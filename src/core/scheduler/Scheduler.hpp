@@ -91,7 +91,7 @@ namespace csopesy {
         // If the process finished, release the core
         if (proc.get_state().is_finished()) {
           proc.log(format("[tick] finished on core {}", i));
-          proc.clear_core();
+          proc.reset_core();
           core.reset();
         }
       }
