@@ -1,5 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
 #include "core/process/Process.hpp"
 #include "core/shell/Shell.hpp"
 

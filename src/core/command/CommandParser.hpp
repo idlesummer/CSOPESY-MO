@@ -1,6 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "types.hpp"
+#include "core/command/Command.hpp"
 
 namespace csopesy {
   /**

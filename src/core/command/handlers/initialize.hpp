@@ -1,7 +1,8 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
 #include "core/shell/Shell.hpp"
-#include "core/command/types.hpp"
 #include "core/scheduler/types.hpp"
 
 namespace csopesy::command {

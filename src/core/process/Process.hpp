@@ -19,19 +19,20 @@ namespace csopesy {
     bool step() { return ProcessExecutor::step(data); }
 
     // === ProcessData interface ===
-    // === Accessors/Mutators for ProcessData ===
+
+    // Mutators for ProcessData components
     void log(str line) { data.log(move(line)); }
     void set_core(int id) { data.set_core(id); }
     void reset_core() { data.reset_core(); }
 
-    // === Accessors for ProcessData components ===
+    // Accessors for ProcessData components
     const str& get_name() const { return data.get_name(); }
     const uint get_pid() const { return data.get_pid(); }
     const int  get_core() const { return data.get_core(); }
     const Time& get_start_time() const { return data.get_start_time(); }
     const list& get_logs() const { return data.get_logs(); }
 
-    // === Accessors for ProcessData sub-components ===
+    // Accessors for ProcessData sub-components
     ProcessData& get_data() { return data; }
     ProcessState& get_state() { return data.get_state(); }
     ProcessMemory& get_memory() { return data.get_memory(); }

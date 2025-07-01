@@ -1,6 +1,7 @@
 #pragma once
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
 #include "core/shell/Shell.hpp"
-#include "core/command/types.hpp"
 
 namespace csopesy::command {
   inline const CommandHandler make_report_util() {
