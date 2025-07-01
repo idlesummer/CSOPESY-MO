@@ -12,12 +12,12 @@ namespace csopesy::command {
       .flags = {},
       .execute = [](const Command&, Shell& shell) {
         if (shell.get_screen() == Screen::MAIN_MENU) {
-            shell.request_stop();
-            shell.emit("shutdown");
-          } else {
-            shell.switch_screen(Screen::MAIN_MENU);
-            shell.emit("switched_to_main");
-          }
+          shell.request_stop();
+          shell.emit("shutdown");
+        } else {
+          shell.switch_screen(Screen::MAIN_MENU);
+          shell.emit("switched_to_main");
+        }
       },
     };
   }

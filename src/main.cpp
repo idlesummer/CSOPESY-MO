@@ -32,7 +32,7 @@ int main() {
     shell.register_command(move(cmd));
 
   global.on("shutdown", [&] {
-    cout << "[Shell] Shutting down..." << endl;
+    cout << "[Shell] Shutting down...";
     sleep_for(200ms);
     running = false;
   });
