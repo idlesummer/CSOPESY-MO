@@ -1,0 +1,13 @@
+# === Build artifacts ===
+*.exe
+
+# === Logs and local data ===
+logs/
+
+# === CMake (if used) ===
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# === Test folders ===
+test/
