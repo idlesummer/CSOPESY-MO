@@ -125,7 +125,7 @@ namespace csopesy {
 
     /** Execute a single instruction for one process */
     void step_process(Process& proc) {
-      if (ProcessExecutor::step(proc))
+      if (ProcessExecutor::step(proc.get_data()))
         finished.push_back(cref(proc));
     }
 
@@ -138,7 +138,7 @@ namespace csopesy {
       uint num_inst = Random::num(config.min_ins, config.max_ins);
       for (uint i = 0; i < num_inst; ++i) {
         auto handler = Random::pick(handlers).get();
-        auto inst = handler.example(proc);
+        auto inst = handler.example(proc.get_data());
         proc.get_program().add_instruction(inst);
       }
 

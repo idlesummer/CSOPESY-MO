@@ -2,7 +2,7 @@
 #include "core/common/imports/_all.hpp"
 
 namespace csopesy {
-  
+
   /** Represents a parsed command-line input. */
   struct Command {
     using list = vector<str>;  
@@ -18,22 +18,22 @@ namespace csopesy {
       return any_cast<const Type&>(context);
     }
   };
-  
-  
+
+
   /** Contains the flag name and whether it requires an argument. */
   struct CommandFlag {
     str  name;              ///< Flag name (e.g., "-s", "-r", "-ls")
     bool has_arg = false;   ///< Whether the flag requires an argument
   };
-  
-  
+
+
   /** Represents a single command entry in the interpreter. */
   class Shell;
   struct CommandHandler {
     using list = vector<CommandFlag>;
     using execute_func  = function<void(const Command&, Shell&)>;
     using validate_func = function<Str(const Command&, Shell&)>;
-    
+  
     str  name;                        ///< Command name (e.g., "screen", "exit")
     str  desc;                        ///< Description for help or documentation
     uint min_args = 0;                ///< Minimum number of required arguments

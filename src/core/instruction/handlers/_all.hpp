@@ -1,5 +1,5 @@
 #pragma once
-#include "core/instruction/types.hpp"
+#include "core/instruction/InstructionHandler.hpp"
 #include "add.hpp"
 #include "declare.hpp"
 #include "for.hpp"

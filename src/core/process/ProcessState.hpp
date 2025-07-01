@@ -4,7 +4,7 @@
 
 namespace csopesy {
   class ProcessState {
-  public:
+    public:
     State state = State::Ready;
     uint sleep_ticks = 0;
 

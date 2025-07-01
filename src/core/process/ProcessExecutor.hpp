@@ -1,6 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/process/Process.hpp"
+#include "core/process/ProcessData.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
 
 namespace csopesy {
@@ -17,7 +17,7 @@ namespace csopesy {
 
     public:
 
-    static bool step(Process& data) {
+    static bool step(ProcessData& data) {
       auto& state = data.get_state();
       auto& prog  = data.get_program();
       auto& ctx   = prog.get_context();
@@ -44,7 +44,7 @@ namespace csopesy {
         if (inst.opcode == "FOR")
           ctx.emplace_back(inst);
         else
-          Interpreter::instance().execute(inst, data);
+          interpreter.execute(inst, data);
 
         return prog.is_finished();
       }
@@ -63,7 +63,7 @@ namespace csopesy {
       if (sub_inst.opcode == "FOR")
         ctx.emplace_back(sub_inst);
       else
-        Interpreter::instance().execute(sub_inst, data);
+        interpreter.execute(sub_inst, data);
 
       if (prog.is_finished()) {
         state.set_finished();

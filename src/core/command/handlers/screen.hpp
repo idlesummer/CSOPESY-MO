@@ -114,7 +114,7 @@ namespace csopesy::command {
             const uint num_inst = Random::num(min, max);
             for (uint j = 0; j < num_inst; ++j) {
               auto handler = Random::pick(handlers).get();
-              auto inst = handler.example(process);
+              auto inst = handler.example(process.get_data());
               process.get_program().add_instruction(inst);
             }
             

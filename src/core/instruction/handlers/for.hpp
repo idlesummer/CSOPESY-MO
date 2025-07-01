@@ -1,6 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/process/Process.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
 #include "print.hpp"
 #include "sleep.hpp"
 
@@ -9,11 +10,11 @@ namespace csopesy::instruction {
     return {
       .opcode = "FOR",
 
-      .execute = [](Process& proc, const Instruction& inst) {
+      .execute = [](const Instruction& inst, ProcessData& proc) {
         // Do nothing, control instructions are handled internally by ProcessProgram
       },
 
-      .example = [](Process& proc) -> Instruction {
+      .example = [](ProcessData& proc) -> Instruction {
         return Instruction {
           .opcode = "FOR", 
           .args  = { "3" },

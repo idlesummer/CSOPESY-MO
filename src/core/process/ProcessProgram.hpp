@@ -1,15 +1,19 @@
-#include "core/instruction/types.hpp"
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "types.hpp"
 
 namespace csopesy {
+
   class ProcessProgram {
     using Instructions = vector<Instruction>;
-    using Stack = LoopFrame::Stack;
+    using Stack = ContextFrame::Stack;
 
     Instructions instructions;
     Stack context;
     uint ip = 0;
 
     public:
+
     ProcessProgram(Instructions inst={}): instructions(move(inst)) {}
 
     Instructions& get_instructions() { return instructions; }
@@ -19,9 +23,9 @@ namespace csopesy {
     void add_instruction(Instruction inst) {
       instructions.push_back(move(inst));
     }
-    
+
     /** Get number of root instructions */
-    size_t size() const {
+    uint size() const {
       return instructions.size();
     }
 

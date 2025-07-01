@@ -1,21 +1,20 @@
 #pragma once
 #include "core/instruction/handlers/_all.hpp"
-#include "core/process/Process.hpp"
-#include "types.hpp"
+#include "core/process/ProcessData.hpp"
+#include "InstructionHandler.hpp"
 
 namespace csopesy {
 
-  /**
-   * @brief Central registry and dispatcher for all instruction types.
-   */
+  /** Central registry and dispatcher for all instruction types. */
   class InstructionInterpreter {
     using map  = unordered_map<str, InstructionHandler>;
     using list = vector<ref<const InstructionHandler>>;
 
-    map handlers;             ///< opcode → handler
-    list handler_list;        ///< cached reference list for introspection
+    map handlers;       ///< opcode → handler
+    list handler_list;  ///< cached reference list for introspection
 
-  public:
+    public:
+
     /** Initializes and registers all handlers once. */
     InstructionInterpreter() {
       for (auto& inst : instruction::get_all())
@@ -32,12 +31,12 @@ namespace csopesy {
     }
 
     /** Executes an instruction using its mapped handler. */
-    void execute(const Instruction& inst, Process& proc) const {
+    void execute(const Instruction& inst, ProcessData& proc) const {
       auto it = handlers.find(inst.opcode);
       if (it == handlers.end())
         throw runtime_error("Unknown instruction: " + inst.opcode);
 
-      it->second.execute(proc, inst);
+      it->second.execute(inst, proc);
     }
 
     /** Returns list of all registered handlers. */

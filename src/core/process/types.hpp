@@ -1,8 +1,10 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/instruction/types.hpp"
+#include "core/instruction/Instruction.hpp"
 
 namespace csopesy {
+
+  /** An enum representing the possible states of a process. */
   enum class State {
     Ready,
     Sleeping,
@@ -10,16 +12,16 @@ namespace csopesy {
   };
 
   /** A loop frame from a FOR-like instruction. */
-  struct LoopFrame {
+  struct ContextFrame {
     using Block  = ref<const vector<Instruction>>;
-    using Stack  = vector<LoopFrame>;
+    using Stack  = vector<ContextFrame>;
 
     uint ip = 0;     ///< Current instruction index within the block
     uint count;      ///< Number of remaining iterations
     Block block;     ///< Reference to the loop's instruction block
 
     /** Constructs a loop frame from a FOR-like instruction. */
-    explicit LoopFrame(const Instruction& inst):
+    explicit ContextFrame(const Instruction& inst):
       ip(0),
       count(cast_uint(inst.args[0])),
       block(cref(inst.block)) {}

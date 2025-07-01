@@ -1,6 +1,6 @@
 #pragma once
-#include "core/process/Process.hpp"
-#include "core/instruction/types.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
 
 namespace csopesy::instruction {
 
@@ -8,13 +8,13 @@ namespace csopesy::instruction {
     return {
       .opcode = "SUBTRACT",
 
-      .execute = [](Process& proc, const Instruction& inst) {
+      .execute = [](const Instruction& inst, ProcessData& proc) {
         uint lhs = proc.get_memory().get(inst.args[1]);
         uint rhs = proc.get_memory().resolve(inst.args[2]);
         proc.get_memory().set(inst.args[0], lhs - rhs);
       },
 
-      .example = [](Process&) -> Instruction {
+      .example = [](ProcessData&) -> Instruction {
         return Instruction{ "SUBTRACT", { "z", "x", "y" } };
       },
     };
