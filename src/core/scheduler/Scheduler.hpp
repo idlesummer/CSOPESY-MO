@@ -136,10 +136,12 @@ namespace csopesy {
     /** Generate one dummy process */
     void create_dummy_process() {
       auto name = format("p{:02}", next_process_id);
-      Process proc(name, next_process_id++);
+      auto proc = Process(name, next_process_id++);
 
       const auto& handlers = interpreter.get_handler_list();
-      uint num_inst = Random::num(config.min_ins, config.max_ins);
+      uint min = config.min_ins;
+      uint max = config.max_ins;
+      uint num_inst = Random::num(min, max);
       for (uint i = 0; i < num_inst; ++i) {
         auto handler = Random::pick(handlers).get();
         auto inst = handler.example(proc.get_data());
