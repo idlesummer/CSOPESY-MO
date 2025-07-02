@@ -16,10 +16,10 @@ namespace csopesy::command {
 
       .validate = [](const Command&, Shell& shell) -> Str {
         if (!shell.get_scheduler().is_initialized())
-          return Str{"[Shell] Please run 'initialize' first."};
+          return "[Shell] Please run 'initialize' first.";
 
         if (shell.get_scheduler().is_generating())
-          return Str{"[Shell] Dummy process generation already active."};
+          return "[Shell] Dummy process generation already active.";
 
         return nullopt;
       },

@@ -13,7 +13,7 @@ namespace csopesy {
   inline Shell::Shell(EventEmitter& emitter): 
       Component(emitter), 
       interpreter(Interpreter::instance()) {
-        
+    
     for (auto handler: command::get_all())
       interpreter.register_command(move(handler));
   }

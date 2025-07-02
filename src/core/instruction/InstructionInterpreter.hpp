@@ -51,7 +51,7 @@ namespace csopesy {
         register_instruction(move(inst));
 
       handler_list.reserve(handlers.size());
-      for (const auto& [_, handler] : handlers)
+      for (const auto& [_, handler]: handlers)
         handler_list.push_back(cref(handler));
     }
   };

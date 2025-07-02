@@ -5,12 +5,9 @@
 #include "core/common/EventEmitter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 #include "core/command/CommandInterpreter.hpp"
+#include "types.hpp"
 
 namespace csopesy {
-  enum class Screen {
-    MAIN_MENU,
-    PROCESS_VIEW,
-  };
 
   class Shell: public Component {
     using Interpreter = CommandInterpreter;
@@ -62,7 +59,7 @@ namespace csopesy {
 
     void request_stop() {
       active = false;  // safe from inside the shell thread
-    }
+    } 
 
     void emit(str name, any data={}) {
       global.emit(move(name), move(data));
@@ -94,7 +91,7 @@ namespace csopesy {
       return current_screen;
     }
 
-    string screen_name(Screen s) const {
+    str screen_name(Screen s) const {
       switch (s) {
         case Screen::MAIN_MENU: return "main";
         case Screen::PROCESS_VIEW: return "process";

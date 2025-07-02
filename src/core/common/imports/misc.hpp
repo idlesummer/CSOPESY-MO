@@ -32,6 +32,7 @@ namespace csopesy {
   // === STL Utility Aliases ===
   using std::ranges::all_of;
   using std::ranges::any_of;
+  using std::ranges::find_if;
   using std::ranges::none_of;
   using std::any_cast;
   using std::erase_if;

@@ -12,11 +12,10 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
       .flags = {},
-      .execute = [](const Command &command, Shell &shell) {
-        if (shell.get_screen() != Screen::MAIN_MENU) {
-          cout << "Not in the Main Menu.\n";
-          return;
-        }
+
+      .execute = [](const Command &command, Shell &shell) {   
+        if (shell.get_screen() != Screen::MAIN_MENU)
+          return void(cout << "Not in the Main Menu.\n");
 
         auto& scheduler = shell.get_scheduler();
         const auto& running = scheduler.get_running_processes();
