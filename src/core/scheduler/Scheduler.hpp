@@ -7,6 +7,7 @@
 
 namespace csopesy {
   class Scheduler {
+    using Interpreter = InstructionInterpreter;
     using ProcList    = List<Process>;
     using ProcRefList = vector<ref<const Process>>;
     using CoreList    = vector<optional<ref<Process>>>;
@@ -16,12 +17,15 @@ namespace csopesy {
     queue<ref<Process>> ready_queue;
     CoreList cores;
     SchedulerConfig config;
-    InstructionInterpreter interpreter;
     uint tick_count = 0;
     bool generating = false;
     uint next_process_id = 1;
+    Interpreter& interpreter;
 
-  public:
+    public:
+
+    Scheduler(): interpreter(Interpreter::instance()) {}
+
     /** Add a process to the global process list */
     void add_process(Process proc) {
       processes.push_back(move(proc));

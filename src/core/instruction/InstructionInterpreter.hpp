@@ -15,14 +15,10 @@ namespace csopesy {
 
     public:
 
-    /** Initializes and registers all handlers once. */
-    InstructionInterpreter() {
-      for (auto& inst : instruction::get_all())
-        register_instruction(move(inst));
-
-      handler_list.reserve(handlers.size());
-      for (const auto& [_, handler] : handlers)
-        handler_list.push_back(cref(handler));
+    /** Returns the global singleton instance of the InstructionInterpreter. */
+    static InstructionInterpreter& instance() {
+      static InstructionInterpreter inst;
+      return inst;
     }
 
     /** Registers a handler by opcode. */
@@ -44,10 +40,19 @@ namespace csopesy {
       return handler_list;
     }
 
-    /** Returns the singleton instance. */
-    static InstructionInterpreter& instance() {
-      static InstructionInterpreter inst;
-      return inst;
+    private:
+
+    /** 
+     * Private constructor to enforce singleton access via instance().
+     * Initializes and registers all handlers once. 
+     */
+    InstructionInterpreter() {
+      for (auto& inst : instruction::get_all())
+        register_instruction(move(inst));
+
+      handler_list.reserve(handlers.size());
+      for (const auto& [_, handler] : handlers)
+        handler_list.push_back(cref(handler));
     }
   };
 }

@@ -21,6 +21,12 @@ namespace csopesy {
     
     public:
 
+    /** Returns the global singleton instance of the CommandInterpreter. */
+    static CommandInterpreter& instance() {
+      static CommandInterpreter inst;
+      return inst;
+    }
+
     /** Registers a command with its name and handlers. */
     void register_command(Handler handler) {
       handlers[handler.name] = move(handler);
@@ -28,7 +34,7 @@ namespace csopesy {
 
     /** Executes a command in the shell context. */ 
     void execute(const str& line, Shell& shell) {
-      try {
+
       // Parse the command line into a Command (name, args, flags)
       const auto& command = CommandParser::parse(line);  
       if (command.name.empty()) 
@@ -54,18 +60,14 @@ namespace csopesy {
         return void(cout << format("[Shell] {}\n", *msg));
       
       // Execute the command
-      
       handler.execute(command, shell);
       cout << '\n';
-      
-
-      } catch(const char* line) {
-        cerr << line;
-      }
-
     }
 
     private:
+
+    /** Private constructor to enforce singleton access via instance(). */
+    CommandInterpreter() = default;
     
     /** Returns true if any flag is invalid or misused. */
     static bool invalid_flags(const Command& command, const Handler& handler) {

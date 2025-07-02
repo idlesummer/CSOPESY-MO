@@ -1,5 +1,5 @@
 #pragma once
-#include "core/shell/Shell.hpp"
+#include "core/shell/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 

@@ -2,9 +2,6 @@
 #include "core/common/EventEmitter.hpp"
 #include "core/shell/Shell.hpp"
 
-// Command files
-#include "core/command/handlers/_all.hpp"
-
 void enable_ansi() {
   auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
   auto mode = DWORD(0);
@@ -27,9 +24,6 @@ int main() {
   auto running = atomic_bool(true);
   auto global  = EventEmitter();
   auto shell   = Shell(global);
-
-  for (auto cmd: command::get_all())
-    shell.register_command(move(cmd));
 
   global.on("shutdown", [&] {
     cout << "[Shell] Shutting down...";
