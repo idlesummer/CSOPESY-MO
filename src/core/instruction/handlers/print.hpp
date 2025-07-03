@@ -1,4 +1,5 @@
 #pragma once
+#include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
@@ -8,13 +9,14 @@ namespace csopesy::instruction {
     return {
       .opcode = "PRINT",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) {
+      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
         proc.log(inst.args[0]);
+        return nullopt;
       },
 
       .example = [](ProcessData& proc) -> Instruction {
         str message = format("Hello world from {}!", proc.get_name());
-        return Instruction{ "PRINT", { move(message) }};
+        return { "PRINT", { move(message) }};
       },
     };
   }

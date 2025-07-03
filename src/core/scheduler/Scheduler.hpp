@@ -101,7 +101,6 @@ namespace csopesy {
       }
     }
 
-
     void tick_rr() {
       // Round Robin: assign cores in a round-robin fashion
       for (uint i = 0; i < cores.size(); ++i) {

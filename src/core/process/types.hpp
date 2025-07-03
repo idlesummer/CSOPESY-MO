@@ -13,33 +13,59 @@ namespace csopesy {
 
   /** A loop frame from a FOR-like instruction. */
   struct ContextFrame {
-    using Block  = ref<const vector<Instruction>>;
-    using Stack  = vector<ContextFrame>;
+    str  name;      // optional label for debugging
+    uint line_addr; // where the FOR begins
+    uint jump_addr; // where to go when the loop ends
+    uint count;     // remaining repeat count
+  };
 
-    uint ip = 0;     ///< Current instruction index within the block
-    uint count;      ///< Number of remaining iterations
-    Block block;     ///< Reference to the loop's instruction block
+  class ContextStack {
+    using Stack = vector<ContextFrame>;
+    Stack stack;
 
-    /** Constructs a loop frame from a FOR-like instruction. */
-    explicit ContextFrame(const Instruction& inst):
-      ip(0),
-      count(cast_uint(inst.args[0])),
-      block(cref(inst.block)) {}
+    public:
 
-    /** Returns true if the instruction pointer has reached the end of the block. */
-    bool end_of_block() const {
-      return ip >= block.get().size();
+    /** Check if the loop context stack is empty. */
+    bool empty() const { 
+      return stack.empty(); 
     }
 
-    /** Returns true if the loop has completed all iterations. */
-    bool should_exit() const {
-      return count == 0;
+    /** Get the number of loop contexts in the stack. */
+    uint size() const { 
+      return stack.size(); 
+    }
+    
+    /** Push a new loop context onto the stack. */
+    void push(str name, uint line_addr, uint jump_addr, uint count) {
+      stack.emplace_back(move(name), line_addr, jump_addr, count);
     }
 
-    /** Advances to the next iteration by decrementing count and resetting the instruction pointer. */
-    void next_iteration() {
-      --count;
-      ip = 0;
+    /** Pop the top loop context from the stack. */
+    void pop() { stack.pop_back(); }
+
+    /** Set the jump address for the top loop context. */
+    void set_jump(uint addr) {
+      if (!stack.empty()) 
+        stack.back().jump_addr = addr;
     }
+
+    /** Check whether the program is currently inside a loop. */
+    bool in_loop() const { 
+      return !stack.empty(); 
+    }
+
+    /** Clear all loop contexts from the stack. */
+    void clear() { 
+      stack.clear(); 
+    }
+
+    /** Get a reference to the raw stack of loop contexts. */
+    const Stack& raw() const {
+      return stack; 
+    }
+
+    /** Access the top loop context */
+    ContextFrame& top() { return stack.back(); }
+    const ContextFrame& top() const { return stack.back(); }
   };
 }

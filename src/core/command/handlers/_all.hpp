@@ -4,6 +4,7 @@
 #include "echo.hpp"
 #include "exit.hpp"
 #include "initialize.hpp"
+#include "loop-test.hpp"
 #include "process-smi.hpp"
 #include "report-util.hpp"
 #include "scheduler-start.hpp"
@@ -19,6 +20,7 @@ namespace csopesy::command {
       make_echo(),
       make_exit(),
       make_initialize(),
+      make_loop_test(),
       make_process_smi(),
       make_report_util(),
       make_scheduler_start(),

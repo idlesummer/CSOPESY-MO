@@ -15,60 +15,22 @@ namespace csopesy {
     using Interpreter = InstructionInterpreter;
     inline static Interpreter interpreter = Interpreter::instance();
 
-    public:
+    public:  
+    static bool step(ProcessData& proc) {
+      auto& prog  = proc.get_program();
+      auto& state = proc.get_state();
 
-    static bool step(ProcessData& data) {
-      auto& state = data.get_state();
-      auto& prog  = data.get_program();
-      auto& ctx   = prog.get_context();
-      auto& insts = prog.get_instructions();
+      // Exit if program already finished
+      if (state.is_finished() || prog.is_finished())
+        return state.set_finished(), true;
 
-      if (state.state == State::Finished)
-        return true;
-
-      // Handle sleeping
-      if (state.is_sleeping()) {
-        if (--state.sleep_ticks == 0)
-          state.set_ready();
-        return false;
-      }
-
-      // Top-level instruction stream
-      if (ctx.empty()) {
-        if (prog.get_ip() >= insts.size()) {
-          state.set_finished();
-          return true;
-        }
-
-        const auto& inst = insts[prog.next_ip()];
-        if (inst.opcode == "FOR")
-          ctx.emplace_back(inst);
-        else
-          interpreter.execute(inst, data);
-
-        return prog.is_finished();
-      }
-
-      // Inside FOR block
-      auto& frame = ctx.back();
-
-      if (frame.end_of_block()) {
-        frame.next_iteration();
-        if (frame.should_exit())
-          ctx.pop_back();
-        return false;
-      }
-
-      const auto& sub_inst = frame.block.get()[frame.ip++];
-      if (sub_inst.opcode == "FOR")
-        ctx.emplace_back(sub_inst);
-      else
-        interpreter.execute(sub_inst, data);
-
-      if (prog.is_finished()) {
-        state.set_finished();
-        return true;
-      }
+      // Fetch and execute instruction
+      const auto ip = prog.get_ip();
+      const auto& inst = prog.get_instructions()[ip];
+      const auto next = interpreter.execute(inst, proc);
+      
+      const auto line = next.value_or(prog.next_ip());
+      prog.set_ip(line);
 
       return false;
     }

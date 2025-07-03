@@ -4,40 +4,49 @@
 
 namespace csopesy {
 
+  /** A program that can be executed by a process. */
   class ProcessProgram {
-    using Instructions = vector<Instruction>;
-    using Stack = ContextFrame::Stack;
+    public:
+    using list = vector<Instruction>;
+    
+    private:
+    using Stack = ContextStack;
 
-    Instructions instructions;
-    Stack context;
-    uint ip = 0;
+    list insts;  ///< Flat list of all program instructions
+    Stack context;  ///< Stack of active loop contexts
+    uint ip = 0;    ///< Current instruction pointer
 
     public:
 
-    ProcessProgram(Instructions inst={}): instructions(move(inst)) {}
-
-    Instructions& get_instructions() { return instructions; }
-    const Instructions& get_instructions() const { return instructions; }
+    /** Construct a process program with an optional instruction list. */
+    ProcessProgram(list inst={}): insts(move(inst)) {}
 
     /** Append a new instruction to the program */
     void add_instruction(Instruction inst) {
-      instructions.push_back(move(inst));
+      insts.push_back(move(inst));
     }
 
-    /** Get number of root instructions */
+    /** Get the total number of instructions in the program. */
     uint size() const {
-      return instructions.size();
+      return insts.size();
     }
 
+    /** Access and control the instruction pointer. */
+    uint get_ip() const { return ip; }
+    void set_ip(uint new_ip) { ip = new_ip; }
+    uint next_ip() { return ip + 1; }
+
+    /** Check if the program has completed execution. */
+    bool is_finished() const {
+      return ip >= insts.size();
+    }
+
+    /** Access the loop context stack. */
     Stack& get_context() { return context; }
     const Stack& get_context() const { return context; }
 
-    uint get_ip() const { return ip; }
-    void set_ip(uint new_ip) { ip = new_ip; }
-    uint next_ip() { return ip++; }
-
-    bool is_finished() const {
-      return context.empty() && ip >= instructions.size();
-    }
+    /** Access list of all instructions. */
+    list& get_instructions() { return insts; }
+    const list& get_instructions() const { return insts; }
   };
 }

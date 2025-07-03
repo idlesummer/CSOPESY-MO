@@ -27,12 +27,12 @@ namespace csopesy {
     }
 
     /** Executes an instruction using its mapped handler. */
-    void execute(const Instruction& inst, ProcessData& proc) const {
+    Uint execute(const Instruction& inst, ProcessData& proc) const {
       auto it = handlers.find(inst.opcode);
       if (it == handlers.end())
         throw runtime_error("Unknown instruction: " + inst.opcode);
 
-      it->second.execute(inst, proc);
+      return it->second.execute(inst, proc);
     }
 
     /** Returns list of all registered handlers. */

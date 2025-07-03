@@ -1,4 +1,5 @@
 #pragma once
+#include "core/common/imports/_all.hpp"
 #include "Instruction.hpp"
 
 namespace csopesy {
@@ -6,7 +7,7 @@ namespace csopesy {
   /** Represents an executable instruction handler. */
   class ProcessData; // Forward declaration
   struct InstructionHandler {
-    using execute_func = function<void(const Instruction&, ProcessData&)>;
+    using execute_func = function<Uint(const Instruction&, ProcessData&)>;
     using example_func = function<Instruction(ProcessData&)>;
 
     str opcode;

@@ -1,4 +1,5 @@
 #pragma once
+#include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
@@ -8,13 +9,13 @@ namespace csopesy::instruction {
     return {
       .opcode = "SLEEP",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) {
+      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
         uint duration = cast_uint(inst.args[0]);
         proc.get_state().sleep_for(duration);
       },
 
       .example = [](ProcessData&) -> Instruction {
-        return Instruction{ "SLEEP", { "2" } };
+        return { "SLEEP", { "2" } };
       },
     };
   }

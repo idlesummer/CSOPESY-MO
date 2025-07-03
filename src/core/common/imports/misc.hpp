@@ -20,6 +20,7 @@ namespace csopesy {
   using byte = uint8_t;
   using uint = uint32_t;
   using uchar = unsigned char;
+  using Uint = std::optional<uint>;
 
   // === Reference Aliases ===
   using std::cref;
