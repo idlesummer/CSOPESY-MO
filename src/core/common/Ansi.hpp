@@ -1,43 +1,48 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 
-namespace csopesy::Ansi {
-  inline void enable() {
-    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD mode = 0;
-    if (!GetConsoleMode(handle, &mode))
-      throw runtime_error("Failed to get console mode");
+namespace csopesy {
+  class Ansi {
+    public:
 
-    mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (!SetConsoleMode(handle, mode))
-      throw runtime_error("Failed to enable ANSI virtual terminal");
-  }
+    static void enable() {
+      auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
+      auto mode = DWORD(0);
+      
+      if (!GetConsoleMode(handle, &mode))
+        return void(cerr << "Failed to get console mode.\n");
 
-  inline void set_title(ostream& out, const str& title) {
-    out << "\033]0;" << title << "\a";
-  }
+      mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+      if (!SetConsoleMode(handle, mode)) 
+        return void(cerr << "Failed to enable ANSI escape sequences.\n");
+    }
 
-  inline void enter_alt_buffer(ostream& out) {
-    out << "\033[?1049h";
-  }
+    static void set_title(ostream& out, const str& title) {
+      out << "\033]0;" << title << "\a";
+    }
 
-  inline void exit_alt_buffer(ostream& out) {
-    out << "\033[?1049l";
-  }
+    static void enter_alt_buffer(ostream& out) {
+      out << "\033[?1049h";
+    }
 
-  inline void hide_cursor(ostream& out) {
-    out << "\033[?25l";
-  }
+    static void exit_alt_buffer(ostream& out) {
+      out << "\033[?1049l";
+    }
 
-  inline void show_cursor(ostream& out) {
-    out << "\033[?25h";
-  }
+    static void hide_cursor(ostream& out) {
+      out << "\033[?25l";
+    }
 
-  inline void clear_screen(ostream& out) {
-    out << "\033[2J\033[H";
-  }
+    static void show_cursor(ostream& out) {
+      out << "\033[?25h";
+    }
 
-  inline void move_cursor(ostream& out, int row, int col) {
-    out << "\033[" << row << ";" << col << "H";
-  }
+    static void clear_screen(ostream& out) {
+      out << "\033[2J\033[H";
+    }
+
+    static void move_cursor(ostream& out, int row, int col) {
+      out << "\033[" << row << ";" << col << "H";
+    }
+  };
 }

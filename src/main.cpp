@@ -1,26 +1,14 @@
 #include "core/common/imports/_all.hpp"
+#include "core/common/Ansi.hpp"
 #include "core/common/EventEmitter.hpp"
 #include "core/shell/Shell.hpp"
-
-void enable_ansi() {
-  auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  auto mode = DWORD(0);
-
-  if (!GetConsoleMode(handle, &mode)) {
-    std::cerr << "Failed to get console mode.\n";
-    return;
-  }
-
-  mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-  if (!SetConsoleMode(handle, mode)) 
-    std::cerr << "Failed to enable ANSI escape sequences.\n";
-}
 
 int main() {
   using namespace csopesy;
 
   system("cls");
-  enable_ansi();
+  Ansi::enable();
+
   auto running = atomic_bool(true);
   auto global  = EventEmitter();
   auto shell   = Shell(global);
