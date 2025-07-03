@@ -11,7 +11,7 @@ namespace csopesy::instruction {
 
       .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
         auto& program = proc.get_program();
-        auto& context  = program.get_context();
+        auto& context = program.get_context();
         
         uint line_addr = program.get_ip();
         uint count = cast_uint(inst.args[0]);

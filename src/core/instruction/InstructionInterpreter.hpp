@@ -26,7 +26,10 @@ namespace csopesy {
       handlers[handler.opcode] = move(handler);
     }
 
-    /** Executes an instruction using its mapped handler. */
+    /** 
+     * Execute an instruction using its handler.  
+     * Returns optional next instruction pointer. 
+     */
     Uint execute(const Instruction& inst, ProcessData& proc) const {
       auto it = handlers.find(inst.opcode);
       if (it == handlers.end())

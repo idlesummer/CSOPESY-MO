@@ -8,7 +8,7 @@
 
 namespace csopesy::command {
 
-  inline const CommandHandler make_loop_test() {
+  inline const CommandHandler make_test() {
     return {
       .name = "test",
       .desc = "Spawn and manually step a dummy FOR loop process.",
