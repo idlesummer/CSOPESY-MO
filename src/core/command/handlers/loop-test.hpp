@@ -14,13 +14,19 @@ namespace csopesy::command {
       .desc = "Spawn and manually step a dummy FOR loop process.",
       .min_args = 0,
       .max_args = 0,
-      .flags = {},
+      .flags = {{ "--reset", false }},
 
-      .execute = [](const Command&, Shell& shell) {
+      .execute = [](const Command& command, Shell& shell) {
         using Instructions = ProcessProgram::list;
-
-        system("cls");
+        
         auto& storage = shell.get_storage();
+
+        // 0. Reset process if requested
+        if (command.flags.contains("--reset")) {
+          shell.get_storage().remove("test_proc");
+          cout << "[loop-test] Dummy process reset.";
+          return;
+        }
         
         // 1. Spawn process if not already present
         if (!storage.has("test_proc")) {
@@ -46,6 +52,7 @@ namespace csopesy::command {
         }
 
         // 2. Access process
+        system("cls");
         auto& process = storage.get<Process>("test_proc");
         auto& program = process.get_program();
         auto& state   = process.get_state();
@@ -56,13 +63,13 @@ namespace csopesy::command {
         }
 
         // === Debug: Show context stack ===
-        const auto& ctx_stack = program.get_context();
+        const auto& stack = program.get_context();
         cout << "[loop-test] Context Stack:\n";
-        if (ctx_stack.empty()) {
+        if (stack.empty())
           cout << "  <empty>\n";
 
-        } else {
-          const auto& frames = ctx_stack.raw();
+        else {
+          const auto& frames = stack.raw();
           for (uint i = 0; i < frames.size(); ++i) {
             const auto& frame = frames[i];
             cout << format(
@@ -87,6 +94,8 @@ namespace csopesy::command {
             cout << ' ' << arg;
           cout << '\n';
         }
+
+        cout << '\n';
 
         // 3. Step the process
         const bool done = ProcessExecutor::step(process.get_data());
