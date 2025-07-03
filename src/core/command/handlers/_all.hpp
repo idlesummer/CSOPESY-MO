@@ -1,11 +1,11 @@
 #pragma once
-#include "core/command/types.hpp"
+#include "core/command/CommandHandler.hpp"
 #include "clear.hpp"
 #include "echo.hpp"
 #include "exit.hpp"
 #include "initialize.hpp"
-// #include "process-smi.hpp"
-// #include "report-util.hpp"
+#include "process-smi.hpp"
+#include "report-util.hpp"
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
@@ -19,8 +19,8 @@ namespace csopesy::command {
       make_echo(),
       make_exit(),
       make_initialize(),
-      // make_process_smi(),
-      // make_report_util(),
+      make_process_smi(),
+      make_report_util(),
       make_scheduler_start(),
       make_scheduler_stop(),
       make_screen(),

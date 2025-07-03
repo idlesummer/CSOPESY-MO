@@ -40,10 +40,5 @@ namespace csopesy {
     void remove(const str& key) {
       storage.erase(key);
     }
-
-    /** Clear all stored data. */
-    void clear() {
-      storage.clear();
-    }
   };
 }

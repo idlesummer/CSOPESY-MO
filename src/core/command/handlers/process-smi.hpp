@@ -2,6 +2,7 @@
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/process/Process.hpp"
 
 namespace csopesy::command {
   inline const CommandHandler make_process_smi() {
@@ -12,13 +13,12 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {},
       
-      .execute = [](const Command& command, Shell& shell) {
-        auto& scheduler = shell.get_scheduler();
-        
-        if (shell.get_screen() != Screen::PROCESS)
-          return void(cout << "Not in a process screen.\n");
+      .validate = [](const Command& command, Shell& shell) -> Str {
+        if (shell.get_screen().is_main())
+          return "Not in a process screen.";
 
-        const auto& name = *shell.get_active_process_name();
+        const auto& name = shell.get_screen().get_id();
+        const auto& scheduler = shell.get_scheduler();
         const auto& processes = scheduler.get_processes();
 
         auto it = find_if(processes, [&](const auto& proc) {
@@ -26,9 +26,18 @@ namespace csopesy::command {
         });
 
         if (it == processes.end())
-          return void(cout << "Active process \"" << name << "\" not found.\n");
+          return format("Active process \"{}\" not found.", name);
 
-        const auto& process = *it;
+        auto& storage = shell.get_storage();
+        storage.set("process-smi.cache", ref(*it));
+        return nullopt;
+      },
+      
+      .execute = [](const Command& command, Shell& shell) {
+        auto& storage = shell.get_storage();
+        auto& target_ref = storage.get<ref<Process>>("process-smi.cache");
+
+        const auto& process = target_ref.get();;
         const auto& logs = process.get_logs();
         const auto& program = process.get_program();
 
@@ -49,6 +58,7 @@ namespace csopesy::command {
 
         cout << "Current instruction line: " << program.get_ip() << '\n';
         cout << "Lines of code: " << program.size() << "\n" << "\n";
+        storage.remove("process-smi.cache");
       },
     };
   }

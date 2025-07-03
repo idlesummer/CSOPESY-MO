@@ -11,10 +11,19 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
       .flags = {},
-      .execute = [](const Command &command, Shell &shell) {
-        if (shell.get_screen() != Screen::MAIN_MENU)
-          return void(cout << "Not in the Main Menu.\n");
 
+      .validate = [](const Command &command, Shell &shell) -> Str {
+        if (!shell.get_screen().is_main())
+          return "Not in the Main Menu.";
+        
+        // Check if the scheduler is initialized
+        if (!shell.get_scheduler().get_config().initialized)
+          return "Scheduler not initialized. Please run 'initialize' first.";
+
+        return nullopt; // No validation errors
+      },
+
+      .execute = [](const Command &command, Shell &shell) {
         auto& scheduler = shell.get_scheduler();
         const auto& running = scheduler.get_running_processes();
         const auto& finished = scheduler.get_finished_processes();
@@ -67,4 +76,3 @@ namespace csopesy::command {
     };
   }
 }
-

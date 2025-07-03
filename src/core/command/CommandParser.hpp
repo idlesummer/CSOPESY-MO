@@ -22,16 +22,14 @@ namespace csopesy {
 
       for (uint i=1; i < tokens.size(); ++i) {
         str token = move(tokens[i]);
-
-        if (token[0] != '-')
+        if (token[0] != '-') {
           cmd.args.emplace_back(move(token));
-
-        else {
-          bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
-          cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+          continue;
         }
+        bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
+        cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
       }
-
+      
       return cmd;
     }
 

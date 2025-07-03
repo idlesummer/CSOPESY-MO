@@ -19,19 +19,21 @@ namespace csopesy::command {
       .validate = [](const Command& command, Shell& shell) -> Str {
         // Check if the scheduler has already been initialized
         if (shell.get_scheduler().get_config().initialized)
-          return Str{"[Shell] Already initialized."};
+          return "Already initialized.";
         
         // Check if the file could not be opened or is empty
         auto lines = read_lines("config.txt");
         if (lines.empty())
-          return "[Shell] Failed to open config.txt";
+          return "Failed to open config.txt";
 
-        command.context = any(move(lines));
+        auto& storage = shell.get_storage();
+        storage.set("initialize.cache", move(lines));
         return nullopt;
       },
 
       .execute = [](const Command& command, Shell& shell) {
-        const auto& lines = command.get_context<list>();
+        auto& storage = shell.get_storage();
+        const auto& lines = storage.get<list>("initialize.cache");
         auto config = SchedulerConfig();
 
         for (const auto& line: lines) {
@@ -43,10 +45,11 @@ namespace csopesy::command {
         }
 
         config.initialized = true;
-        shell.get_scheduler().set_config(config);  // ✅ Apply to scheduler
+        shell.get_scheduler().set_config(config);
 
         cout << BANNER << endl;
         cout << "[Shell] Scheduler config loaded.";
+        storage.remove("initialize.cache");
       },
     };
   }

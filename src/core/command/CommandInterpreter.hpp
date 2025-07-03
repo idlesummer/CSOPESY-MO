@@ -52,10 +52,6 @@ namespace csopesy {
       if (invalid_flags(command, handler))
         return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
 
-      // Check for duplicate flags
-      if (has_duplicate_flags(command))
-        return void(cout << format("[Shell] Duplicate flag(s) in command '{}'\n", command.name));
-
       // Check positional argument count
       if (invalid_args(command, handler))
         return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
@@ -83,16 +79,6 @@ namespace csopesy {
           return f.name == flag.first && f.has_arg == !flag.second.empty();
         });
       });
-    }
-
-    /** Checks if there are duplicate flag names in the command. */
-    static bool has_duplicate_flags(const Command& command) {
-      set seen;
-      for (const auto& [name, _]: command.flags) {
-        if (!seen.insert(name).second)
-          return true;  // Already seen → duplicate
-      }
-      return false;
     }
 
     /** Checks if argument count is within bounds. */
