@@ -15,6 +15,7 @@ namespace csopesy {
     using Flag = CommandFlag;
     using Handler = CommandHandler;
     using map = unordered_map<str, Handler>;
+    using set = unordered_set<str>;
     
     // Registry of available command handlers
     map handlers;   
@@ -51,6 +52,10 @@ namespace csopesy {
       if (invalid_flags(command, handler))
         return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
 
+      // Check for duplicate flags
+      if (has_duplicate_flags(command))
+        return void(cout << format("[Shell] Duplicate flag(s) in command '{}'\n", command.name));
+
       // Check positional argument count
       if (invalid_args(command, handler))
         return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
@@ -80,7 +85,17 @@ namespace csopesy {
       });
     }
 
-    /** A helper that checks if argument count is within bounds. */
+    /** Checks if there are duplicate flag names in the command. */
+    static bool has_duplicate_flags(const Command& command) {
+      set seen;
+      for (const auto& [name, _]: command.flags) {
+        if (!seen.insert(name).second)
+          return true;  // Already seen → duplicate
+      }
+      return false;
+    }
+
+    /** Checks if argument count is within bounds. */
     static bool invalid_args(const Command& command, const Handler& handler) {
       const auto argc = command.args.size();
       return argc < handler.min_args || argc > handler.max_args;

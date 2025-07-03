@@ -1,7 +1,7 @@
 #pragma once
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
-#include "core/shell/Shell.impl.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
 
 namespace csopesy::command {
   inline const CommandHandler make_process_smi() {
@@ -15,7 +15,7 @@ namespace csopesy::command {
       .execute = [](const Command& command, Shell& shell) {
         auto& scheduler = shell.get_scheduler();
         
-        if (shell.get_screen() != Screen::PROCESS_VIEW)
+        if (shell.get_screen() != Screen::PROCESS)
           return void(cout << "Not in a process screen.\n");
 
         const auto& name = *shell.get_active_process_name();

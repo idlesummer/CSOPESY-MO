@@ -6,6 +6,7 @@
 #include <utility>    // for std::forward
 
 namespace csopesy {
+  using std::bad_any_cast;
 
   // === Type-to-Type Casting ===
   template <typename Type>

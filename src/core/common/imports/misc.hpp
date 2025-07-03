@@ -11,6 +11,7 @@
 #include <utility>
 
 namespace csopesy {
+  using std::runtime_error;
 
   // === Type Aliases ===
   using std::any;

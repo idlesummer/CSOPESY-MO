@@ -1,5 +1,5 @@
 #pragma once
-#include "core/shell/Shell.impl.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
@@ -11,12 +11,16 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
       .flags = {},
+      
       .execute = [](const Command&, Shell& shell) {
-        if (shell.get_screen() == Screen::MAIN_MENU) {
+        auto& screen = shell.get_screen();
+
+        if (screen.is_main()) {
           shell.request_stop();
           shell.emit("shutdown");
+
         } else {
-          shell.switch_screen(Screen::MAIN_MENU);
+          screen.switch_to_main();
           shell.emit("switched_to_main");
         }
       },

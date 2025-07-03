@@ -3,7 +3,7 @@
 #include "core/common/constants/banner.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
-#include "core/shell/Shell.impl.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/scheduler/types.hpp"
 
 namespace csopesy::command {

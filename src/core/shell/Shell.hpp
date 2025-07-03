@@ -1,5 +1,5 @@
-#include "Shell.impl.hpp"
-#include "core/command/handlers/_all.hpp"
+#include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
+#include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
 
 namespace csopesy {
   
@@ -12,7 +12,8 @@ namespace csopesy {
    */
   inline Shell::Shell(EventEmitter& emitter): 
       Component(emitter), 
-      interpreter(Interpreter::instance()) {
+      interpreter(Interpreter::instance()),
+      screen(storage) {
     
     for (auto handler: command::get_all())
       interpreter.register_command(move(handler));
