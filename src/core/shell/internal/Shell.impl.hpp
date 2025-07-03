@@ -1,5 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
 #include "core/common/Component.hpp"
 #include "core/common/EventEmitter.hpp"
@@ -36,6 +37,9 @@ namespace csopesy {
 
     /** Starts the shell loop in a separate thread and hooks into global ticks. */
     void start() override {
+      system("cls");
+      Ansi::enable();
+
       global.on("tick", [&] { 
         scheduler.tick(); 
       });
@@ -52,6 +56,8 @@ namespace csopesy {
 
       if (thread.joinable()) 
         thread.join();
+
+      system("cls");
     }
 
     /** Executes a single shell tick (input + command dispatch). */
