@@ -3,6 +3,7 @@
 
 # === Logs and local data ===
 logs/
+.VSCodeCounter/
 
 # === CMake (if used) ===
 CMakeFiles/
