@@ -26,6 +26,15 @@ namespace csopesy {
       insts.push_back(move(inst));
     }
 
+    /** 
+     * Compile the program. 
+     * This is a placeholder for any future compilation logic.
+     * Currently does nothing but can be extended later.
+     */
+    void compile() {
+
+    }
+
     /** Get the total number of instructions in the program. */
     uint size() const {
       return insts.size();

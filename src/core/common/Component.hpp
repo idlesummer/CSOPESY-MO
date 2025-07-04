@@ -12,8 +12,8 @@ namespace csopesy {
     virtual ~Component() = default;
 
     virtual void start() {}
-    virtual void tick() {}
     virtual void stop() {}
+    virtual void tick() {}
 
     EventEmitter& get_global() { return global; }
     EventEmitter& get_local() { return local; }
