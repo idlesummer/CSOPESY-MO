@@ -9,7 +9,7 @@ namespace csopesy::instruction {
     return {
       .opcode = "ADD",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
+      .execute = [](const Instruction& inst, ProcessData& proc) {
         uint lhs = proc.get_memory().get(inst.args[1]);
         uint rhs = proc.get_memory().resolve(inst.args[2]);
         proc.get_memory().set(inst.args[0], lhs + rhs);

@@ -9,7 +9,7 @@ namespace csopesy::instruction {
     return {
       .opcode = "SLEEP",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
+      .execute = [](const Instruction& inst, ProcessData& proc) {
         uint duration = cast_uint(inst.args[0]);
         proc.get_state().sleep_for(duration);
       },

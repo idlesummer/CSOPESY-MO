@@ -10,9 +10,9 @@ namespace csopesy::instruction {
     return {
       .opcode = "ENDFOR",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
-        auto& prog = proc.get_program();
-        auto& context  = prog.get_context();
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        auto& program = proc.get_program();
+        auto& context = program.get_context();
 
         // Check for matching FOR context
         if (context.empty())
@@ -22,15 +22,14 @@ namespace csopesy::instruction {
 
         // First time hitting ENDFOR, set jump address
         if (frame.jump_addr == 0)
-          context.set_jump(prog.next_ip());
+          context.set_jump(program.get_ip() + 1);
         
          // Decrement count and check if we're done
         if (--frame.count > 0)
-          return frame.line_addr;
+          return void(program.set_ip(frame.line_addr));
 
         // Finished with this loop
         context.pop(); 
-        return nullopt;
       },
 
       .example = [](ProcessData&) -> Instruction {

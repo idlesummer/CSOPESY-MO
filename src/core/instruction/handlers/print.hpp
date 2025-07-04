@@ -9,9 +9,8 @@ namespace csopesy::instruction {
     return {
       .opcode = "PRINT",
 
-      .execute = [](const Instruction& inst, ProcessData& proc) -> Uint {
+      .execute = [](const Instruction& inst, ProcessData& proc) {
         proc.log(inst.args[0]);
-        return nullopt;
       },
 
       .example = [](ProcessData& proc) -> Instruction {

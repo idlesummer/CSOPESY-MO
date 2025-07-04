@@ -30,12 +30,12 @@ namespace csopesy {
      * Execute an instruction using its handler.  
      * Returns optional next instruction pointer. 
      */
-    Uint execute(const Instruction& inst, ProcessData& proc) const {
+    void execute(const Instruction& inst, ProcessData& proc) const {
       auto it = handlers.find(inst.opcode);
       if (it == handlers.end())
         throw runtime_error("Unknown instruction: " + inst.opcode);
 
-      return it->second.execute(inst, proc);
+      it->second.execute(inst, proc);
     }
 
     /** Returns list of all registered handlers. */

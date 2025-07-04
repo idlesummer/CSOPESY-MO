@@ -27,10 +27,12 @@ namespace csopesy {
       // Fetch and execute instruction
       const auto ip = prog.get_ip();
       const auto& inst = prog.get_instructions()[ip];
-      const auto next = interpreter.execute(inst, proc);
       
-      const auto line = next.value_or(prog.next_ip());
-      prog.set_ip(line);
+      interpreter.execute(inst, proc);
+      
+      // This line checks if IP was changed. If not, advance it.
+      if (ip == prog.get_ip())
+        prog.set_ip(ip + 1);
 
       return false;
     }

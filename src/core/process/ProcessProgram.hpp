@@ -34,7 +34,6 @@ namespace csopesy {
     /** Access and control the instruction pointer. */
     uint get_ip() const { return ip; }
     void set_ip(uint new_ip) { ip = new_ip; }
-    uint next_ip() { return ip + 1; }
 
     /** Check if the program has completed execution. */
     bool is_finished() const {
