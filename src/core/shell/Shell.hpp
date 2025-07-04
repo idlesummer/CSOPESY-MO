@@ -15,6 +15,7 @@ namespace csopesy {
       interpreter(Interpreter::instance()),
       screen(storage) {
     
+    // Register all command handlers
     for (auto handler: command::get_all())
       interpreter.register_command(move(handler));
   }
