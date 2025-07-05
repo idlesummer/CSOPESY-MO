@@ -26,13 +26,9 @@ namespace csopesy {
       insts.push_back(move(inst));
     }
 
-    /** 
-     * Compile the program. 
-     * This is a placeholder for any future compilation logic.
-     * Currently does nothing but can be extended later.
-     */
-    void compile() {
-
+    /** Returns a reference to the instruction at the given address. */
+    const Instruction& get_instruction(uint ip) {
+      return insts.at(ip);
     }
 
     /** Get the total number of instructions in the program. */

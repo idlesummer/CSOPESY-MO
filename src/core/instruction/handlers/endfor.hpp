@@ -14,22 +14,23 @@ namespace csopesy::instruction {
         auto& program = proc.get_program();
         auto& context = program.get_context();
 
-        // Check for matching FOR context
-        if (context.empty())
-          throw runtime_error("[ENDFOR] No matching FOR context.");
-
+        // Check if block is inside a FOR loop
+        if (!context.matches("FOR"))
+          throw runtime_error("[ENDFOR] No matching FOR block on stack.");
+        
         auto& frame = context.top();
 
-        // First time hitting ENDFOR, set jump address
-        if (frame.jump_addr == 0)
-          context.set_jump(program.get_ip() + 1);
-        
-         // Decrement count and check if we're done
-        if (--frame.count > 0)
-          return void(program.set_ip(frame.line_addr));
+        // Cache exit address if it's not set
+        const auto& for_inst = program.get_instruction(frame.start);
+        if (for_inst.exit == 0)
+          for_inst.exit = program.get_ip() + 1;
 
-        // Finished with this loop
-        context.pop(); 
+        // Decrement loop count; jump back if more iterations remain
+        if (--frame.count > 0)
+          return void(program.set_ip(frame.start));
+
+        // Loop finished - pop the context frame
+        context.pop();
       },
 
       .example = [](ProcessData&) -> Instruction {

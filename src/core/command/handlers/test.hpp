@@ -67,14 +67,14 @@ namespace csopesy::command {
         cout << "[loop-test] Context Stack:\n";
         if (stack.empty())
           cout << "  <empty>\n";
-
         else {
           const auto& frames = stack.raw();
           for (uint i = 0; i < frames.size(); ++i) {
             const auto& frame = frames[i];
+            const auto& inst  = program.get_instruction(frame.start);
             cout << format(
-              "  [{}] name: {}, line: {}, jump: {}, count: {}\n",
-              i, frame.name, frame.line_addr, frame.jump_addr, frame.count
+              "  [{}] {:<6} @{:02}, exit: {:02}, count: {}\n",
+              i, frame.opcode, frame.start, inst.exit, frame.count
             );
           }
         }
@@ -89,7 +89,7 @@ namespace csopesy::command {
         for (uint i = 0; i < insts.size(); ++i) {
           const auto& inst = insts[i];
           auto arrow = (i == ip) ? ">" : " ";
-          cout << format("  {} [{:02}] {}", arrow, i, inst.opcode);
+          cout << format("  {} [{:02}] {:<8}", arrow, i, inst.opcode);
           for (const auto& arg : inst.args)
             cout << ' ' << arg;
           cout << '\n';
@@ -102,7 +102,6 @@ namespace csopesy::command {
         cout << "[loop-test] Process stepped.\n";
         cout << (done ? "Finished." : "Still running.");
       },
-
     };
   }
 }
