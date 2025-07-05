@@ -10,7 +10,7 @@ namespace csopesy::instruction {
       .opcode = "DECLARE",
 
       .execute = [](const Instruction& inst, ProcessData& proc) {
-        uint value = cast_uint(inst.args[1]);
+        uint value = stoul(inst.args[1]);
         proc.get_memory().set(inst.args[0], value);
       },
 

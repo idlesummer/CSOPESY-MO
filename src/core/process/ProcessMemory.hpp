@@ -22,7 +22,7 @@ namespace csopesy {
     
     /** Resolves a token as a literal or variable lookup */
     uint resolve(const str& token) const {
-      return isdigit(token[0]) ? cast_uint(token) : get(token);
+      return isdigit(token[0]) ? stoul(token) : get(token);
     }
 
     /** Exposes internal variable bindings */

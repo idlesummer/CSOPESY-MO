@@ -1,39 +1,42 @@
 #pragma once
-#include <string>     // for std::string
-#include <any>        // for std::any, std::any_cast
-#include <cstdlib>    // for std::strtoul
-#include <cstdint>    // for uint32_t
-#include <utility>    // for std::forward
+#include <any>          // for std::any, std::any_cast
+#include <cstdint>      // for std::uint32_t
+#include <string>       // for std::string
+#include <type_traits>  // for std::decay_t
+#include <utility>      // for std::forward
 
 namespace csopesy {
   using std::bad_any_cast;
+  
+  // Import standard string conversion functions
+  using std::stoi;
+  using std::stof;
+  using std::stoul;
 
-  // === Type-to-Type Casting ===
-  template <typename Type>
-  inline float cast_float(Type&& x) {
-    return static_cast<float>(std::forward<Type>(x));
+  // === Generic any cast function ===
+  template <typename Type, typename From>
+  Type cast(From&& x) {
+    using Raw = std::decay_t<From>;
+
+    if constexpr (std::is_same_v<Raw, std::any>)
+      return std::any_cast<Type>(x);
+    else
+      return static_cast<Type>(std::forward<From>(x));
   }
 
-  template <typename Type>
-  inline int cast_int(Type&& x) {
-    return static_cast<int>(std::forward<Type>(x));
+  // === Aliases for clarity ===
+  template <typename From> 
+  inline int cast_int (From&& x) { 
+    return cast<int>(std::forward<From>(x)); 
   }
 
-  // === String Conversion ===
-  inline uint32_t cast_uint(const std::string& s) {
-    return static_cast<uint32_t>(std::stoul(s));
+  template <typename From> 
+  inline std::uint32_t cast_uint (From&& x) { 
+    return cast<uint32_t>(std::forward<From>(x)); 
   }
-
-  // === std::any Conversion ===
-  inline int to_int (const std::any& val)    { 
-    return std::any_cast<int>(val); 
-  }
-
-  inline std::string to_str(const std::any& val) { 
-    return std::any_cast<std::string>(val); 
-  }
-
-  inline uint32_t to_uint(const std::any& val) { 
-    return std::any_cast<uint32_t>(val); 
+  
+  template <typename From> 
+  inline std::string cast_str (From&& x) {
+    return cast<std::string>(std::forward<From>(x)); 
   }
 }

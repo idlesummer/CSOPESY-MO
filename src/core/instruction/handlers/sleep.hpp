@@ -10,7 +10,7 @@ namespace csopesy::instruction {
       .opcode = "SLEEP",
 
       .execute = [](const Instruction& inst, ProcessData& proc) {
-        uint duration = cast_uint(inst.args[0]);
+        uint duration = stoul(inst.args[0]);
         proc.get_state().sleep_for(duration);
       },
 

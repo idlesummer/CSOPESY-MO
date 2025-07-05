@@ -14,7 +14,7 @@ namespace csopesy::instruction {
         auto& context = program.get_context();
         
         uint line_addr = program.get_ip();
-        uint count = cast_uint(inst.args[0]);
+        uint count = stoul(inst.args[0]);
         
         // Only push if no frame exists or the top isn't for this same line
         if (context.empty() || context.top().line_addr != line_addr)
