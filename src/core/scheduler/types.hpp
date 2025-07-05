@@ -13,18 +13,13 @@ namespace csopesy {
     bool initialized = false;
 
     bool set(const str& key, str value) {
-      if (key == "scheduler") {
-        scheduler = move(value);
-        return true;
-      }
-
-      if      (key == "num-cpu")            return (num_cpu = stoul(value)), true;
-      else if (key == "quantum-cycles")     return (quantum_cycles = stoul(value)), true;
-      else if (key == "batch-process-freq") return (batch_process_freq = stoul(value)), true;
-      else if (key == "min-ins")            return (min_ins = stoul(value)), true;
-      else if (key == "max-ins")            return (max_ins = stoul(value)), true;
-      else if (key == "delays-per-exec")    return (delays_per_exec = stoul(value)), true;
-
+      if (key == "scheduler")          return (scheduler = move(value)), true;
+      if (key == "num-cpu")            return (num_cpu = stoul(value)), true;
+      if (key == "quantum-cycles")     return (quantum_cycles = stoul(value)), true;
+      if (key == "batch-process-freq") return (batch_process_freq = stoul(value)), true;
+      if (key == "min-ins")            return (min_ins = stoul(value)), true;
+      if (key == "max-ins")            return (max_ins = stoul(value)), true;
+      if (key == "delays-per-exec")    return (delays_per_exec = stoul(value)), true;
       return false;
     }
   };
