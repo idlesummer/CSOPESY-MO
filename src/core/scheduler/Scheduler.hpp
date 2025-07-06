@@ -137,7 +137,7 @@ namespace csopesy {
       auto name = format("p{:02}", next_process_id);
       auto proc = Process(name, next_process_id++);
 
-      const auto& handlers = interpreter.get_handler_list();
+      const auto& handlers = interpreter.get_handlers();
       uint min = config.min_ins;
       uint max = config.max_ins;
       uint num_inst = Random::num(min, max);

@@ -1,5 +1,6 @@
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
 #include "core/process/Process.hpp"
 #include "core/process/ProcessProgram.hpp"
 #include "core/process/ProcessExecutor.hpp"
@@ -7,7 +8,6 @@
 #include "core/command/CommandHandler.hpp"
 
 namespace csopesy::command {
-
   inline const CommandHandler make_test() {
     return {
       .name = "test",
@@ -17,7 +17,7 @@ namespace csopesy::command {
       .flags = {{ "--reset", false }},
 
       .execute = [](const Command& command, Shell& shell) {
-        using Instructions = ProcessProgram::list;
+        using Insts = Instruction::list;
         
         auto& storage = shell.get_storage();
 
@@ -27,10 +27,10 @@ namespace csopesy::command {
           cout << "[loop-test] Dummy process reset.\n";
           return;
         }
-        
+
         // 1. Spawn process if not already present
         if (!storage.has("test_proc")) {
-          auto insts = Instructions{
+          auto insts = Insts{
             { "PRINT", { "Start!" }},
             { "FOR", { "3" }},
             { "PRINT", { "outer loop" }},
@@ -55,7 +55,7 @@ namespace csopesy::command {
         system("cls");
         auto& process = storage.get<Process>("test_proc");
         auto& program = process.get_program();
-        auto& state   = process.get_state();
+        auto& state = process.get_state();
 
         if (state.is_finished())
           return void(cout << "[loop-test] Process already finished.");

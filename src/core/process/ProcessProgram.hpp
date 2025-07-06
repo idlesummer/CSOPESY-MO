@@ -52,7 +52,6 @@ namespace csopesy {
       // Compute padding width based on the number of instructions
       uint addr_width = to_string(insts.size()-1).length();
       
-
       for (uint i=0; i < insts.size(); ++i) {
         const auto& inst = insts[i];
         const auto marker = (i == ip) ? '>' : ' ';

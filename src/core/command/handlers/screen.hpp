@@ -102,7 +102,7 @@ namespace csopesy::command {
           if (process_exists)
             return void(cout << "Process " << name << " already exists\n");
 
-          const auto& handlers = interpreter.get_handler_list();
+          const auto& handlers = interpreter.get_handlers();
           const int pid = scheduler.get_processes().size() + 1;
 
           // create process 

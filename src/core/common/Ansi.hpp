@@ -3,6 +3,7 @@
 
 namespace csopesy {
   class Ansi {
+
     public:
 
     static void enable() {
@@ -16,7 +17,7 @@ namespace csopesy {
       if (!SetConsoleMode(handle, mode)) 
         return void(cerr << "Failed to enable ANSI escape sequences.\n");
     }
-
+    
     static void set_title(ostream& out, const str& title) {
       out << "\033]0;" << title << "\a";
     }
