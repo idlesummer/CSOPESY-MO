@@ -61,7 +61,7 @@ namespace csopesy {
         if (opcode.size() > opcode_width)
           opcode = opcode.substr(0, opcode_width);
 
-        stream << format("{} [{:>{}}] {:<{}}", 
+        stream << format("{} [{:0{}}] {:<{}}", 
           marker, i, addr_width, opcode, opcode_width);
 
         for (const auto& arg: inst.args)
