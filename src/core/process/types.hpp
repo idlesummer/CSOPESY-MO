@@ -23,21 +23,15 @@ namespace csopesy {
     public:
     
     /** Checks if top frame matches the opcode. */
-    bool matches(const str& opcode) const {
-      return !empty() && top().opcode == opcode;
-    }
+    bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }
 
     /** Checks if top frame matches the opcode, start address, and has an initialized exit address. */
     bool matches(const str& opcode, uint start) const {
-      return !empty()
-          && top().opcode == opcode
-          && top().start == start;
+      return !empty() && top().opcode == opcode && top().start == start;
     }
 
     /** Returns true if the top frame starts at the given instruction pointer. */
-    bool starts_at(uint ip) const {
-      return !empty() && top().start == ip;
-    }
+    bool starts_at(uint ip) const { return !empty() && top().start == ip; }
 
     /** Push a new loop context onto the stack. */
     void push(str opcode, uint start, uint count) {
@@ -56,11 +50,12 @@ namespace csopesy {
     /** Clear all loop contexts from the stack. */
     void clear() { stack.clear(); }
 
-    /** Get a reference to the raw stack of loop contexts. */
-    const Stack& raw() const { return stack; }
-
     /** Access the top loop context */
     ContextFrame& top() { return stack.back(); }
     const ContextFrame& top() const { return stack.back(); }
+
+    /** Access a loop context by index. */
+    ContextFrame& at(uint index) { return stack.at(index); }
+    const ContextFrame& at(uint index) const { return stack.at(index); }
   };
 }

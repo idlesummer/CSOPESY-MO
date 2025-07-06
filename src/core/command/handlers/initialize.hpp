@@ -47,8 +47,8 @@ namespace csopesy::command {
         config.initialized = true;
         shell.get_scheduler().set_config(config);
 
-        cout << BANNER << endl;
-        cout << "[Shell] Scheduler config loaded.";
+        cout << BANNER << '\n';
+        cout << "[Shell] Scheduler config loaded.\n";
         storage.remove("initialize.cache");
       },
     };

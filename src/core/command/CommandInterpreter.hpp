@@ -62,7 +62,6 @@ namespace csopesy {
       
       // Execute the command
       handler.execute(command, shell);
-      cout << '\n';
     }
 
     private:

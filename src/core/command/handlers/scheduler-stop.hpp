@@ -22,7 +22,7 @@ namespace csopesy::command {
 
       .execute = [](const Command&, Shell& shell) {
         shell.get_scheduler().stop_generation();
-        cout << "[Shell] Dummy process generation stopped.";
+        cout << "[Shell] Dummy process generation stopped.\n";
       },
     };
   }

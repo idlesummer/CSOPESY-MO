@@ -45,6 +45,7 @@ namespace csopesy {
       });
 
       thread = Thread([&] {
+        cout << '\n';   // Lets make it a convention that line 1 is empty.
         while (active) 
           tick();
       });

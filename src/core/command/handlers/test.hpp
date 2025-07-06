@@ -24,7 +24,7 @@ namespace csopesy::command {
         // 0. Reset process if requested
         if (command.flags.contains("--reset")) {
           shell.get_storage().remove("test_proc");
-          cout << "[loop-test] Dummy process reset.";
+          cout << "[loop-test] Dummy process reset.\n";
           return;
         }
         
@@ -43,11 +43,11 @@ namespace csopesy::command {
 
           auto process = Process("loop-test", 999);
           auto& program = process.get_program();
-          for (auto& inst : insts)
+          for (auto& inst: insts)
             program.add_instruction(move(inst));
 
           storage.set("test_proc", move(process));
-          cout << "[loop-test] Process created.";
+          cout << "[loop-test] Process created.\n";
           return;
         }
 
@@ -57,50 +57,22 @@ namespace csopesy::command {
         auto& program = process.get_program();
         auto& state   = process.get_state();
 
-        if (state.is_finished()) {
-          cout << "[loop-test] Process already finished.";
-          return;
-        }
+        if (state.is_finished())
+          return void(cout << "[loop-test] Process already finished.");
 
         // === Debug: Show context stack ===
-        const auto& stack = program.get_context();
         cout << "[loop-test] Context Stack:\n";
-        if (stack.empty())
-          cout << "  <empty>\n";
-        else {
-          const auto& frames = stack.raw();
-          for (uint i = 0; i < frames.size(); ++i) {
-            const auto& frame = frames[i];
-            const auto& inst  = program.get_instruction(frame.start);
-            cout << format(
-              "  [{}] {:<6} @{:02}, exit: {:02}, count: {}\n",
-              i, frame.opcode, frame.start, inst.exit, frame.count
-            );
-          }
-        }
-
-        cout << '\n';
+        cout << program.view_context() << '\n';
 
         // === Debug: Show instruction list with pointer ===
-        const auto ip = program.get_ip();
-        const auto& insts = program.get_instructions();
-
         cout << "[loop-test] Instruction List:\n";
-        for (uint i = 0; i < insts.size(); ++i) {
-          const auto& inst = insts[i];
-          auto arrow = (i == ip) ? ">" : " ";
-          cout << format("  {} [{:02}] {:<8}", arrow, i, inst.opcode);
-          for (const auto& arg : inst.args)
-            cout << ' ' << arg;
-          cout << '\n';
-        }
-
-        cout << '\n';
-
+        cout << program.view_instructions() << '\n';
+        
         // 3. Step the process
         const bool done = ProcessExecutor::step(process.get_data());
         cout << "[loop-test] Process stepped.\n";
         cout << (done ? "Finished." : "Still running.");
+        cout << '\n';
       },
     };
   }

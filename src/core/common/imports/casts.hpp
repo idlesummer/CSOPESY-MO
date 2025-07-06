@@ -12,6 +12,7 @@ namespace csopesy {
   using std::stoi;
   using std::stof;
   using std::stoul;
+  using std::to_string;
 
   // === Generic any cast function ===
   template <typename Type, typename From>

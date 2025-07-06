@@ -57,7 +57,7 @@ namespace csopesy::command {
         // }
 
         cout << "Current instruction line: " << program.get_ip() << '\n';
-        cout << "Lines of code: " << program.size() << "\n" << "\n";
+        cout << "Lines of code: " << program.size() << "\n\n";
         storage.remove("process-smi.cache");
       },
     };

@@ -15,6 +15,7 @@ namespace csopesy::command {
       .execute = [](const Command& command, Shell&) {
         for (const auto& arg: command.args)
           cout << arg << ' ';
+        cout << '\n';
       },
     };
   }
