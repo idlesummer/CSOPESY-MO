@@ -33,6 +33,11 @@ namespace csopesy {
       return dist(rng);
     }
 
+    /** Returns true with probability 1/odds */
+    static bool chance(uint odds) {
+      return odds != 0 && num(1u, odds) == 1u;
+    }
+
     /** Random float in [min, max) */
     static float real(float min, float max) {
       auto dist = real_dist(min, max);
