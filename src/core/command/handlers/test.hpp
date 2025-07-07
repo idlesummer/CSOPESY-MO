@@ -63,7 +63,7 @@ namespace csopesy::command {
         cout << program.view_script() << '\n';
         
         // 3. Step the process
-        const bool done = ProcessExecutor::step(process.get_data());
+        const bool done = process.step();
         cout << "[loop-test] Process stepped.\n";
         cout << (done ? "Finished." : "Still running.");
         cout << '\n';

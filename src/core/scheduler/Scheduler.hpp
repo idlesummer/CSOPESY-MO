@@ -1,7 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
-#include "core/process/ProcessExecutor.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "types.hpp"
 
@@ -128,7 +127,7 @@ namespace csopesy {
 
     /** Execute a single instruction for one process */
     void step_process(Process& proc) {
-      if (ProcessExecutor::step(proc.get_data()))
+      if (proc.step())
         finished.push_back(cref(proc));
     }
 
@@ -137,11 +136,11 @@ namespace csopesy {
       auto name = format("p{:02}", next_process_id);
       auto proc = Process(name, next_process_id++);
      
-      // Use the interpreter to generate a valid script
+      // Randomly generate a script of a random instruction count
       uint size = Random::num(config.min_ins, config.max_ins);
       auto script = interpreter.generate_script(size);
 
-      // Add them to the program
+      // Load the script into the program
       proc.get_program().load_script(move(script));
 
       // Add process to process list
