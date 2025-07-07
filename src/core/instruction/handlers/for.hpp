@@ -1,13 +1,13 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionSchema.hpp"
+#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 namespace csopesy::instruction {
   inline InstructionHandler make_for() {
-    using Schema = InstructionSchema;
+    using Param = InstructionParam;
     
     // === Skips ahead to the matching ENDFOR. ===
     auto skip_block = [](auto& program, const Instruction& inst) {
@@ -40,7 +40,7 @@ namespace csopesy::instruction {
     return {
       .opcode = "FOR",
       .exit_opcode = "ENDFOR",
-      .schema = { Schema::UInt(1, 5) },
+      .signatures = {{ Param::UInt(1, 5) }},
       .execute = [&](const Instruction& inst, ProcessData& process) {
         auto& program = process.get_program();
         auto count = stoul(inst.args[0]);

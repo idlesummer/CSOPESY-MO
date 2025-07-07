@@ -37,7 +37,7 @@ namespace csopesy::command {
           auto& program = process.get_program();
           
           // Generate a random list of instructions
-          auto script = interpreter.generate_script(20);
+          auto script = interpreter.generate_script(10);
           program.load_script(move(script));
 
           storage.set("test.process", move(process));

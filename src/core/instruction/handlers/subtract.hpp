@@ -4,7 +4,6 @@
 #include "core/process/ProcessData.hpp"
 
 namespace csopesy::instruction {
-
   inline InstructionHandler make_subtract() {
     return {
       .opcode = "SUBTRACT",
@@ -14,11 +13,6 @@ namespace csopesy::instruction {
         uint rhs = proc.get_memory().resolve(inst.args[2]);
         proc.get_memory().set(inst.args[0], lhs - rhs);
       },
-
-      .example = [](ProcessData&) -> Instruction {
-        return { "SUBTRACT", { "z", "x", "y" } };
-      },
     };
   }
-
 }

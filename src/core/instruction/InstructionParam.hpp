@@ -4,8 +4,9 @@
 namespace csopesy {
 
   /** Represents a schema used to validate and generate instruction arguments. */
-  struct InstructionSchema {
+  struct InstructionParam {
     using list = vector<str>;
+    using Signature = vector<InstructionParam>;
 
     /** Supported argument types. */
     enum class Type {
@@ -22,7 +23,7 @@ namespace csopesy {
     // === Argument Generator ===
 
     /** Returns a randomly generated argument string that matches this schema. */
-    str generate_arg() const {
+    str generate() const {
       switch (type) {
         case Type::UInt:    return to_string(Random::num(min, max));
         case Type::String:  return Random::pick(vars);
@@ -33,11 +34,11 @@ namespace csopesy {
 
     // === Static Constructors ===
 
-    static InstructionSchema UInt(uint min, uint max) { return { Type::UInt, min, max }; }
-    static InstructionSchema UInt8() { return UInt(0, 255); }
-    static InstructionSchema UInt16() { return UInt(0, 65535); }
-    static InstructionSchema String() { return { Type::String }; }
-    static InstructionSchema Keyword(list opts) { return { Type::Keyword, 0, 0, opts };}
+    static InstructionParam UInt(uint min, uint max) { return { Type::UInt, min, max }; }
+    static InstructionParam UInt8() { return UInt(0, 255); }
+    static InstructionParam UInt16() { return UInt(0, 65535); }
+    static InstructionParam String() { return { Type::String }; }
+    static InstructionParam Keyword(list opts) { return { Type::Keyword, 0, 0, opts };}
 
     private:
 

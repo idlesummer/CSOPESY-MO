@@ -87,7 +87,8 @@ namespace csopesy {
         all_handlers.push_back(cref(handler));  // Add to full list
 
         // Separate into control vs. flat based on metadata
-        if (handler.is_control())
+        if (handler.is_control_exit()) continue;
+        if (handler.is_control_open())
           control_handlers.push_back(cref(handler));
         else
           flat_handlers.push_back(cref(handler));

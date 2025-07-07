@@ -4,7 +4,6 @@
 #include "core/process/ProcessData.hpp"
 
 namespace csopesy::instruction {
-
   inline InstructionHandler make_sleep() {
     return {
       .opcode = "SLEEP",
@@ -13,11 +12,6 @@ namespace csopesy::instruction {
         uint duration = stoul(inst.args[0]);
         proc.get_state().sleep_for(duration);
       },
-
-      .example = [](ProcessData&) -> Instruction {
-        return { "SLEEP", { "2" } };
-      },
     };
   }
-
 }
