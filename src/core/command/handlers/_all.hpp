@@ -1,4 +1,5 @@
 #pragma once
+#include "core/common/imports/_all.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "clear.hpp"
 #include "echo.hpp"

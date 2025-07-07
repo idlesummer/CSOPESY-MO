@@ -3,7 +3,7 @@
 #include "core/process/Process.hpp"
 
 namespace csopesy {
-  class Core {
+  class SchedulerCore {
     using ProcessRef = ref<Process>;
     using Job = optional<ProcessRef>;
 
@@ -12,7 +12,7 @@ namespace csopesy {
 
   public:
 
-    Core(uint id=0): id(id) {}
+    SchedulerCore(uint id=0): id(id) {}
 
     void assign(ProcessRef procref) {
       job = move(procref);
