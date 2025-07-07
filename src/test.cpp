@@ -11,7 +11,7 @@ int main() {
 
   // Create a flat program with a FOR loop and some basic instructions
   auto& prog = data.get_program();
-  auto& insts = prog.get_instructions();
+  auto& insts = prog.get_script();
 
   insts = {
     Instruction{"DECLARE", {"x", "0"}},

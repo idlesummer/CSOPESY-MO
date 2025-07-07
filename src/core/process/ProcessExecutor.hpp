@@ -26,7 +26,7 @@ namespace csopesy {
 
       // Fetch and execute instruction
       const auto ip = prog.get_ip();
-      const auto& inst = prog.get_instructions()[ip];
+      const auto& inst = prog.get_script()[ip];
       
       interpreter.execute(inst, proc);
       

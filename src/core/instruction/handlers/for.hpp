@@ -1,11 +1,13 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionSchema.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 namespace csopesy::instruction {
   inline InstructionHandler make_for() {
+    using Schema = InstructionSchema;
     
     // === Skips ahead to the matching ENDFOR. ===
     auto skip_block = [](auto& program, const Instruction& inst) {
@@ -15,12 +17,12 @@ namespace csopesy::instruction {
         return program.set_ip(inst.exit);
       
       auto start = program.get_ip();
-      auto& insts = program.get_instructions();
+      auto& script = program.get_script();
       uint depth = 1;
 
       // Otherwise, scan ahead to find the matching ENDFOR
-      for (uint i = start+1; i < insts.size(); ++i) {
-        const auto& opcode = insts[i].opcode;
+      for (uint i = start+1; i < script.size(); ++i) {
+        const auto& opcode = script[i].opcode;
         const int delta = (opcode == "FOR") - (opcode == "ENDFOR");
         depth += delta;
         
@@ -37,7 +39,8 @@ namespace csopesy::instruction {
 
     return {
       .opcode = "FOR",
-
+      .exit_opcode = "ENDFOR",
+      .schema = { Schema::UInt(1, 5) },
       .execute = [&](const Instruction& inst, ProcessData& process) {
         auto& program = process.get_program();
         auto count = stoul(inst.args[0]);
@@ -52,10 +55,6 @@ namespace csopesy::instruction {
         // Push context if this FOR hasn't been visited yet
         if (!context.starts_at(ip))
           context.push("FOR", ip, count);
-      },
-
-      .example = [](ProcessData& proc) -> Instruction {
-        return { "FOR", { "3" }};
       },
     };
   }

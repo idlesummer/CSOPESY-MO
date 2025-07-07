@@ -136,17 +136,15 @@ namespace csopesy {
     void create_dummy_process() {
       auto name = format("p{:02}", next_process_id);
       auto proc = Process(name, next_process_id++);
+     
+      // Use the interpreter to generate a valid script
+      uint size = Random::num(config.min_ins, config.max_ins);
+      auto script = interpreter.generate_script(size);
 
-      const auto& handlers = interpreter.get_handlers();
-      uint min = config.min_ins;
-      uint max = config.max_ins;
-      uint num_inst = Random::num(min, max);
-      for (uint i = 0; i < num_inst; ++i) {
-        auto handler = Random::pick(handlers).get();
-        auto inst = handler.example(proc.get_data());
-        proc.get_program().add_instruction(inst);
-      }
+      // Add them to the program
+      proc.get_program().load_script(move(script));
 
+      // Add process to process list
       add_process(move(proc));
     }
 

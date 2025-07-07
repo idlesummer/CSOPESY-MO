@@ -111,13 +111,10 @@ namespace csopesy::command {
           const int min = config.min_ins;
           const int max = config.max_ins;
 
-          // process.set_program(randomized instruction) TODO
-          const uint num_inst = Random::num(min, max);
-          for (uint j = 0; j < num_inst; ++j) {
-            auto handler = Random::pick(handlers).get();
-            auto inst = handler.example(process.get_data());
-            process.get_program().add_instruction(inst);
-          }
+          // create randomized instruction list (script)
+          const uint size = Random::num(min, max);
+          auto script = interpreter.generate_script(size);
+          process.get_program().load_script(move(script));
           
           // scheduler.add_process(process);
           scheduler.add_process(move(process));

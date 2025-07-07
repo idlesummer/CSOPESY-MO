@@ -9,7 +9,7 @@ namespace csopesy::instruction {
   inline InstructionHandler make_endfor() {
     return {
       .opcode = "ENDFOR",
-
+      .open_opcode = "FOR",
       .execute = [](const Instruction& inst, ProcessData& proc) {
         auto& program = proc.get_program();
         auto& context = program.get_context();
@@ -31,10 +31,6 @@ namespace csopesy::instruction {
 
         // Loop finished - pop the context frame
         context.pop();
-      },
-
-      .example = [](ProcessData&) -> Instruction {
-        return { "ENDFOR" };
       },
     };
   }
