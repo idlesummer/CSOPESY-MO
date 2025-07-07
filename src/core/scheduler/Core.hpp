@@ -1,4 +1,3 @@
-
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
@@ -6,43 +5,45 @@
 namespace csopesy {
   class Core {
     using ProcessRef = ref<Process>;
-    using Slot = optional<ProcessRef>;
-    using func = function<void(Process&)>;
+    using Job = optional<ProcessRef>;
 
-    Slot process;
+    Job job;
     uint id;
 
-    public:
-    
+  public:
+
     Core(uint id=0): id(id) {}
 
-    void assign(ProcessRef p) {
-      process = move(p);
-      p.get().set_core(id);
+    void assign(ProcessRef procref) {
+      job = move(procref);
+      auto& process = procref.get();
+      process.set_core(id);
     }
-    
-    void release() {
-      if (process) 
-        process.value().get().reset_core();
-      process.reset();
-    }
-    
-    void step() {
-      if (!process) return;
-      auto& p = process.value().get();
 
-      if (p.step())
+    void release() {
+      if (!job) return;
+
+      auto& process = job->get();
+      process.reset_core();
+      job.reset();
+    }
+
+    void step() {
+      if (!job) return;
+
+      auto& process = job->get();
+      if (process.step())
         release();
     }
-    
-    Process& get_process() {
-      if (!process) 
-        throw runtime_error("No process assigned to core");
-      return process.value().get();
+
+    Process& get_job() {
+      if (!job)
+        throw runtime_error("No job assigned to core");
+      return job->get();
     }
-    
+
     uint id() const { return id; }
-    bool is_idle() const { return !process.has_value(); }
-    bool is_running() const { return process.has_value(); }
+    bool is_idle() const { return !job.has_value(); }
+    bool is_running() const { return job.has_value(); }
   };
 }
