@@ -1,9 +1,9 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/Ansi.hpp"
+#include "core/common/utility/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
-#include "core/common/Component.hpp"
-#include "core/common/EventEmitter.hpp"
+#include "core/common/utility/Component.hpp"
+#include "core/common/utility/EventEmitter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 #include "core/command/CommandInterpreter.hpp"
 

@@ -1,5 +1,5 @@
 #include "core/common/imports/_all.hpp"
-#include "core/common/EventEmitter.hpp"
+#include "core/common/utility/EventEmitter.hpp"
 #include "core/shell/Shell.hpp"
 
 int main() {

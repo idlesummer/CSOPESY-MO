@@ -1,5 +1,5 @@
 #pragma once
-#include "core/common/EventEmitter.hpp"
+#include "core/common/utility/EventEmitter.hpp"
 
 namespace csopesy {
   class Component {
