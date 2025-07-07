@@ -11,9 +11,9 @@ namespace csopesy::instruction {
     return {
       .opcode = "ADD",
       .signatures = {
-        { Param::String(), Param::String(), Param::String() },  // ADD var, var, var
-        { Param::String(), Param::String(), Param::UInt16() },  // ADD var, var, immediate
-        { Param::String(), Param::UInt16(), Param::UInt16() },  // ADD var, immediate, immediate
+        { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
+        { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
+        { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
       },
       .execute = [](const Instruction& inst, ProcessData& proc) {
         uint lhs = proc.get_memory().get(inst.args[1]);

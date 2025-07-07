@@ -10,8 +10,8 @@ namespace csopesy::instruction {
     return {
       .opcode = "PRINT",
       .signatures = {
-        { Param::String() },
-        // { Param::String(), Param::Keyword({ "x" })},
+        { Param::Str() },
+        { Param::Str(), Param::Var()},
       },
       .execute = [](const Instruction& inst, ProcessData& proc) {
         proc.log(inst.args[0]);
