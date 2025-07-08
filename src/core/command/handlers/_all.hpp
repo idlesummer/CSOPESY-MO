@@ -2,6 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "clear.hpp"
+#include "demo.hpp"
 #include "echo.hpp"
 #include "exit.hpp"
 #include "initialize.hpp"
@@ -18,6 +19,7 @@ namespace csopesy::command {
   list get_all() {
     return {
       make_clear(),
+      make_demo(),
       make_echo(),
       make_exit(),
       make_initialize(),

@@ -50,22 +50,22 @@ namespace csopesy {
      */
     Script generate_script(uint size, uint max_depth=3) {
       auto script = Script();
-      list control_stack; // Tracks opened control blocks
+      list stack; // Tracks opened control blocks
 
       while (script.size() < size) {
-        if (should_open(control_stack, max_depth))    // For opening control instructions
-          open_control_block(script, control_stack);
+        if (should_open(stack, max_depth))  // For opening control instructions
+          open_control_block(script, stack);
         
-        else if (should_close(control_stack)) // For closing control instructions
-          close_control_block(script, control_stack);
+        else if (should_close(stack))       // For closing control instructions
+          close_control_block(script, stack);
 
-        if (!flat_handlers.empty())      // For adding flat instructions
+        if (!flat_handlers.empty())                 // For adding flat instructions
           script.push_back(Random::pick(flat_handlers).get().generate());
       }
 
       // Auto-close any unclosed control blocks
-      while (!control_stack.empty())
-        close_control_block(script, control_stack);
+      while (!stack.empty())
+        close_control_block(script, stack);
 
       return script;
     }
@@ -98,30 +98,30 @@ namespace csopesy {
     // === Internal Helpers ===
 
     /** Returns true if a control block can be opened (depth-limited, random chance). */
-    bool should_open(const list& control_stack, uint max_depth) const { 
-      return !control_handlers.empty() && (control_stack.size() < max_depth) && Random::chance(4); 
+    bool should_open(const list& stack, uint max_depth) const { 
+      return !control_handlers.empty() && (stack.size() < max_depth) && Random::chance(4); 
     }
 
     /** Returns true if a control block can be closed (if any open, random chance). */
-    bool should_close(const list& control_stack) const { 
-      return !control_stack.empty() && Random::chance(4); 
+    bool should_close(const list& stack) const { 
+      return !stack.empty() && Random::chance(4); 
     }
 
-    /** Emits a random control-opener instruction and pushes it to the control_stack. */
-    void open_control_block(Script& script, list& control_stack) const {
+    /** Emits a random control-opener instruction and pushes it to the stack. */
+    void open_control_block(Script& script, list& stack) const {
       const auto& handler = Random::pick(control_handlers);
       script.push_back(handler.get().generate());
-      control_stack.push_back(handler);
+      stack.push_back(handler);
     }
 
     /** Emits the matching end-opcode of the current open control block. */
-    void close_control_block(Script& script, list& control_stack) const {
-      if (control_stack.empty())
+    void close_control_block(Script& script, list& stack) const {
+      if (stack.empty())
         throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
       
-      const auto& opener = control_stack.back();
+      const auto& opener = stack.back();
       script.emplace_back(opener.get().exit_opcode);
-      control_stack.pop_back();
+      stack.pop_back();
     }
   };
 }

@@ -6,41 +6,38 @@ namespace csopesy {
 
   /** A program that can be executed by a process. */
   class ProcessProgram {
-    public:
-    using list = vector<Instruction>;
-    
-    private:
+    using Script = Instruction::Script;
     using Stack = ContextStack;
 
-    list script;    ///< Flat list of all program instructions
+    Script script;  ///< Flat list of all program instructions
     Stack context;  ///< Stack of active loop contexts
     uint ip = 0;    ///< Current instruction pointer
 
     public:
 
     /** Append a new instruction to the program */
-    void load_script(list new_script) { 
+    void load_script(Script new_script) { 
       script = move(new_script);
       context.clear();
       ip = 0;  
     }
+    
+    /** Check if the program has completed execution. */
+    bool is_finished() const { return ip >= script.size(); }
+
+    /** Get the total number of instructions in the program. */
+    uint size() const { return script.size(); }
+
+    /** Access and control the instruction pointer. */
+    void set_ip(uint new_ip) { ip = new_ip; }
+    uint get_ip() const { return ip; }
 
     /** Returns a reference to the instruction at the given address. */
     const Instruction& get_instruction(uint ip) { return script.at(ip); }
 
     /** Access list of all instructions. */
-    list& get_script() { return script; }
-    const list& get_script() const { return script; }
-    
-    /** Get the total number of instructions in the program. */
-    uint size() const { return script.size(); }
-
-    /** Access and control the instruction pointer. */
-    uint get_ip() const { return ip; }
-    void set_ip(uint new_ip) { ip = new_ip; }
-
-    /** Check if the program has completed execution. */
-    bool is_finished() const { return ip >= script.size(); }
+    Script& get_script() { return script; }
+    const Script& get_script() const { return script; }
 
     /** Access the loop context stack. */
     Stack& get_context() { return context; }

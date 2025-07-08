@@ -17,7 +17,6 @@ namespace csopesy {
     
     // === Optional Metadata ===
     str open_opcode; ///< For control instruction with a matching open
-    str next_opcode; ///< For control instruction with a matching next
     str exit_opcode; ///< For control instruction with a matching exit
     list signatures;      ///< Describes expected argument types
     
@@ -27,16 +26,10 @@ namespace csopesy {
     // === Helpers ===
 
     /** Returns true if this instruction begins a open control block (e.g., FOR). */
-    bool is_control_open() const { 
-      return !exit_opcode.empty();
-    }
-
-    // bool is_control_next() {...} NOT USED IN CODE SO I WONT IMLPEMENT THIS
+    bool is_control_open() const { return !exit_opcode.empty(); }
 
     /** Returns true if this instruction begins a exit control block (e.g., FOR). */
-    bool is_control_exit() const { 
-      return !open_opcode.empty();
-    }
+    bool is_control_exit() const { return !open_opcode.empty(); }
 
     /** Generates a random instruction based on the signature. */
     Instruction generate() const {
