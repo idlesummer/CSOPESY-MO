@@ -28,7 +28,7 @@ namespace csopesy {
     
     // === Control & lifecycle ===
     Thread thread;
-    atomic_bool active = true;
+    abool active = true;
     
     public:
 

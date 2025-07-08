@@ -5,7 +5,7 @@
 int main() {
   using namespace csopesy;
 
-  auto running = atomic_bool(true); // Global run flag for main loop
+  auto running = abool(true); // Global run flag for main loop
   auto global  = EventEmitter();    // Central event system
   auto shell   = Shell(global);     // Main shell interface
 

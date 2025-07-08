@@ -13,7 +13,7 @@ namespace csopesy {
 
     ProcList processes;
     ProcRefList finished;
-    queue<ref<Process>> ready_queue;
+    queue<ref<Process>> rqueue;
     CoreList cores;
     SchedulerConfig config;
     uint tick_count = 0;
@@ -28,7 +28,7 @@ namespace csopesy {
     /** Add a process to the global process list */
     void add_process(Process proc) {
       processes.push_back(move(proc));
-      ready_queue.push(ref(processes.back()));
+      rqueue.push(ref(processes.back()));
     }
 
     /** Advance 1 CPU tick */
@@ -56,8 +56,8 @@ namespace csopesy {
         if (core.has_value()) continue;
 
         // Skip if no ready process available
-        while (!ready_queue.empty()) {
-          auto proc_ref = ready_queue.front(); ready_queue.pop();
+        while (!rqueue.empty()) {
+          auto proc_ref = rqueue.front(); rqueue.pop();
           auto& proc = proc_ref.get();
 
           // Sanity check: skip if process is already finished
@@ -106,9 +106,9 @@ namespace csopesy {
         auto& core = cores[i];
 
         if (!core.has_value()) {
-          if (!ready_queue.empty()) {
-            core = ready_queue.front();
-            ready_queue.pop();
+          if (!rqueue.empty()) {
+            core = rqueue.front();
+            rqueue.pop();
           }
           continue;
         }
@@ -120,7 +120,7 @@ namespace csopesy {
           core.reset();
         } else {
           // Re-queue the process if it is still running
-          ready_queue.push(ref(proc));
+          rqueue.push(ref(proc));
         }
       }
     }

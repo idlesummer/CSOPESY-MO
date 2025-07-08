@@ -12,6 +12,9 @@ namespace csopesy {
   using std::atomic_bool;
   using std::atomic_int;
   using std::atomic_uint;
+  using abool = std::atomic_bool;
+  using aint = std::atomic_int;
+  using auint = std::atomic_uint;
 
   // === Locking & Threading Aliases ===
   using std::lock_guard;
