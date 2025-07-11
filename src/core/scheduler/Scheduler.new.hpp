@@ -42,7 +42,7 @@ namespace csopesy {
 
     /** Executes the active strategy logic and increments the tick count. */
     void tick() {
-      
+
       // Handle any queued process generations
       for (auto& name: proc_queue)
         generate_process(move(name));
@@ -71,7 +71,7 @@ namespace csopesy {
         core.on("release", [this](any payload) { on_core_release(payload); });
       }
     }    
-    
+
     // === Generation Control ===
     void enqueue_process(str name) { proc_queue.push_back(move(name)); }
     void generate(bool flag) { generating = flag; }

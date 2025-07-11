@@ -36,8 +36,8 @@ namespace csopesy {
     ~Core() { stop(); }
 
     /** Assigns a process to this core and updates its core ID. */
-    void assign(ProcessRef procref) {
-      job = move(procref);
+    void assign(ProcessRef ref) {
+      job = move(ref);
       job->get().set_core(id);
       ticks = 0;
       

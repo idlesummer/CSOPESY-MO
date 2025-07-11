@@ -431,39 +431,43 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](const Command& command, Shell& shell) -> Str {
-        // Check if the scheduler has already been initialized
-        if (shell.get_scheduler().get_config().initialized)
-          return "Already initialized.";
-        
-        // Check if the file could not be opened or is empty
-        auto lines = read_lines("config.txt");
-        if (lines.empty())
-          return "Failed to open config.txt";
-
-        auto& storage = shell.get_storage();
-        storage.set("initialize.cache", move(lines));
-        return nullopt;
+        return access([&]() -> Str {
+          // Check if the scheduler has already been initialized
+          if (shell.get_scheduler().get_config().initialized)
+            return "Already initialized.";
+          
+          // Check if the file could not be opened or is empty
+          auto lines = read_lines("config.txt");
+          if (lines.empty())
+            return "Failed to open config.txt";
+  
+          auto& storage = shell.get_storage();
+          storage.set("initialize.cache", move(lines));
+          return nullopt;
+        });
       },
 
       .execute = [](const Command& command, Shell& shell) {
-        auto& storage = shell.get_storage();
-        const auto& lines = storage.get<list>("initialize.cache");
-        auto config = SchedulerConfig();
-
-        for (const auto& line: lines) {
-          str key, value;
-          isstream(line) >> key >> value;
-
-          if (!config.set(key, move(value)))
-            cout << format("[Shell] Unknown config key: {}\n", key);
-        }
-
-        config.initialized = true;
-        shell.get_scheduler().set_config(config);
-
-        cout << BANNER << '\n';
-        cout << "[Shell] Scheduler config loaded.\n";
-        storage.remove("initialize.cache");
+        access([&] {
+          auto& storage = shell.get_storage();
+          const auto& lines = storage.get<list>("initialize.cache");
+          auto config = SchedulerConfig();
+  
+          for (const auto& line: lines) {
+            str key, value;
+            isstream(line) >> key >> value;
+  
+            if (!config.set(key, move(value)))
+              cout << format("[Shell] Unknown config key: {}\n", key);
+          }
+  
+          config.initialized = true;
+          shell.get_scheduler().set_config(config);
+  
+          cout << BANNER << '\n';
+          cout << "[Shell] Scheduler config loaded.\n";
+          storage.remove("initialize.cache");
+        });
       },
     };
   }
@@ -493,48 +497,52 @@ namespace csopesy::command {
       .flags = {},
       
       .validate = [](const Command& command, Shell& shell) -> Str {
-        if (shell.get_screen().is_main())
-          return "Not in a process screen.";
-
-        uint pid = shell.get_screen().get_id();
-        const auto& scheduler = shell.get_scheduler();
-        const auto& data = scheduler.get_data();
-
-        if (!data.has_process(pid))
-          return format("Active process with ID \"{}\" not found.", pid);
-
-        auto process = data.get_process(pid); // Returns a process ref
-        auto& storage = shell.get_storage();
-        storage.set("process-smi.cache", process);
-        return nullopt;
+        return access([&]() -> Str {
+          if (shell.get_screen().is_main())
+            return "Not in a process screen.";
+  
+          uint pid = shell.get_screen().get_id();
+          const auto& scheduler = shell.get_scheduler();
+          const auto& data = scheduler.get_data();
+  
+          if (!data.has_process(pid))
+            return format("Active process with ID \"{}\" not found.", pid);
+  
+          auto process = data.get_process(pid); // Returns a process ref
+          auto& storage = shell.get_storage();
+          storage.set("process-smi.cache", process);
+          return nullopt;
+        });
       },
       
       .execute = [](const Command& command, Shell& shell) {
-        auto& storage = shell.get_storage();
-        auto& ref = storage.get<ProcessRef>("process-smi.cache");
-
-        const auto& process = ref.get();;
-        const auto& logs = process.get_logs();
-        const auto& program = process.get_program();
-
-        cout << "Process name: " << process.get_name() << '\n';
-        cout << "ID: " << process.get_id() << '\n';
-
-        cout << "Logs:\n";
-        for (const auto& log: logs)
-          cout << log << '\n';
-
-        // if (process.is_finished()) {
-        //   cout << "Finished!\n\n";
-        // 
-        // } else {
-        //   cout << "Current instruction line: " << program.get_ip() << '\n';
-        //   cout << "Lines of code: " << program.size() << "\n\n";
-        // }
-
-        cout << "Current instruction line: " << program.get_ip() << '\n';
-        cout << "Lines of code: " << program.size() << "\n\n";
-        storage.remove("process-smi.cache");
+        access([&] {
+          auto& storage = shell.get_storage();
+          auto& ref = storage.get<ProcessRef>("process-smi.cache");
+  
+          const auto& process = ref.get();;
+          const auto& logs = process.get_logs();
+          const auto& program = process.get_program();
+  
+          cout << "Process name: " << process.get_name() << '\n';
+          cout << "ID: " << process.get_id() << '\n';
+  
+          cout << "Logs:\n";
+          for (const auto& log: logs)
+            cout << log << '\n';
+  
+          // if (process.is_finished()) {
+          //   cout << "Finished!\n\n";
+          // 
+          // } else {
+          //   cout << "Current instruction line: " << program.get_ip() << '\n';
+          //   cout << "Lines of code: " << program.size() << "\n\n";
+          // }
+  
+          cout << "Current instruction line: " << program.get_ip() << '\n';
+          cout << "Lines of code: " << program.size() << "\n\n";
+          storage.remove("process-smi.cache");
+        });
       },
     };
   }
@@ -564,61 +572,64 @@ namespace csopesy::command {
           return "Not in the Main Menu.";
         
         // Check if the scheduler is initialized
-        if (!shell.get_scheduler().is_initialized())
-          return "Scheduler not initialized. Please run 'initialize' first.";
-
-        return nullopt; // No validation errors
+        return access([&]() -> Str {
+          if (!shell.get_scheduler().is_initialized())
+            return "Scheduler not initialized. Please run 'initialize' first.";
+          return nullopt; // No validation errors
+        });
       },
 
       .execute = [](const Command &command, Shell &shell) {
-        const auto& data = shell.get_scheduler().get_data();
-        const auto& running = data.get_running_processes();
-        const auto& finished = data.get_finished_processes();
-
-        auto log = ofstream("csopesylog.txt");
-        auto separator = "---------------------------------------------\n";
-
-        cout << "\033[38;5;33m" << separator << "\033[0m";
-        log << separator;
-
-        cout << "Running processes:\n";
-        log << "Running processes:\n";
-
-        for (const auto& ref: running) {
-          const auto& proc = ref.get();
-          auto line = format(
-            "  {:<10} ({})  Core: {:<2}  {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_core(),
-            proc.get_program().get_ip(),
-            proc.get_program().size()
-          );
-          cout << "\033[36m" << line << "\033[0m";
-          log << line;
-        }
-
-        cout << "\nFinished processes:\n";
-        log << "\nFinished processes:\n";
-
-        for (const auto& ref: finished) {
-          const auto& proc = ref.get();
-          auto line = format(
-            "  {:<10} ({})  Finished      {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_program().size(),
-            proc.get_program().size()
-          );
-          cout << "\033[36m" << line << "\033[0m";
-          log << line;
-        }
-
-        cout << "\033[38;5;33m" << separator << "\033[0m";
-        log << separator;
-        log.close();
-
-        cout << "[report-util] Report written to csopesylog.txt\n";
+        access([&] {
+          const auto& data = shell.get_scheduler().get_data();
+          const auto& running = data.get_running_processes();
+          const auto& finished = data.get_finished_processes();
+  
+          auto log = ofstream("csopesylog.txt");
+          auto separator = "---------------------------------------------\n";
+  
+          cout << "\033[38;5;33m" << separator << "\033[0m";
+          log << separator;
+  
+          cout << "Running processes:\n";
+          log << "Running processes:\n";
+  
+          for (const auto& ref: running) {
+            const auto& proc = ref.get();
+            auto line = format(
+              "  {:<10} ({})  Core: {:<2}  {} / {}\n",
+              proc.get_name(),
+              timestamp(proc.get_stime()),
+              proc.get_core(),
+              proc.get_program().get_ip(),
+              proc.get_program().size()
+            );
+            cout << "\033[36m" << line << "\033[0m";
+            log << line;
+          }
+  
+          cout << "\nFinished processes:\n";
+          log << "\nFinished processes:\n";
+  
+          for (const auto& ref: finished) {
+            const auto& proc = ref.get();
+            auto line = format(
+              "  {:<10} ({})  Finished      {} / {}\n",
+              proc.get_name(),
+              timestamp(proc.get_stime()),
+              proc.get_program().size(),
+              proc.get_program().size()
+            );
+            cout << "\033[36m" << line << "\033[0m";
+            log << line;
+          }
+  
+          cout << "\033[38;5;33m" << separator << "\033[0m";
+          log << separator;
+          log.close();
+  
+          cout << "[report-util] Report written to csopesylog.txt\n";
+        });
       }
     };
   }
@@ -714,19 +725,6 @@ namespace csopesy::command {
 
 namespace csopesy::command {
   inline const CommandHandler make_screen() {
-
-    auto wait_process = [](const str& name, const SchedulerData& data) -> bool {     
-      auto start = Clock::now();
-      while (!data.has_process(name)) {
-        if (Clock::now() - start > 3s)
-          return false;
-        cout << '.' << flush;
-        sleep_for(100ms);
-      }
-      cout << "\n";
-      return true;
-    };
-
     return {
       .name = "screen",
       .desc = "Creates and switches through existing screens.",
@@ -734,7 +732,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {{"-s", true}, {"-r", true}, {"-ls", false}},
 
-      .validate = [](const Command &command, Shell &) -> Str {
+      .validate = [](const Command &command, Shell& shell) -> Str {
         const bool has_ls = command.flags.contains("-ls");
         const bool has_s = command.flags.contains("-s");
         const bool has_r = command.flags.contains("-r");
@@ -742,133 +740,161 @@ namespace csopesy::command {
         // If more than one of -s, -r, or -ls is used, return an error
         if (has_s + has_ls + has_r > 1)
           return "You must use only one of -s, -r, or -ls.";
+
+        if (!shell.get_screen().is_main())
+          return "Not in the Main Menu.";
+
         return nullopt;
       },
 
       .execute = [&](const Command &command, Shell &shell) {
-        using Interpreter = InstructionInterpreter;
-        using set = unordered_set<int>;
-
-        auto& screen = shell.get_screen();
-        if (!shell.get_screen().is_main())
-          return void(cout << "Not in the Main Menu.\n");
+        using set = unordered_set<int>;       
         
-        auto& interpreter = InstructionInterpreter::instance();
+        auto& screen = shell.get_screen();
         auto& scheduler = shell.get_scheduler();
-        auto& data = scheduler.get_data();
-        auto& config = scheduler.get_config();
-
+             
         if (command.flags.contains("-ls")) {
-          const auto& running  = data.get_running_processes();
-          const auto& finished = data.get_finished_processes();
-          
-          set used_cores;
-          for (const auto& ref: running) {
-            const auto& proc = ref.get();
-            if (proc.get_core() != -1)
-              used_cores.insert(proc.get_core());
-          }
-
-          int total_cores = config.num_cpu;
-          int used = used_cores.size();
-          int free = total_cores - used;
-          float cpu_util = total_cores ? (float)used / total_cores * 100 : 0.0f;  // Divide by zero guard
-
-          // Output
-          cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
-          cout << format("Cores used: {} / {}\n\n", used, total_cores);
-
-          cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
-          cout << "Running processes:\n";
-          for (const auto& ref: running) {
-            const auto& proc = ref.get();
-
-            // âœ… Skip processes not currently assigned to a core
-            if (proc.get_core() == -1) continue;
-
-            cout << format(
-              "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
-              proc.get_name(),
-              timestamp(proc.get_stime()),
-              proc.get_core(),
-              proc.get_program().get_ip(),
-              proc.get_program().size()
-            );
-          }
-
-          cout << "\nFinished processes:\n";
-          for (const auto& ref: finished) {
-            const auto& proc = ref.get();
-            cout << format(
-              "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
-              proc.get_name(),
-              timestamp(proc.get_stime()),
-              proc.get_program().size(),
-              proc.get_program().size()
-            );
-          }
-
-          cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+          access([&] {
+            auto& data = scheduler.get_data();
+            auto& config = scheduler.get_config();
+  
+            const auto& running  = data.get_running_processes();
+            const auto& finished = data.get_finished_processes();
+            
+            set used_cores;
+            for (const auto& ref: running) {
+              const auto& proc = ref.get();
+              if (proc.get_core() != -1)
+                used_cores.insert(proc.get_core());
+            }
+  
+            int total_cores = config.num_cpu;
+            int used = used_cores.size();
+            int free = total_cores - used;
+            float cpu_util = total_cores ? (float)used / total_cores * 100 : 0.0f;  // Divide by zero guard
+  
+            // Output
+            cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
+            cout << format("Cores used: {} / {}\n\n", used, total_cores);
+  
+            cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+            cout << "Running processes:\n";
+            for (const auto& ref: running) {
+              const auto& proc = ref.get();
+  
+              // âœ… Skip processes not currently assigned to a core
+              if (proc.get_core() == -1) continue;
+  
+              cout << format(
+                "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
+                proc.get_name(),
+                timestamp(proc.get_stime()),
+                proc.get_core(),
+                proc.get_program().get_ip(),
+                proc.get_program().size()
+              );
+            }
+  
+            cout << "\nFinished processes:\n";
+            for (const auto& ref: finished) {
+              const auto& proc = ref.get();
+              cout << format(
+                "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
+                proc.get_name(),
+                timestamp(proc.get_stime()),
+                proc.get_program().size(),
+                proc.get_program().size()
+              );
+            }
+  
+            cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+          });
         }
 
         else if (command.flags.contains("-s")) {
           const str& name = command.flags.at("-s");
-          
-          // Check if any process in the list has the same name
-          if (data.has_process(name))
-            return void(cout << format("Process {} already exists\n", name));
-          
-          // Enqueue process for generation in the next scheduler tick
-          scheduler.enqueue_process(name);
-          
-          // Wait for process to be created (blocking loop)
-          cout << format("\nWaiting for process creation: ", name) << flush;
-          if (wait_process(name, data)) 
+
+          // Step 1: Check if process exists and enqueue creation
+          auto process_exists = [&](const str& name) -> bool {
+            return access([&] {
+              auto& data = scheduler.get_data();
+              return data.has_process(name);
+            });
+          };
+
+          if (process_exists(name)) 
+            return void(cout << format("Process '{}' already exists\n", name));
+
+          // Enqueue process for creation in the next scheduler tick
+          access([&] {
+            scheduler.enqueue_process(name);
+          });
+
+          // Step 3: Wait for process to be created
+          cout << format("\nWaiting for process creation: {}", name);
+          bool created = false;
+
+          for (uint i=0; i < 30; ++i) {
+            if (process_exists(name)) {
+              created = true;
+              break;
+            }
+            
+            sleep_for(200ms);
+          }
+    
+          if (!created)
             return void(cout << "\nTimed out.\n");
-          
-          // Retrieve the process by name
-          const auto& proc = data.get_process(name).get(); 
-          
-          // Change screens and print info
-          screen.switch_to(proc.get_id());
-          
-          // Output process info
-          cout << format("Process name: {}\n", proc.get_name());
-          cout << format("ID: {}\n", proc.get_id());
-          
-          cout << "Logs:\n";
-          for (const auto& log : proc.get_logs())
-            cout << format("  {}\n", log);
-          
-          const auto& program = proc.get_program();
-          cout << format("Current instruction line: {}\n", program.get_ip());
-          cout << format("Lines of code: {}\n", program.size());
+
+          // Switch screen and show process info
+          access([&] {
+            auto& data = scheduler.get_data();
+            const auto& proc = data.get_process(name).get();
+
+            screen.switch_to(proc.get_id());
+
+            cout << "\n";
+            cout << format("Process name: {}\n", proc.get_name());
+            cout << format("ID: {}\n", proc.get_id());
+
+            cout << "Logs:\n";
+            for (const auto& log : proc.get_logs())
+              cout << format("  {}\n", log);
+
+            const auto& program = proc.get_program();
+            cout << format("Current instruction line: {}\n", program.get_ip());
+            cout << format("Lines of code: {}\n", program.size());
+          });
         }
 
         else if (command.flags.contains("-r")) {
-          const str& name = command.flags.at("-r");
-
-          // Attempt to get a reference to the process by name
-          if (!data.has_process(name))
-            return void(cout << format("Process <{}> not found.\n", name));
-          
-          const auto& proc = data.get_process(name).get();
-          const auto& logs = proc.get_logs();
-          const auto& program = proc.get_program();
-
-          // Switch screen and show process info
-          screen.switch_to(proc.get_id());
-
-          cout << format("Process name: {}\n", proc.get_name());
-          cout << format("ID: {}\n", proc.get_id());
-
-          cout << "Logs:\n";
-          for (const auto& log: logs)
-            cout << format("  {}\n", log);
-
-          cout << format("Current instruction line: {}\n", program.get_ip());
-          cout << format("Lines of code: {}\n", program.size());
-            } 
+          access([&] {
+            auto& data = scheduler.get_data();
+            auto& config = scheduler.get_config();
+            const str& name = command.flags.at("-r");
+  
+            // Attempt to get a reference to the process by name
+            if (!data.has_process(name))
+              return void(cout << format("Process <{}> not found.\n", name));
+            
+            const auto& proc = data.get_process(name).get();
+            const auto& logs = proc.get_logs();
+            const auto& program = proc.get_program();
+  
+            // Switch screen and show process info
+            screen.switch_to(proc.get_id());
+  
+            cout << format("Process name: {}\n", proc.get_name());
+            cout << format("ID: {}\n", proc.get_id());
+  
+            cout << "Logs:\n";
+            for (const auto& log: logs)
+              cout << format("  {}\n", log);
+  
+            cout << format("Current instruction line: {}\n", program.get_ip());
+            cout << format("Lines of code: {}\n", program.size());            
+          });
+        } 
       },
     };
   }
@@ -1092,6 +1118,41 @@ namespace csopesy {
                             Like a Real OS, But Not Written in Assembly!        
                                 Dicayanan|Maramag|Maunahan|Villaver                         
   )";
+}
+
+------------------------------
+ FILE:  access.hpp
+ PATH:  core\common\imports\access.hpp
+------------------------------
+
+#pragma once
+#include <mutex>
+
+namespace csopesy {
+
+  /**
+   * @brief Global mutex protecting all SchedulerData access.
+   * 
+   * This allows you to leave SchedulerData itself lock-free and instead
+   * synchronize externally using a simple access(...) wrapper.
+   */
+  inline std::mutex mtx;
+
+  /**
+   * @brief Executes a function with exclusive access to scheduler state.
+   * 
+   * This acquires a scoped lock on the global mutex, executes the
+   * function, and returns its result. Automatically unlocks at scope end.
+   * 
+   * @tparam Func A callable type (lambda, functor, etc.)
+   * @param fn The function to execute under lock
+   * @return The result of the provided function (supports references and values)
+   */
+  template <typename Func>
+  decltype(auto) access(Func&& fn) {
+    auto lock = std::lock_guard(mtx);
+    return std::forward<Func>(fn)();
+  }
 }
 
 ------------------------------
@@ -1531,6 +1592,7 @@ namespace csopesy {
 ------------------------------
 
 #pragma once
+#include "access.hpp"
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"
@@ -1842,8 +1904,8 @@ namespace csopesy {
     ~Core() { stop(); }
 
     /** Assigns a process to this core and updates its core ID. */
-    void assign(ProcessRef procref) {
-      job = move(procref);
+    void assign(ProcessRef ref) {
+      job = move(ref);
       job->get().set_core(id);
       ticks = 0;
       
@@ -3345,7 +3407,7 @@ namespace csopesy {
 
     /** Executes the active strategy logic and increments the tick count. */
     void tick() {
-      
+
       // Handle any queued process generations
       for (auto& name: proc_queue)
         generate_process(move(name));
@@ -3374,7 +3436,7 @@ namespace csopesy {
         core.on("release", [this](any payload) { on_core_release(payload); });
       }
     }    
-    
+
     // === Generation Control ===
     void enqueue_process(str name) { proc_queue.push_back(move(name)); }
     void generate(bool flag) { generating = flag; }
@@ -3748,7 +3810,7 @@ namespace csopesy::scheduler {
       // Each tick: assign next process to any idle core.
       .on_tick([](SchedulerData& data, const SelectHandler& select) {
         // For every idle cores
-        for (auto& ref : data.get_cores().get_idle()) {
+        for (auto& ref: data.get_cores().get_idle()) {
           auto& core = ref.get();
           
           // Select the next proces from the rqueue
@@ -3960,10 +4022,14 @@ namespace csopesy {
       system("cls");
       Ansi::enable();
 
+      // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 
-        scheduler.tick(); 
+        // Ensures scheduler.tick() does not conflict with shell command access
+        // Uses global access(...) wrapper to synchronize with shared SchedulerData
+        access([&] { scheduler.tick(); });
       });
-
+    
+      // Start CLI in a separate thread
       thread = Thread([&] {
         cout << '\n';   // Lets make it a convention that line 1 is empty.
         while (active) 

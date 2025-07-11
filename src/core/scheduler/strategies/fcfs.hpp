@@ -38,7 +38,7 @@ namespace csopesy::scheduler {
       // Each tick: assign next process to any idle core.
       .on_tick([](SchedulerData& data, const SelectHandler& select) {
         // For every idle cores
-        for (auto& ref : data.get_cores().get_idle()) {
+        for (auto& ref: data.get_cores().get_idle()) {
           auto& core = ref.get();
           
           // Select the next proces from the rqueue

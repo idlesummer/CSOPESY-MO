@@ -40,10 +40,14 @@ namespace csopesy {
       system("cls");
       Ansi::enable();
 
+      // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 
-        scheduler.tick(); 
+        // Ensures scheduler.tick() does not conflict with shell command access
+        // Uses global access(...) wrapper to synchronize with shared SchedulerData
+        access([&] { scheduler.tick(); });
       });
-
+    
+      // Start CLI in a separate thread
       thread = Thread([&] {
         cout << '\n';   // Lets make it a convention that line 1 is empty.
         while (active) 
