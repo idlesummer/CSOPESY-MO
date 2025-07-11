@@ -22,4 +22,8 @@ $(TARGET): $(SRC)
 clean:
 	rm -f $(TARGET)
 
+# === Bundle rule ===
+bundle:
+	powershell -ExecutionPolicy Bypass -File bundle.ps1
+
 .PHONY: all clean

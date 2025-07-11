@@ -1,0 +1,4016 @@
+﻿# === GPT System Overview Request ===
+
+You are a senior developer reviewing this project for a new team member.
+
+Please do the following:
+
+1. **Give an overview** of what this project does and its main components.
+2. **Explain how each component works**, especially:
+   - main.cpp
+   - Core and CoreManager classes
+   - Scheduler, SchedulerStrategy, and SchedulerData
+   - Process and how it interacts with the Console and Instructions
+   - Command system and Shell
+3. **Describe how everything fits together** during execution:
+   - How a process is created, assigned, executed, and logged.
+   - How the scheduler ticks and how cores are managed.
+4. **Highlight entry points** and flow of control.
+5. **Note any potential issues or architecture strengths/weaknesses.**
+
+Use the FILE: and PATH: headers to locate the content.
+
+Please write in clear sections and simple language for onboarding a new developer.
+
+--- End of prompt ---
+
+------------------------------
+ FILE:  main.cpp
+ PATH:  main.cpp
+------------------------------
+
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/EventEmitter.hpp"
+#include "core/shell/Shell.hpp"
+
+int main() {
+  using namespace csopesy;
+
+  auto running = abool(true); // Global run flag for main loop
+  auto global  = EventEmitter();    // Central event system
+  auto shell   = Shell(global);     // Main shell interface
+
+  // Listen for shutdown event to stop main loop
+  global.on("shutdown", [&] {
+    cout << "[Shell] Shutting down...";
+    sleep_for(200ms);
+    running = false;
+  });
+
+  shell.start();  // Launch shell thread
+
+  // === Main simulation loop ===
+  while (running) {
+    global.emit("tick");  // Broadcast system tick
+    global.dispatch();    // Run all queued listeners
+    sleep_for(100ms);     // Simulated tick rate
+  }
+  
+  shell.stop(); // Join shell thread (cleanup)
+}
+
+------------------------------
+ FILE:  Command.hpp
+ PATH:  core\command\Command.hpp
+------------------------------
+
+#pragma once 
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /** Represents a parsed command-line input. */
+  struct Command {
+    using list = vector<str>;  
+    using map = unordered_map<str, str>;
+    str  name;    ///< The command name (e.g., "screen", "exit")
+    list args;    ///< Positional arguments for the command
+    map  flags;   ///< Map of flags and their associated values (if any)
+  };
+}
+
+------------------------------
+ FILE:  CommandHandler.hpp
+ PATH:  core\command\CommandHandler.hpp
+------------------------------
+
+#pragma once 
+#include "core/common/imports/_all.hpp"
+#include "Command.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+
+  /** Represents a single command entry in the interpreter. */
+  class Shell;
+  struct CommandHandler {
+    using list = vector<CommandFlag>;
+    using execute_func  = function<void(const Command&, Shell&)>;
+    using validate_func = function<Str(const Command&, Shell&)>;
+  
+    str  name;                        ///< Command name (e.g., "screen", "exit")
+    str  desc;                        ///< Description for help or documentation
+    uint min_args = 0;                ///< Minimum number of required arguments
+    uint max_args = MAX;              ///< Maximum number of allowed arguments
+    list flags;                       ///< Valid flags for this command
+    validate_func validate = nullptr; ///< Optional validation hook
+    execute_func  execute;            ///< Main handler for executing the command
+  };
+}
+
+------------------------------
+ FILE:  CommandInterpreter.hpp
+ PATH:  core\command\CommandInterpreter.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "CommandHandler.hpp"
+#include "CommandParser.hpp"
+
+namespace csopesy {
+  
+  /**
+   * @class CommandInterpreter
+   * @brief Responsible for parsing, validating, and executing registered commands.
+   * Acts as a central dispatcher for handling parsed input lines and invoking the appropriate command logic.
+   */
+  class Shell;  // Forward declaration
+  class CommandInterpreter {
+    using Flag = CommandFlag;
+    using Handler = CommandHandler;
+    using map = unordered_map<str, Handler>;
+    using set = unordered_set<str>;
+    
+    // Registry of available command handlers
+    map handlers;   
+    
+    public:
+
+    /** Returns the global singleton instance of the CommandInterpreter. */
+    static CommandInterpreter& instance() {
+      static CommandInterpreter inst;
+      return inst;
+    }
+
+    /** Registers a command with its name and handlers. */
+    void register_command(Handler handler) {
+      handlers[handler.name] = move(handler);
+    }
+
+    /** Executes a command in the shell context. */ 
+    void execute(const str& line, Shell& shell) {
+
+      // Parse the command line into a Command (name, args, flags)
+      const auto& command = CommandParser::parse(line);  
+      if (command.name.empty()) 
+        return;
+
+      // Find command in the registry
+      const auto it = handlers.find(command.name);       
+      if (it == handlers.end())
+        return void(cout << format("[Shell] Unknown command: {}\n", command.name));
+
+      const auto& handler = it->second;
+
+      // Check for unknown/misused flags
+      if (invalid_flags(command, handler))
+        return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
+
+      // Check positional argument count
+      if (invalid_args(command, handler))
+        return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
+
+      // Run optional command-specific validation logic
+      if (auto msg = validate_command(command, handler, shell))
+        return void(cout << format("[Shell] {}\n", *msg));
+      
+      // Execute the command
+      handler.execute(command, shell);
+    }
+
+    private:
+
+    /** Private constructor to enforce singleton access via instance(). */
+    CommandInterpreter() = default;
+    
+    /** Returns true if any flag is invalid or misused. */
+    static bool invalid_flags(const Command& command, const Handler& handler) {
+      // If any user flag has no valid match (in name and usage), 
+      // then the set of flags is invalid.
+      return any_of(command.flags, [&](const auto& flag) {
+        return none_of(handler.flags, [&](const Flag& f) {
+          return f.name == flag.first && f.has_arg == !flag.second.empty();
+        });
+      });
+    }
+
+    /** Checks if argument count is within bounds. */
+    static bool invalid_args(const Command& command, const Handler& handler) {
+      const auto argc = command.args.size();
+      return argc < handler.min_args || argc > handler.max_args;
+    }
+
+    /** Runs the handler's custom validator and returns an optional error message. */
+    static Str validate_command(const Command& command, const Handler& handler, Shell& shell) {
+      if (!handler.validate) return nullopt;
+      if (const auto& err = handler.validate(command, shell))
+        return err->empty() ? "Handler disabled or invalid." : *err;
+      return nullopt;
+    }
+  };
+}
+
+------------------------------
+ FILE:  CommandParser.hpp
+ PATH:  core\command\CommandParser.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+
+namespace csopesy {
+  /**
+   * @class Parser
+   * @brief Utility class for tokenizing and parsing command lines.
+   */
+  class CommandParser {
+    using list = Command::list;
+
+    public:
+
+    /** A helper that parses a handler line string into a Handler Command object. */
+    static Command parse(const str& line) {
+      auto tokens = tokenize(line);
+      if (tokens.empty()) return {};
+
+      auto cmd = Command();
+      cmd.name = move(tokens[0]);
+
+      for (uint i=1; i < tokens.size(); ++i) {
+        str token = move(tokens[i]);
+        if (token[0] != '-') {
+          cmd.args.emplace_back(move(token));
+          continue;
+        }
+        bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
+        cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+      }
+      
+      return cmd;
+    }
+
+    private:
+    
+    /** A helper that splits a string into whitespace-separated tokens. */
+    static list tokenize(const str& line) {
+      if (line.empty()) return {};
+      auto stream = isstream(line);
+      list tokens; 
+
+      for (str token; stream >> token; )
+        tokens.emplace_back(move(token));
+      return tokens;
+    }
+  };
+}
+
+------------------------------
+ FILE:  types.hpp
+ PATH:  core\command\types.hpp
+------------------------------
+
+#pragma once 
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /** Contains the flag name and whether it requires an argument. */
+  struct CommandFlag {
+    str  name;              ///< Flag name (e.g., "-s", "-r", "-ls")
+    bool has_arg = false;   ///< Whether the flag requires an argument
+  };
+}
+
+------------------------------
+ FILE:  clear.hpp
+ PATH:  core\command\handlers\clear.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_clear() {
+    return {
+      .name = "clear",
+      .desc = "Clear screen contents.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+      .execute = [](const Command&, Shell&) {
+        system("cls");
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  demo.hpp
+ PATH:  core\command\handlers\demo.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/process/Process.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_demo() {
+    return {
+      .name = "demo",
+      .desc = "Creates and steps a demo process with random instructions.",
+      .min_args = 0,
+      .max_args = 0,
+
+      .execute = [](const Command&, Shell& shell) {
+        auto& storage = shell.get_storage();
+        
+        if (!storage.has("demo.counter")) {
+          storage.set("demo.counter", 0);
+          return;
+        }
+
+        int counter = storage.get<int>("demo.counter");
+        counter++;
+        storage.set("demo.counter", counter);
+        cout << counter << endl;
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  echo.hpp
+ PATH:  core\command\handlers\echo.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_echo() {
+    return {
+      .name = "echo",
+      .desc = "Print arguments.",
+      .min_args = 1,
+      .max_args = MAX,
+      .flags = {},
+      
+      .execute = [](const Command& command, Shell&) {
+        for (const auto& arg: command.args)
+          cout << arg << ' ';
+        cout << '\n';
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  exit.hpp
+ PATH:  core\command\handlers\exit.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_exit() {
+    return {
+      .name = "exit",
+      .desc = "Exit shell.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+      
+      .execute = [](const Command&, Shell& shell) {
+        auto& screen = shell.get_screen();
+
+        if (screen.is_main()) {
+          shell.request_stop();
+          shell.emit("shutdown");
+
+        } else {
+          screen.switch_to_main();
+          shell.emit("switched_to_main");
+        }
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  initialize.hpp
+ PATH:  core\command\handlers\initialize.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/constants/banner.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/scheduler/types.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_initialize() {
+    using list = vector<str>;
+    return {
+      .name = "initialize",
+      .desc = "Initializes the processor configuration of the application.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+
+      .validate = [](const Command& command, Shell& shell) -> Str {
+        // Check if the scheduler has already been initialized
+        if (shell.get_scheduler().get_config().initialized)
+          return "Already initialized.";
+        
+        // Check if the file could not be opened or is empty
+        auto lines = read_lines("config.txt");
+        if (lines.empty())
+          return "Failed to open config.txt";
+
+        auto& storage = shell.get_storage();
+        storage.set("initialize.cache", move(lines));
+        return nullopt;
+      },
+
+      .execute = [](const Command& command, Shell& shell) {
+        auto& storage = shell.get_storage();
+        const auto& lines = storage.get<list>("initialize.cache");
+        auto config = SchedulerConfig();
+
+        for (const auto& line: lines) {
+          str key, value;
+          isstream(line) >> key >> value;
+
+          if (!config.set(key, move(value)))
+            cout << format("[Shell] Unknown config key: {}\n", key);
+        }
+
+        config.initialized = true;
+        shell.get_scheduler().set_config(config);
+
+        cout << BANNER << '\n';
+        cout << "[Shell] Scheduler config loaded.\n";
+        storage.remove("initialize.cache");
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  process-smi.hpp
+ PATH:  core\command\handlers\process-smi.hpp
+------------------------------
+
+#pragma once
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/process/Process.hpp"
+#include "core/execution/Core.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_process_smi() {
+    using ProcessRef = Core::ProcessRef;
+
+    return {
+      .name = "process-smi",
+      .desc = "Shows the current process status, logs, and info.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+      
+      .validate = [](const Command& command, Shell& shell) -> Str {
+        if (shell.get_screen().is_main())
+          return "Not in a process screen.";
+
+        uint pid = shell.get_screen().get_id();
+        const auto& scheduler = shell.get_scheduler();
+        const auto& data = scheduler.get_data();
+
+        if (!data.has_process(pid))
+          return format("Active process with ID \"{}\" not found.", pid);
+
+        auto process = data.get_process(pid); // Returns a process ref
+        auto& storage = shell.get_storage();
+        storage.set("process-smi.cache", process);
+        return nullopt;
+      },
+      
+      .execute = [](const Command& command, Shell& shell) {
+        auto& storage = shell.get_storage();
+        auto& ref = storage.get<ProcessRef>("process-smi.cache");
+
+        const auto& process = ref.get();;
+        const auto& logs = process.get_logs();
+        const auto& program = process.get_program();
+
+        cout << "Process name: " << process.get_name() << '\n';
+        cout << "ID: " << process.get_id() << '\n';
+
+        cout << "Logs:\n";
+        for (const auto& log: logs)
+          cout << log << '\n';
+
+        // if (process.is_finished()) {
+        //   cout << "Finished!\n\n";
+        // 
+        // } else {
+        //   cout << "Current instruction line: " << program.get_ip() << '\n';
+        //   cout << "Lines of code: " << program.size() << "\n\n";
+        // }
+
+        cout << "Current instruction line: " << program.get_ip() << '\n';
+        cout << "Lines of code: " << program.size() << "\n\n";
+        storage.remove("process-smi.cache");
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  report-util.hpp
+ PATH:  core\command\handlers\report-util.hpp
+------------------------------
+
+#pragma once
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_report_util() {
+    return {
+      .name = "report-util",
+      .desc = "Generates a CPU unitilization report.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+
+      .validate = [](const Command &command, Shell &shell) -> Str {
+        if (!shell.get_screen().is_main())
+          return "Not in the Main Menu.";
+        
+        // Check if the scheduler is initialized
+        if (!shell.get_scheduler().is_initialized())
+          return "Scheduler not initialized. Please run 'initialize' first.";
+
+        return nullopt; // No validation errors
+      },
+
+      .execute = [](const Command &command, Shell &shell) {
+        const auto& data = shell.get_scheduler().get_data();
+        const auto& running = data.get_running_processes();
+        const auto& finished = data.get_finished_processes();
+
+        auto log = ofstream("csopesylog.txt");
+        auto separator = "---------------------------------------------\n";
+
+        cout << "\033[38;5;33m" << separator << "\033[0m";
+        log << separator;
+
+        cout << "Running processes:\n";
+        log << "Running processes:\n";
+
+        for (const auto& ref: running) {
+          const auto& proc = ref.get();
+          auto line = format(
+            "  {:<10} ({})  Core: {:<2}  {} / {}\n",
+            proc.get_name(),
+            timestamp(proc.get_stime()),
+            proc.get_core(),
+            proc.get_program().get_ip(),
+            proc.get_program().size()
+          );
+          cout << "\033[36m" << line << "\033[0m";
+          log << line;
+        }
+
+        cout << "\nFinished processes:\n";
+        log << "\nFinished processes:\n";
+
+        for (const auto& ref: finished) {
+          const auto& proc = ref.get();
+          auto line = format(
+            "  {:<10} ({})  Finished      {} / {}\n",
+            proc.get_name(),
+            timestamp(proc.get_stime()),
+            proc.get_program().size(),
+            proc.get_program().size()
+          );
+          cout << "\033[36m" << line << "\033[0m";
+          log << line;
+        }
+
+        cout << "\033[38;5;33m" << separator << "\033[0m";
+        log << separator;
+        log.close();
+
+        cout << "[report-util] Report written to csopesylog.txt\n";
+      }
+    };
+  }
+}
+
+------------------------------
+ FILE:  scheduler-start.hpp
+ PATH:  core\command\handlers\scheduler-start.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/process/Process.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_scheduler_start() {
+    return {
+      .name = "scheduler-start",
+      .desc = "Starts periodic dummy process generation every batch_process_freq ticks.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+
+      .validate = [](const Command&, Shell& shell) -> Str {
+        if (!shell.get_scheduler().is_initialized())
+          return "[Shell] Please run 'initialize' first.";
+
+        if (shell.get_scheduler().is_generating())
+          return "[Shell] Dummy process generation already active.";
+
+        return nullopt;
+      },
+
+      .execute = [](const Command&, Shell& shell) {
+        shell.get_scheduler().generate(true);
+        cout << "[Shell] Dummy process generation started.\n";
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  scheduler-stop.hpp
+ PATH:  core\command\handlers\scheduler-stop.hpp
+------------------------------
+
+#pragma once
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_scheduler_stop() {
+    return {
+      .name = "scheduler-stop",
+      .desc = "Stops generating dummy processes.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+
+      .validate = [](const Command&, Shell& shell) -> Str {
+        if (!shell.get_scheduler().is_initialized())
+          return "[Shell] Please run 'initialize' first.";
+
+        if (!shell.get_scheduler().is_generating())
+          return "[Shell] Dummy process generation is not running.";
+        
+        return nullopt;
+      },
+
+      .execute = [](const Command&, Shell& shell) {
+        shell.get_scheduler().generate(false);
+        cout << "[Shell] Dummy process generation stopped.\n";
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  screen.hpp
+ PATH:  core\command\handlers\screen.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/scheduler/SchedulerData.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_screen() {
+
+    auto wait_process = [](const str& name, const SchedulerData& data) -> bool {     
+      auto start = Clock::now();
+      while (!data.has_process(name)) {
+        if (Clock::now() - start > 3s)
+          return false;
+        cout << '.' << flush;
+        sleep_for(100ms);
+      }
+      cout << "\n";
+      return true;
+    };
+
+    return {
+      .name = "screen",
+      .desc = "Creates and switches through existing screens.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {{"-s", true}, {"-r", true}, {"-ls", false}},
+
+      .validate = [](const Command &command, Shell &) -> Str {
+        const bool has_ls = command.flags.contains("-ls");
+        const bool has_s = command.flags.contains("-s");
+        const bool has_r = command.flags.contains("-r");
+
+        // If more than one of -s, -r, or -ls is used, return an error
+        if (has_s + has_ls + has_r > 1)
+          return "You must use only one of -s, -r, or -ls.";
+        return nullopt;
+      },
+
+      .execute = [&](const Command &command, Shell &shell) {
+        using Interpreter = InstructionInterpreter;
+        using set = unordered_set<int>;
+
+        auto& screen = shell.get_screen();
+        if (!shell.get_screen().is_main())
+          return void(cout << "Not in the Main Menu.\n");
+        
+        auto& interpreter = InstructionInterpreter::instance();
+        auto& scheduler = shell.get_scheduler();
+        auto& data = scheduler.get_data();
+        auto& config = scheduler.get_config();
+
+        if (command.flags.contains("-ls")) {
+          const auto& running  = data.get_running_processes();
+          const auto& finished = data.get_finished_processes();
+          
+          set used_cores;
+          for (const auto& ref: running) {
+            const auto& proc = ref.get();
+            if (proc.get_core() != -1)
+              used_cores.insert(proc.get_core());
+          }
+
+          int total_cores = config.num_cpu;
+          int used = used_cores.size();
+          int free = total_cores - used;
+          float cpu_util = total_cores ? (float)used / total_cores * 100 : 0.0f;  // Divide by zero guard
+
+          // Output
+          cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
+          cout << format("Cores used: {} / {}\n\n", used, total_cores);
+
+          cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+          cout << "Running processes:\n";
+          for (const auto& ref: running) {
+            const auto& proc = ref.get();
+
+            // âœ… Skip processes not currently assigned to a core
+            if (proc.get_core() == -1) continue;
+
+            cout << format(
+              "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
+              proc.get_name(),
+              timestamp(proc.get_stime()),
+              proc.get_core(),
+              proc.get_program().get_ip(),
+              proc.get_program().size()
+            );
+          }
+
+          cout << "\nFinished processes:\n";
+          for (const auto& ref: finished) {
+            const auto& proc = ref.get();
+            cout << format(
+              "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
+              proc.get_name(),
+              timestamp(proc.get_stime()),
+              proc.get_program().size(),
+              proc.get_program().size()
+            );
+          }
+
+          cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+        }
+
+        else if (command.flags.contains("-s")) {
+          const str& name = command.flags.at("-s");
+          
+          // Check if any process in the list has the same name
+          if (data.has_process(name))
+            return void(cout << format("Process {} already exists\n", name));
+          
+          // Enqueue process for generation in the next scheduler tick
+          scheduler.enqueue_process(name);
+          
+          // Wait for process to be created (blocking loop)
+          cout << format("\nWaiting for process creation: ", name) << flush;
+          if (wait_process(name, data)) 
+            return void(cout << "\nTimed out.\n");
+          
+          // Retrieve the process by name
+          const auto& proc = data.get_process(name).get(); 
+          
+          // Change screens and print info
+          screen.switch_to(proc.get_id());
+          
+          // Output process info
+          cout << format("Process name: {}\n", proc.get_name());
+          cout << format("ID: {}\n", proc.get_id());
+          
+          cout << "Logs:\n";
+          for (const auto& log : proc.get_logs())
+            cout << format("  {}\n", log);
+          
+          const auto& program = proc.get_program();
+          cout << format("Current instruction line: {}\n", program.get_ip());
+          cout << format("Lines of code: {}\n", program.size());
+        }
+
+        else if (command.flags.contains("-r")) {
+          const str& name = command.flags.at("-r");
+
+          // Attempt to get a reference to the process by name
+          if (!data.has_process(name))
+            return void(cout << format("Process <{}> not found.\n", name));
+          
+          const auto& proc = data.get_process(name).get();
+          const auto& logs = proc.get_logs();
+          const auto& program = proc.get_program();
+
+          // Switch screen and show process info
+          screen.switch_to(proc.get_id());
+
+          cout << format("Process name: {}\n", proc.get_name());
+          cout << format("ID: {}\n", proc.get_id());
+
+          cout << "Logs:\n";
+          for (const auto& log: logs)
+            cout << format("  {}\n", log);
+
+          cout << format("Current instruction line: {}\n", program.get_ip());
+          cout << format("Lines of code: {}\n", program.size());
+            } 
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  test.hpp
+ PATH:  core\command\handlers\test.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/process/ProcessProgram.hpp"
+#include "core/process/ProcessExecutor.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_test() {
+    return {
+      .name = "test",
+      .desc = "Spawn and manually step a dummy FOR loop process.",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {{ "-r", false }},
+
+      .execute = [](const Command& command, Shell& shell) {
+        using Script = Instruction::list;
+        using Interpreter = InstructionInterpreter;
+        
+        auto& interpreter = Interpreter::instance();
+        auto& storage = shell.get_storage();
+
+        // 0. Reset process if requested
+        if (command.flags.contains("-r")) {
+          shell.get_storage().remove("test.process");
+          cout << "[loop-test] Dummy process reset.\n";
+          return;
+        }
+
+        // 1. Spawn process if not already present
+        if (!storage.has("test.process")) {
+          auto process = Process("test.process", 999);
+          auto& program = process.get_program();
+          
+          // Generate a random list of instructions
+          auto script = interpreter.generate_script(10);
+          program.load_script(move(script));
+
+          storage.set("test.process", move(process));
+          cout << "[loop-test] Process created.\n";
+          return;
+        }
+
+        // 2. Access process
+        system("cls");
+        auto& process = storage.get<Process>("test.process");
+        auto& program = process.get_program();
+        auto& state = process.get_state();
+
+        if (state.is_finished())
+          return void(cout << "[loop-test] Process already finished.");
+
+        // === Debug: Show context stack ===
+        cout << "[loop-test] Context Stack:\n";
+        cout << program.view_context() << '\n';
+
+        // === Debug: Show instruction list with pointer ===
+        cout << "[loop-test] Instruction List:\n";
+        cout << program.view_script() << '\n';
+        
+        // 3. Step the process
+        const bool done = process.step();
+        cout << "[loop-test] Process stepped.\n";
+        cout << (done ? "Finished." : "Still running.");
+        cout << '\n';
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  util.hpp
+ PATH:  core\command\handlers\util.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_util() {
+    return {
+      .name = "report-util",
+      .desc = "Generates a report of running and finished processes to csopesylog.txt",
+      .min_args = 0,
+      .max_args = 0,
+      .flags = {},
+
+      .execute = [](const Command &command, Shell &shell) {   
+        if (!shell.get_screen().is_main())
+          return void(cout << "Not in the Main Menu.\n");
+
+        const auto& data = shell.get_scheduler().get_data();
+        const auto& running = data.get_running_processes();
+        const auto& finished = data.get_finished_processes();
+
+        auto log = ofstream("csopesylog.txt");
+        auto separator = "---------------------------------------------\n";
+
+        cout << "\033[38;5;33m" << separator << "\033[0m";
+        log << separator;
+
+        cout << "Running processes:\n";
+        log << "Running processes:\n";
+
+        for (const auto& ref: running) {
+          const auto& proc = ref.get();
+          auto line = format(
+            "  {:<10} ({})  Core: {:<2}  {} / {}\n",
+            proc.get_name(),
+            timestamp(proc.get_stime()),
+            proc.get_core(),
+            proc.get_program().get_ip(),
+            proc.get_program().size()
+          );
+          cout << "\033[36m" << line << "\033[0m";
+          log << line;
+        }
+
+        cout << "\nFinished processes:\n";
+        log << "\nFinished processes:\n";
+
+        for (const auto& ref: finished) {
+          const auto& proc = ref.get();
+          auto line = format(
+            "  {:<10} ({})  Finished      {} / {}\n",
+            proc.get_name(),
+            timestamp(proc.get_stime()),
+            proc.get_program().size(),
+            proc.get_program().size()
+          );
+          cout << "\033[36m" << line << "\033[0m";
+          log << line;
+        }
+
+        cout << "\033[38;5;33m" << separator << "\033[0m";
+        log << separator;
+        log.close();
+
+        cout << "[report-util] Report written to csopesylog.txt\n";
+      }
+    };
+  }
+}
+
+------------------------------
+ FILE:  _all.hpp
+ PATH:  core\command\handlers\_all.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "clear.hpp"
+#include "demo.hpp"
+#include "echo.hpp"
+#include "exit.hpp"
+#include "initialize.hpp"
+#include "process-smi.hpp"
+#include "report-util.hpp"
+#include "scheduler-start.hpp"
+#include "scheduler-stop.hpp"
+#include "screen.hpp"
+#include "test.hpp"
+
+namespace csopesy::command {
+  using list = vector<CommandHandler>;
+  
+  list get_all() {
+    return {
+      make_clear(),
+      make_demo(),
+      make_echo(),
+      make_exit(),
+      make_initialize(),
+      make_process_smi(),
+      make_report_util(),
+      make_scheduler_start(),
+      make_scheduler_stop(),
+      make_screen(),
+      make_test(),
+    };
+  }
+}
+
+------------------------------
+ FILE:  banner.hpp
+ PATH:  core\common\constants\banner.hpp
+------------------------------
+
+#pragma once
+#include <string>
+
+namespace csopesy {
+  inline const std::string BANNER = R"(
+           .dP                                                                        Yb    
+         .dP    .ooooo.   .oooo.o  .ooooo.  oo.ooooo.   .ooooo.   .oooo.o oooo    ooo  `Yb  
+        dP     d88' `"Y8 d88(  "8 d88' `88b  888' `88b d88' `88b d88(  "8  `88.  .8'     `Yb
+        Yb     888       `"Y88b.  888   888  888   888 888ooo888 `"Y88b.    `88..8'      .dP
+         `Yb   888   .o8 o.  )88b 888   888  888   888 888    .o o.  )88b    `888'     .dP  
+           `Yb `Y8bod8P' 8""888P' `Y8bod8P'  888bod8P' `Y8bod8P' 8""888P'     .8'     dP    
+                                             888                          .o..P'            
+                                            o888o                         `Y8P'             
+
+                            Like a Real OS, But Not Written in Assembly!        
+                                Dicayanan|Maramag|Maunahan|Villaver                         
+  )";
+}
+
+------------------------------
+ FILE:  casts.hpp
+ PATH:  core\common\imports\casts.hpp
+------------------------------
+
+#pragma once
+#include <any>          // for std::any, std::any_cast
+#include <cstdint>      // for std::uint32_t
+#include <string>       // for std::string
+#include <type_traits>  // for std::decay_t
+#include <utility>      // for std::forward
+
+namespace csopesy {
+  using std::bad_any_cast;
+  
+  // Import standard string conversion functions
+  using std::stoi;
+  using std::stof;
+  using std::stoul;
+  using std::to_string;
+
+  // === Generic any cast function ===
+  template <typename Type, typename From>
+  Type cast(From&& x) {
+    using Raw = std::decay_t<From>;
+
+    if constexpr (std::is_same_v<Raw, std::any>)
+      return std::any_cast<Type>(x);
+    else
+      return static_cast<Type>(std::forward<From>(x));
+  }
+
+  // === Aliases for clarity ===
+  template <typename From> 
+  inline int cast_int (From&& x) { 
+    return cast<int>(std::forward<From>(x)); 
+  }
+
+  template <typename From> 
+  inline std::uint32_t cast_uint (From&& x) { 
+    return cast<uint32_t>(std::forward<From>(x)); 
+  }
+  
+  template <typename From> 
+  inline std::string cast_str (From&& x) {
+    return cast<std::string>(std::forward<From>(x)); 
+  }
+}
+
+------------------------------
+ FILE:  chrono.hpp
+ PATH:  core\common\imports\chrono.hpp
+------------------------------
+
+#pragma once
+#include <chrono>
+#include <ctime>
+#include <optional>
+
+namespace csopesy {
+  using std::chrono::duration_cast;
+
+  // Aliases for duration types
+  using ms  = std::chrono::milliseconds;
+  using ns  = std::chrono::nanoseconds;
+  using sec = std::chrono::seconds;
+
+  // Clock and time point
+  using duration = std::chrono::system_clock::duration;
+  using Clock = std::chrono::system_clock;
+  using Time = std::chrono::time_point<std::chrono::system_clock>;
+  using TimeStruct = std::tm;
+
+  // Literal suffixes for values like 10ms, 1s, 250ns
+  using std::chrono_literals::operator""ms;
+  using std::chrono_literals::operator""ns;
+  using std::chrono_literals::operator""s;
+
+  /** Returns a formatted timestamp string using current local time. */
+  inline std::string timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") {
+    auto time = Clock::to_time_t(tp.value_or(Clock::now()));
+    auto time_struct = TimeStruct();
+    localtime_s(&time_struct, &time);
+
+    char buffer[32];
+    strftime(buffer, sizeof(buffer), fmt.c_str(), &time_struct);
+    return buffer;
+  }
+}
+
+------------------------------
+ FILE:  containers.hpp
+ PATH:  core\common\imports\containers.hpp
+------------------------------
+
+#pragma once
+#include <array>
+#include <list>
+#include <vector>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
+namespace csopesy {
+  using std::array;
+  using std::vector;
+  using std::queue;
+  using std::unordered_map;
+  using std::unordered_set;
+  using std::pair;
+  template<typename Type> using List = std::list<Type>;
+  using std::make_pair;
+
+  using std::out_of_range;
+}
+
+------------------------------
+ FILE:  io.hpp
+ PATH:  core\common\imports\io.hpp
+------------------------------
+
+#pragma once
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <sstream>
+#include <vector>
+
+namespace csopesy {
+  
+  // I/O utility aliases
+  using std::cin;
+  using std::cout;
+  using std::cerr;
+  using std::endl;
+  using std::flush;
+  using std::getline;
+  using std::ios;
+  using std::ifstream;
+  using std::ofstream;
+  using std::ostream;
+  using std::runtime_error;
+
+  // === Utility functions ===
+  inline std::vector<std::string> read_lines(const std::string& path) {
+    auto file = std::ifstream(path);
+    if (!file) return {};
+
+    auto buffer = std::ostringstream();
+    buffer << file.rdbuf();
+
+    auto in = std::istringstream(buffer.str());
+    auto lines = std::vector<std::string>();
+    lines.reserve(8);
+
+    for (std::string line; std::getline(in, line); )
+      lines.emplace_back(std::move(line));
+
+    return lines;
+  }
+}
+
+------------------------------
+ FILE:  misc.hpp
+ PATH:  core\common\imports\misc.hpp
+------------------------------
+
+#pragma once
+#include <algorithm>  // required for all_of / any_of to work for some reason??
+#include <any>
+#include <cctype>
+#include <cstdint>
+#include <functional>
+#include <limits>
+#include <optional>
+#include <ranges>
+#include <string>
+#include <utility>
+
+namespace csopesy {
+  using std::runtime_error;
+
+  // === Type Aliases ===
+  using std::any;
+  using std::function;
+  using std::optional;
+  using byte = uint8_t;
+  using uint = uint32_t;
+  using uchar = unsigned char;
+  using Uint = std::optional<uint>;
+
+  // === Reference Aliases ===
+  using std::cref;
+  template <typename Type> using ref = std::reference_wrapper<Type>;
+  template <typename Type> using Ref = optional<ref<Type>>;
+
+  // === Constants ===
+  using std::nullopt;
+  inline constexpr uint MAX = std::numeric_limits<uint>::max();
+
+  // === STL Utility Aliases ===
+  using std::ranges::all_of;
+  using std::ranges::any_of;
+  using std::ranges::find_if;
+  using std::ranges::none_of;
+  using std::any_cast;
+  using std::erase_if;
+  using std::move;
+  using std::forward;
+  using std::swap;
+
+  // Iterators
+  template <typename Type>
+  inline auto move_iter(Type it) { 
+    return std::make_move_iterator(it); 
+  }
+}
+
+------------------------------
+ FILE:  platform.hpp
+ PATH:  core\common\imports\platform.hpp
+------------------------------
+
+#pragma once
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h> // Doesn't define min/max since NOMINMAX is set
+#include <algorithm> // Redefines std::min/std::max
+
+namespace csopesy {
+  using std::min;
+  using std::max;
+}
+
+------------------------------
+ FILE:  pointers.hpp
+ PATH:  core\common\imports\pointers.hpp
+------------------------------
+
+#pragma once
+#include <memory>
+
+namespace csopesy {
+  using std::unique_ptr;
+  using std::shared_ptr;
+  using std::make_unique;
+  using std::make_shared;
+}
+
+------------------------------
+ FILE:  random.hpp
+ PATH:  core\common\imports\random.hpp
+------------------------------
+
+#pragma once
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
+#include <random>
+#include <stdexcept>
+#include "casts.hpp"
+#include "containers.hpp"
+#include "misc.hpp"
+
+namespace csopesy {
+
+  /** Random utility class */
+  class Random {
+    using mt19937   = std::mt19937;
+    using int_dist  = std::uniform_int_distribution<>;
+    using uint_dist = std::uniform_int_distribution<unsigned>;
+    using real_dist = std::uniform_real_distribution<float>;
+
+    inline static mt19937 rng = mt19937(std::random_device{}());
+
+  public:
+
+    /** Random signed integer in [min, max] */
+    static int num(int min, int max) {
+      auto dist = int_dist(min, max);
+      return dist(rng);
+    }
+
+    /** Random unsigned integer in [min, max] */
+    static uint num(uint min, uint max) {
+      auto dist = uint_dist(min, max);
+      return dist(rng);
+    }
+
+    /** Returns true with probability 1/odds */
+    static bool chance(uint odds) {
+      return odds != 0 && num(1u, odds) == 1u;
+    }
+
+    /** Random float in [min, max) */
+    static float real(float min, float max) {
+      auto dist = real_dist(min, max);
+      return dist(rng);
+    }
+
+    /** Pick a random element from a non-empty vector */
+    template <typename Type>
+    static Type pick(const std::vector<Type>& list) {
+      if (list.empty()) throw std::runtime_error("Cannot pick from empty list.");
+      return list[num(0, static_cast<int>(list.size()) - 1)];
+    }
+
+    /** Shuffle a vector in place */
+    template <typename Type>
+    static std::vector<Type>& shuffle(std::vector<Type>& list) {
+      std::shuffle(list.begin(), list.end(), rng);
+      return list;
+    }
+  };
+
+}
+
+------------------------------
+ FILE:  string.hpp
+ PATH:  core\common\imports\string.hpp
+------------------------------
+
+#pragma once
+#include <algorithm>  // needed for all_of to work for some reason??
+#include <cctype>
+#include <charconv>
+#include <format>
+#include <string>
+#include <sstream>
+#include <optional>
+#include <ranges>
+
+namespace csopesy {
+  // === String Aliases ===
+  using std::string;
+  using str = std::string;
+  using Str = std::optional<string>;
+
+  // === Character Utilities ===
+  using std::isalpha;
+  using std::isalnum;
+
+  // === Stream Aliases ===
+  using std::stringstream;
+  using std::istringstream;
+  using std::ostringstream;
+  using sstream = std::stringstream;
+  using isstream = std::istringstream;
+  using osstream = std::ostringstream;
+
+  // === Formatting & Parsing ===
+  using std::format;
+  using std::errc;
+  using std::from_chars;
+
+  // === Constants ===
+  constexpr auto NPOS = string::npos;
+
+  // === Validation ===
+  inline bool is_num(const std::string& s) {
+    return !s.empty() && std::ranges::all_of(s, [](char c) {
+      return std::isdigit(static_cast<unsigned char>(c));
+    });
+  }
+}
+
+------------------------------
+ FILE:  thread.hpp
+ PATH:  core\common\imports\thread.hpp
+------------------------------
+
+#pragma once
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
+
+namespace csopesy {
+
+  // === Atomic Types ===
+  using std::atomic;
+  using std::atomic_bool;
+  using std::atomic_int;
+  using std::atomic_uint;
+  using abool = std::atomic_bool;
+  using aint = std::atomic_int;
+  using auint = std::atomic_uint;
+
+  // === Locking & Threading Aliases ===
+  using std::lock_guard;
+  using std::mutex;
+  using std::shared_lock;
+  using std::shared_mutex;
+  using std::this_thread::sleep_for;
+  using std::unique_lock;
+  using Thread = std::thread;
+  using convar = std::condition_variable;
+  
+  // === Scoped Lock Execution Context ===
+  struct Context {
+    /**
+     * @brief Acquires an exclusive lock using std::mutex.
+     * @param mtx The mutex to lock.
+     * @param fn The function to execute within the lock.
+     */
+    template <typename Func>
+    void lock(mutex& mtx, Func&& fn) const {
+      auto guard = lock_guard(mtx);
+      std::forward<Func>(fn)();
+    }
+
+    /**
+     * @brief Acquires an exclusive lock using std::mutex and passes the lock to the function.
+     * @param mtx The mutex to lock.
+     * @param fn The function to execute with the lock passed as argument.
+     */
+    template <typename Func>
+    void unique(mutex& mtx, Func&& fn) const {
+      auto lock = unique_lock(mtx);
+      std::forward<Func>(fn)(lock);
+    }
+  };
+
+  // === Scoped Context Instance ===
+  inline constexpr Context with;
+}
+
+------------------------------
+ FILE:  _all.hpp
+ PATH:  core\common\imports\_all.hpp
+------------------------------
+
+#pragma once
+#include "casts.hpp"
+#include "chrono.hpp"
+#include "containers.hpp"
+#include "io.hpp"
+#include "misc.hpp"
+#include "platform.hpp"
+#include "pointers.hpp"
+#include "random.hpp"
+#include "string.hpp"
+#include "thread.hpp"
+
+------------------------------
+ FILE:  Ansi.hpp
+ PATH:  core\common\utility\Ansi.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+  class Ansi {
+
+    public:
+
+    static void enable() {
+      auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
+      auto mode = DWORD(0);
+      
+      if (!GetConsoleMode(handle, &mode))
+        return void(cerr << "Failed to get console mode.\n");
+
+      mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+      if (!SetConsoleMode(handle, mode)) 
+        return void(cerr << "Failed to enable ANSI escape sequences.\n");
+    }
+    
+    static void set_title(ostream& out, const str& title) {
+      out << "\033]0;" << title << "\a";
+    }
+
+    static void enter_alt_buffer(ostream& out) {
+      out << "\033[?1049h";
+    }
+
+    static void exit_alt_buffer(ostream& out) {
+      out << "\033[?1049l";
+    }
+
+    static void hide_cursor(ostream& out) {
+      out << "\033[?25l";
+    }
+
+    static void show_cursor(ostream& out) {
+      out << "\033[?25h";
+    }
+
+    static void clear_screen(ostream& out) {
+      out << "\033[2J\033[H";
+    }
+
+    static void move_cursor(ostream& out, int row, int col) {
+      out << "\033[" << row << ";" << col << "H";
+    }
+  };
+}
+
+------------------------------
+ FILE:  Component.hpp
+ PATH:  core\common\utility\Component.hpp
+------------------------------
+
+#pragma once
+#include "core/common/utility/EventEmitter.hpp"
+
+namespace csopesy {
+  class Component {
+    protected:
+    EventEmitter& global;
+    EventEmitter  local;
+
+    public:
+    Component(EventEmitter& emitter): global(emitter) {}
+    virtual ~Component() = default;
+
+    virtual void start() {}
+    virtual void stop() {}
+    virtual void tick() {}
+
+    EventEmitter& get_global() { return global; }
+    EventEmitter& get_local() { return local; }
+  };
+}
+
+------------------------------
+ FILE:  EventEmitter.hpp
+ PATH:  core\common\utility\EventEmitter.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+  struct EventHandler {
+    using func = function<void(const any&)>;
+    uint id;
+    func fn;
+  };
+
+  /**
+   * @class EventEmitter
+   * @brief Thread-safe event emitter system.
+   * 
+   * Enables multiple threads to register event handlers, emit named events 
+   * with optional data, and process the queued events. Supports blocking wait 
+   * for event availability.
+   */
+  class EventEmitter {
+    using atomic = atomic_uint;
+    using pair = pair<str, any>;
+    using list = vector<pair>;
+    using obj  = EventHandler;
+    using func = EventHandler::func;
+    using task = function<void()>;
+    using objs = vector<obj>;
+    using map  = unordered_map<str, objs>;
+
+    map    listeners;   ///< Map of event name to handlers
+    list   events;      ///< Queue of emitted events
+    convar cv;          ///< Condition variable for blocking waits
+    atomic next_id = 1; ///< Atomic counter for unique handler IDs
+    mutex  mtx;         ///< Mutex for thread safety
+
+    public:
+    
+    /**
+     * @brief Register a handler for a named event.
+     * @param name The event name.
+     * @param handler A function to call when the event is dispatched.
+     * @return uint The unique handler ID assigned to the registered handler.
+     */
+    uint on(str name, func handler) {
+      uint id = next_id++;
+      return on(id, move(name), move(handler));
+    }
+
+    /**
+     * @brief Register a simple handler for a named event with no payload.
+     * @param name The event name.
+     * @param handler A function to call when the event is dispatched (ignores any payload).
+     * @return The unique handler ID assigned to this registration.
+     */
+    uint on(str name, task handler) {
+      return on(move(name), [handler=move(handler)](const any&) { 
+        handler(); 
+      });
+    }
+
+    /**
+     * @brief Register a one-time handler for a named event.
+     * The handler will be called once, then automatically unregistered.
+     * 
+     * @param name The event name.
+     * @param handler The function to call once.
+     */
+    void once(str name, func handler) {
+      uint id = next_id++; 
+      on(id, name, [this, id, name=move(name), handler=move(handler)](const any& payload) {
+        off(name, id);    // passes name by value to on(), 
+        handler(payload); // then moves into lambda capture
+      });
+    }
+
+    /**
+     * @brief Unregister a handler by ID for a specific event.
+     * @param name The event name.
+     * @param id The handler ID to remove.
+     */
+    void off(const str& name, uint id) {
+      with.lock(mtx, [&] {
+        auto it = listeners.find(name);
+        if (it != listeners.end())
+          erase_if(it->second, [&](const obj& h) { return h.id == id; });
+      });
+    }
+
+    /**
+     * @brief Unregister all handlers for a specific event.
+     * @param name The event name for which all handlers will be removed.
+     */
+    void off(const str& name) {
+      with.lock(mtx, [&] {
+        auto it = listeners.find(name);
+        if (it != listeners.end())
+          listeners.erase(it);          // Remove key and its values from map completely O(1) avg
+      });
+    }
+
+    /**
+     * @brief Emit an event with data.
+     * Queues the event and notifies any thread waiting for events.
+     * 
+     * @param name The event name.
+     * @param payload The data to pass to handlers.
+     */
+    void emit(str name, any payload={}) {
+      with.lock(mtx, [&] { 
+        events.emplace_back(move(name), move(payload));
+      });
+      cv.notify_one();
+    }
+
+    /**
+     * @brief Dispatches all queued events to their registered handlers.
+     * 
+     * Safely callable from any thread. This method swaps out the event queue
+     * under a lock and processes a copy of it outside the lock to avoid
+     * blocking other operations. For each event, the list of handlers is
+     * also copied under a lock to prevent concurrent modification during
+     * dispatch. This ensures thread-safe and non-blocking execution of
+     * handler callbacks, even if new handlers are added or removed during dispatch.
+     */
+    void dispatch() {
+      list local;
+      with.lock(mtx, [&] { local.swap(events); });
+
+      for (const auto& [name, data]: local) {
+        objs handlers;
+
+        with.lock(mtx, [&] {
+          auto it = listeners.find(name);
+          if (it != listeners.end() && !it->second.empty()) // Second condition avoids copying empty list
+            handlers = it->second;      // Cant pass by reference cuz handlers is unsafe after lock
+        });
+
+        if (handlers.empty()) continue; // Skip if there are no handlers
+        for (const auto& handler: handlers) 
+          handler.fn(data);
+      }
+    }
+
+    /**
+     * @brief Block until at least one event is queued, then dispatch it.
+     * Uses a condition variable to efficiently wait until work is available.
+     */
+    void wait_dispatch() {
+      with.unique(mtx, [&](auto& lock) {
+        cv.wait(lock, [&] { return !events.empty(); });
+      });
+      dispatch();
+    }
+
+    private:
+    /**
+     * @brief Internal registration helper to associate a handler with an explicit ID.
+     * @param id A preassigned handler ID.
+     * @param name The event name.
+     * @param handler The function to register.
+     * @return The same ID passed in.
+     */
+    uint on(uint id, str name, func handler) {
+      with.lock(mtx, [&] { 
+        listeners[move(name)].emplace_back(id, move(handler)); 
+      });
+      return id;
+    }
+  };
+}
+
+------------------------------
+ FILE:  Core.hpp
+ PATH:  core\execution\Core.hpp
+------------------------------
+
+#pragma once
+#include "core/common/utility/EventEmitter.hpp"
+#include "core/common/imports/_all.hpp"
+#include "core/process/Process.hpp"
+
+namespace csopesy {
+
+  /**
+   * Represents a single CPU core in the scheduler system.
+   * Each core may run one process job at a time and ticks independently in a thread.
+   */
+  class Core {
+    public:
+    using ProcessRef = ref<Process>;
+    using ProcessCref = ref<const Process>;
+    using Job = optional<ProcessRef>;
+    using func = EventHandler::func;
+    
+    private:   
+    static constexpr auto tick_delay = 1ms;
+    
+    uint id;                  ///< Core ID
+    uint ticks;               ///< Ticks since the current job was assigned
+    Job job;                  ///< Current assigned process (if any)
+    Thread thread;            ///< Background ticking thread
+    abool running = false;    ///< Atomic flag to keep the tick loop alive
+    abool preempting = false; ///< Flag set to forcefully release the process
+    EventEmitter emitter;     ///< Used for event hooks
+
+    public:
+
+    /** Constructs a scheduler core with the given ID and starts the thread. */
+    Core(uint id=0): id(id) { start(); }
+
+    /** Destructor stops the tick thread cleanly. */
+    ~Core() { stop(); }
+
+    /** Assigns a process to this core and updates its core ID. */
+    void assign(ProcessRef procref) {
+      job = move(procref);
+      job->get().set_core(id);
+      ticks = 0;
+      
+      emitter.emit("assign", any(job.value()));
+      emitter.dispatch();
+    }
+
+    /** Returns the currently assigned job, or throws if none exists. */
+    Process& get_job() {
+      if (job) return job->get();
+      throw runtime_error("Core::get_job: No job is currently assigned to this core");
+    }
+
+    /** Flags this core to preempt its current job. */
+    void preempt() { preempting = true; }
+
+    /** Returns the ID of the processor. */
+    uint get_id() const { return id; }
+
+    /** Returns true if the processor is currently idle (no job assigned). */
+    bool is_idle() const { return !job.has_value(); }
+
+    /** Returns the number of ticks the current job has run. */
+    uint time_on_job() const { return ticks; }
+
+    /** Registers an event listener for this core (e.g., "assign", "release"). */
+    void on(const str& name, func handler) { emitter.on(name, handler); }
+
+    private:
+
+    /** Launches a background thread that ticks in a loop. */
+    void start() {
+      running = true;
+      thread = Thread([this] {
+        while (running) {
+          tick();
+          sleep_for(tick_delay);
+        }
+      });
+    }
+  
+    /** Stops the tick loop and joins the thread. */
+    void stop() {
+      running = false;
+      if (thread.joinable()) 
+        thread.join();
+    }
+
+    /** Executes one instruction for the current job, and releases if done. */
+    void tick() {
+      if (!job) return;
+ 
+      // Preemption has priority over stepping
+      if (preempting)         
+        return release(); 
+
+      auto& process = job->get();
+      process.step();
+      ++ticks;
+      
+      // Finish after this tick
+      auto& state = process.get_state();
+      if (state.is_finished())  
+        release();
+    }
+
+    // === Helpers ===
+
+    /** Helper to release the current job and clears its core assignment. */
+    void release() {
+      emitter.emit("release", any(job.value()));
+      emitter.dispatch();
+      
+      preempting = false;
+      job->get().reset_core();
+      job.reset();
+      ticks = 0;
+    }
+  };
+}
+
+------------------------------
+ FILE:  CoreManager.hpp
+ PATH:  core\execution\CoreManager.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/execution/Core.hpp"
+
+namespace csopesy {
+
+  /**
+   * @brief Manages a pool of CPU cores in the scheduler.
+   * 
+   * This class provides access, iteration, and lifecycle
+   * control (start/stop) for all managed `Core`s.
+   */
+  class CoreManager {
+    using CorePtr = unique_ptr<Core>;   // We need pointers since we can't move or copy threads
+    using Cores = vector<CorePtr>;
+    using CoreRefs = vector<ref<Core>>;
+    
+    Cores cores;
+
+    public:
+
+    /** Constructs and initializes a given number of cores. */
+    CoreManager(uint size=0) { resize(size); }
+
+    /** Clears and reinitializes the core list with the specified number of cores. */
+    void resize(uint size) {
+      cores.clear();
+      cores.reserve(size);
+      for (uint i = 0; i < size; ++i)
+        cores.emplace_back(make_unique<Core>(i));
+    }
+
+    // === Accessors ===
+
+    uint size() const { return cores.size(); }
+    Core& get(uint i) { return *cores[i]; }
+    const Core& get(uint i) const { return *cores[i]; }
+
+    /** Returns references to all cores. */
+    CoreRefs get_all() {
+      auto all = CoreRefs();
+      all.reserve(cores.size());
+
+      for (auto& ptr: cores)
+        all.push_back(ref(*ptr));
+      return all;
+    }
+
+    /** Returns a list of references to all idle cores. */
+    CoreRefs get_idle() {
+      auto idle = CoreRefs();
+      idle.reserve(cores.size());
+
+      for (auto& ptr: cores) {
+        if (ptr->is_idle())
+          idle.push_back(ref(*ptr));
+      }
+      return idle;
+    }
+  };
+}
+
+------------------------------
+ FILE:  Instruction.hpp
+ PATH:  core\instruction\Instruction.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /** Represents a single process instruction. */
+  struct Instruction {
+    using Script = vector<Instruction>;
+    using list  = vector<str>;
+   
+    str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
+    list args;  ///< List of string arguments
+
+  /**
+   * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
+   * Set dynamically to allow skipping. A value of 0 means unset.
+   */
+    mutable uint exit = 0;
+  };
+}
+
+------------------------------
+ FILE:  InstructionHandler.hpp
+ PATH:  core\instruction\InstructionHandler.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "Instruction.hpp"
+#include "InstructionParam.hpp"
+
+namespace csopesy {
+  class ProcessData; // Forward declaration
+
+  /** Represents an executable instruction handler. */
+  struct InstructionHandler {
+    using func = function<void(const Instruction&, ProcessData&)>;
+    using Schema = InstructionParam;
+    using list = vector<InstructionParam::Signature>;
+
+    // === Opcode name ===
+    str opcode;           /// The opcode string representing the instruction.
+    
+    // === Optional Metadata ===
+    str open_opcode; ///< For control instruction with a matching open
+    str exit_opcode; ///< For control instruction with a matching exit
+    list signatures;      ///< Describes expected argument types
+    
+    // === Execute function ===
+    func execute;         ///< Function to execute the instruction
+    
+    // === Helpers ===
+
+    /** Returns true if this instruction begins a open control block (e.g., FOR). */
+    bool is_control_open() const { return !exit_opcode.empty(); }
+
+    /** Returns true if this instruction begins a exit control block (e.g., FOR). */
+    bool is_control_exit() const { return !open_opcode.empty(); }
+
+    /** Generates a random instruction based on the signature. */
+    Instruction generate() const {
+      auto inst = Instruction(opcode);
+      if (signatures.empty())
+        return inst;
+
+      const auto& signature = Random::pick(signatures);
+      inst.args.reserve(signature.size()); // Micro-optimization: Preallocate space
+
+      for (const auto& rule: signature)
+        inst.args.push_back(rule.generate());
+      return inst;
+    }
+  };
+}
+
+------------------------------
+ FILE:  InstructionInterpreter.hpp
+ PATH:  core\instruction\InstructionInterpreter.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/handlers/_all.hpp"
+#include "core/process/ProcessData.hpp"
+#include "InstructionHandler.hpp"
+#include "Instruction.hpp"
+
+namespace csopesy {
+
+  /** Central registry and dispatcher for all instruction types. */
+  class InstructionInterpreter {
+    using Script = Instruction::Script;
+    using map  = unordered_map<str, InstructionHandler>;
+    using list = vector<ref<const InstructionHandler>>;
+
+    map handlers;           ///< opcode â†’ handler
+    list all_handlers;      ///< cached reference list for introspection
+    list flat_handlers;     ///< Handlers for non-control instructions
+    list control_handlers;  ///< Handlers for control instructions
+
+    public:
+
+    /** Returns the global singleton instance of the InstructionInterpreter. */
+    static InstructionInterpreter& instance() {
+      static InstructionInterpreter inst;
+      return inst;
+    }
+
+    /** Registers a handler by opcode. */
+    void register_instruction(InstructionHandler handler) {
+      handlers[handler.opcode] = move(handler);
+    }
+
+    /** Execute an instruction using its handler. */
+    void execute(const Instruction& inst, ProcessData& proc) const {
+      auto it = handlers.find(inst.opcode);
+      if (it == handlers.end())
+        throw runtime_error("Unknown instruction: " + inst.opcode);
+
+      it->second.execute(inst, proc);
+    }
+
+    /** Returns list of registered handlers. */
+    const list& get_handlers() const { return all_handlers; }
+    const list& get_flat_handlers() const { return flat_handlers; }
+    const list& get_control_handlers() const { return control_handlers; }
+
+    /**
+     * Generates a random list of up to `size` instructions with proper block closure.
+     * May exceed size due to necessary ENDFOR-like closures.
+     */
+    Script generate_script(uint size, uint max_depth=3) {
+      auto script = Script();
+      list stack; // Tracks opened control blocks
+
+      while (script.size() < size) {
+        if (should_open(stack, max_depth))  // For opening control instructions
+          open_control_block(script, stack);
+        
+        else if (should_close(stack))       // For closing control instructions
+          close_control_block(script, stack);
+
+        if (!flat_handlers.empty())                 // For adding flat instructions
+          script.push_back(Random::pick(flat_handlers).get().generate());
+      }
+
+      // Auto-close any unclosed control blocks
+      while (!stack.empty())
+        close_control_block(script, stack);
+
+      return script;
+    }
+
+    private:
+
+    /** 
+     * Private constructor to enforce singleton access via instance().
+     * Initializes and registers all handlers once. 
+     */
+    InstructionInterpreter() {
+      for (auto& inst: instruction::get_all())
+        register_instruction(move(inst));
+
+      // Categorize and cache handler references for quick lookup
+      all_handlers.reserve(handlers.size());
+
+      for (const auto& [_, handler]: handlers) {
+        all_handlers.push_back(cref(handler));  // Add to full list
+
+        // Separate into control vs. flat based on metadata
+        if (handler.is_control_exit()) continue;
+        if (handler.is_control_open())
+          control_handlers.push_back(cref(handler));
+        else
+          flat_handlers.push_back(cref(handler));
+      }
+    }
+
+    // === Internal Helpers ===
+
+    /** Returns true if a control block can be opened (depth-limited, random chance). */
+    bool should_open(const list& stack, uint max_depth) const { 
+      return !control_handlers.empty() && (stack.size() < max_depth) && Random::chance(4); 
+    }
+
+    /** Returns true if a control block can be closed (if any open, random chance). */
+    bool should_close(const list& stack) const { 
+      return !stack.empty() && Random::chance(4); 
+    }
+
+    /** Emits a random control-opener instruction and pushes it to the stack. */
+    void open_control_block(Script& script, list& stack) const {
+      const auto& handler = Random::pick(control_handlers);
+      script.push_back(handler.get().generate());
+      stack.push_back(handler);
+    }
+
+    /** Emits the matching end-opcode of the current open control block. */
+    void close_control_block(Script& script, list& stack) const {
+      if (stack.empty())
+        throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
+      
+      const auto& opener = stack.back();
+      script.emplace_back(opener.get().exit_opcode);
+      stack.pop_back();
+    }
+  };
+}
+
+------------------------------
+ FILE:  InstructionParam.hpp
+ PATH:  core\instruction\InstructionParam.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /** Represents a schema used to validate and generate instruction arguments. */
+  struct InstructionParam {
+    using list = vector<str>;
+    using Signature = vector<InstructionParam>;
+
+    /** Supported argument types. */
+    enum class Type {
+      UInt,       ///< Unsigned integer (with optional min/max)
+      Str,        ///< Variable or string identifier
+      Var         ///< Fixed set of variables
+    };
+
+    Type type;    ///< The argument's expected type
+    uint min = 0; ///< Minimum value (for UInt)
+    uint max = 0; ///< Maximum value (for UInt)
+
+    // === Argument Generator ===
+
+    /** Returns a randomly generated argument string that matches this schema. */
+    str generate() const {
+      switch (type) {
+        case Type::UInt:  return to_string(Random::num(min, max));
+        case Type::Str:   return Random::pick(messages);
+        case Type::Var:   return Random::pick(vars);
+        default:          return "<?>";  // Should never be hit
+      }
+    }
+
+    // === Static Constructors ===
+
+    static InstructionParam Var() { return { Type::Var }; }
+    static InstructionParam Str() { return { Type::Str }; }
+    static InstructionParam UInt(uint min, uint max) { return { Type::UInt, min, max }; }
+    static InstructionParam UInt8() { return UInt(0, 255); }
+    static InstructionParam UInt16() { return UInt(0, 65535); }
+    
+    private:
+
+    inline static const list vars = {"x", "y", "z"};
+    inline static const list messages = {
+      "We use the observer pattern with an event emitter.",
+      "All components have start, stop, and tick methods.",
+      "We prefer composition over inheritance to build flexible and reusable components.",
+      "We use data-driven design instead of deep inheritance.",
+      "Each part has a single responsibility, keeping code modular.",
+      "We avoid deep nesting by using guard clauses.",
+      "The code is clean and easy to read.",
+      "No 'vibecoding' here â€” everything is intentional.",
+    };
+  };
+}
+
+------------------------------
+ FILE:  add.hpp
+ PATH:  core\instruction\handlers\add.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionParam.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_add() {
+    using Param = InstructionParam;
+    return {
+      .opcode = "ADD",
+      .signatures = {
+        { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
+        { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
+        { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
+      },
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        uint lhs = proc.get_memory().get(inst.args[1]);
+        uint rhs = proc.get_memory().resolve(inst.args[2]);
+        proc.get_memory().set(inst.args[0], lhs + rhs);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  declare.hpp
+ PATH:  core\instruction\handlers\declare.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_declare() {
+    using Param = InstructionParam;
+    using list = vector<str>;
+    return {
+      .opcode = "DECLARE",
+      .signatures = {{ Param::Var(), Param::UInt16() }},
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        uint value = stoul(inst.args[1]);
+        proc.get_memory().set(inst.args[0], value);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  endfor.hpp
+ PATH:  core\instruction\handlers\endfor.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+#include "core/process/ProcessProgram.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_endfor() {
+    return {
+      .opcode = "ENDFOR",
+      .open_opcode = "FOR",
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        auto& program = proc.get_program();
+        auto& context = program.get_context();
+
+        // Check if block is inside a FOR loop
+        if (!context.matches("FOR"))
+          throw runtime_error("[ENDFOR] No matching FOR block on stack.");
+        
+        auto& frame = context.top();
+
+        // Cache exit address if it's not set
+        const auto& for_inst = program.get_instruction(frame.start);
+        if (for_inst.exit == 0)
+          for_inst.exit = program.get_ip() + 1;
+
+        // Decrement loop count; jump back if more iterations remain
+        if (--frame.count > 0)
+          return void(program.set_ip(frame.start));
+
+        // Loop finished - pop the context frame
+        context.pop();
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  for.hpp
+ PATH:  core\instruction\handlers\for.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionParam.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_for() {
+    using Param = InstructionParam;
+    
+    // === Skips ahead to the matching ENDFOR. ===
+    auto skip_block = [](auto& program, const Instruction& inst) {
+      
+      // Use cached exit if available
+      if (inst.exit != 0)
+        return program.set_ip(inst.exit);
+      
+      auto start = program.get_ip();
+      auto& script = program.get_script();
+      uint depth = 1;
+
+      // Otherwise, scan ahead to find the matching ENDFOR
+      for (uint i = start+1; i < script.size(); ++i) {
+        const auto& opcode = script[i].opcode;
+        const int delta = (opcode == "FOR") - (opcode == "ENDFOR");
+        depth += delta;
+        
+        // If matching ENDFOR is found, cache exit address and exit loop
+        if (depth == 0) {
+          inst.exit = i+1;  
+          program.set_ip(inst.exit);
+          return;
+        }
+      }
+      
+      throw runtime_error("[FOR] Mismatched FOR/ENDFOR blocks.");
+    };
+
+    return {
+      .opcode = "FOR",
+      .exit_opcode = "ENDFOR",
+      .signatures = {{ Param::UInt(1, 5) }},
+      .execute = [&](const Instruction& inst, ProcessData& process) {
+        auto& program = process.get_program();
+        auto count = stoul(inst.args[0]);
+        
+        // Skip loop entirely if loop count is zero
+        if (count == 0)
+          return skip_block(program, inst);
+        
+        auto& context = program.get_context();
+        auto ip = program.get_ip();
+        
+        // Push context if this FOR hasn't been visited yet
+        if (!context.starts_at(ip))
+          context.push("FOR", ip, count);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  print.hpp
+ PATH:  core\instruction\handlers\print.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionParam.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_print() {
+    using Param = InstructionParam;
+    return {
+      .opcode = "PRINT",
+      .signatures = {
+        { Param::Str() },
+        { Param::Str(), Param::Var()},
+      },
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        proc.log(inst.args[0]);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  sleep.hpp
+ PATH:  core\instruction\handlers\sleep.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionParam.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_sleep() {
+    using Param = InstructionParam;
+    return {
+      .opcode = "SLEEP",
+      .signatures = {{ Param::UInt8() }},
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        uint duration = stoul(inst.args[0]);
+        proc.get_state().sleep_for(duration);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  subtract.hpp
+ PATH:  core\instruction\handlers\subtract.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionParam.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+namespace csopesy::instruction {
+  inline InstructionHandler make_subtract() {
+    using Param = InstructionParam;
+    return {
+      .opcode = "SUBTRACT",
+      .signatures = {
+        { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
+        { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
+        { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
+      },
+      .execute = [](const Instruction& inst, ProcessData& proc) {
+        uint lhs = proc.get_memory().get(inst.args[1]);
+        uint rhs = proc.get_memory().resolve(inst.args[2]);
+        proc.get_memory().set(inst.args[0], (lhs > rhs) ? (lhs-rhs) : 0);
+      },
+    };
+  }
+}
+
+------------------------------
+ FILE:  _all.hpp
+ PATH:  core\instruction\handlers\_all.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/InstructionHandler.hpp"
+// #include "add.hpp"
+// #include "declare.hpp"
+#include "endfor.hpp"
+#include "for.hpp"
+#include "print.hpp"
+// #include "sleep.hpp"
+// #include "subtract.hpp"
+
+namespace csopesy::instruction {
+  using list = vector<InstructionHandler>;
+  
+  list get_all() {
+    return {
+      // make_add(),
+      // make_declare(),
+      make_endfor(),
+      make_for(),
+      make_print(),
+      // make_sleep(),
+      // make_subtract(),
+    };
+  }
+}
+
+------------------------------
+ FILE:  .gitkeep
+ PATH:  core\memory\.gitkeep
+------------------------------
+
+
+------------------------------
+ FILE:  Maze.hpp
+ PATH:  core\misc\Maze\Maze.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "Position.hpp"
+
+namespace csopesy {
+  class Maze {
+    using list    = vector<int>;
+    using Symbols = array<str, 17>;
+    using Row     = vector<byte>;
+    using Grid    = vector<Row>;
+
+    static constexpr byte PATH = 0;
+    static constexpr byte STEP = 16;
+    static constexpr byte WALL = 255;
+    inline static const Symbols symbols = {
+      " ", "â•‘", "â•", "â•”", "â•", "â•—", "â•", "â•¦",
+      "â•‘", "â•‘", "â•š", "â• ", "â•", "â•£", "â•©", "â•¬",
+      "Â·",
+    };
+
+    uint width;
+    uint height;
+    Grid grid;
+
+    public:
+    Maze(uint width, uint height): 
+      width(width), 
+      height(height), 
+      grid(height, Row(width, WALL)) {
+      generate();
+    }
+
+    str render() const {
+      auto stream = oss();
+      for (const auto& row: grid) {
+        for (const auto& cell: row)
+          stream << symbols[cell];
+        stream << '\n';
+      }
+      return stream.str();
+    }
+
+    private:
+    bool in_bounds(int x, int y) const {
+      return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
+    bool is_wall(int x, int y) const {
+      return grid[y][x] != PATH;
+    }
+
+    void generate() {
+      using Position::pos;
+
+      list dirs  = { pos(1,0), pos(0,1), pos(-1,0), pos(0,-1) };
+      list stack = { pos(1,1) };
+      stack.reserve((width * height) / 2);
+      
+      while (!stack.empty()) {
+        // Pop the current cell (top of the stack)
+        auto [x, y] = pos(stack.back());
+        stack.pop_back();
+        
+        for (auto dir: Random::shuffle(dirs)) {
+          auto [dx, dy] = pos(dir);
+          int nx = x + dx*2;
+          int ny = y + dy*2;
+
+          // Choose a random unvisited neighbor
+          if (!in_bounds(nx, ny) || !is_wall(nx, ny)) 
+            continue;
+
+          // Remove the wall between the current cell and the chosen neighbor
+          grid[y+dy][x+dx] = PATH;
+          grid[ny][nx] = PATH;
+
+          // Add the current position and the new position to the stack
+          stack.push_back(pos(x, y));
+          stack.push_back(pos(nx, ny));
+          break;
+        }
+      }
+
+      format();
+    }
+
+    void format() {
+      for (int y=0; y < height; ++y) {
+        for (int x=0; x < width; ++x) {
+          // Skip empty spaces
+          if (!is_wall(x, y)) continue;
+
+          byte bits = 0;
+          if (y > 0 && is_wall(x, y-1))        bits |= 0b1000;  // Check if there's a top wall
+          if (x > 0 && is_wall(x-1, y))        bits |= 0b0100;  // Check if there's a left wall
+          if (x < width-1 && is_wall(x+1, y))  bits |= 0b0010;  // Check if there's a right wall
+          if (y < height-1 && is_wall(x, y+1)) bits |= 0b0001;  // Check if there's a bottom wall
+
+          // Set the grid's value to the correct symbol based on the bitmask
+          grid[y][x] = bits;
+        }
+      }
+    }
+  };
+}
+
+------------------------------
+ FILE:  Position.hpp
+ PATH:  core\misc\Maze\Position.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy::Position {  
+  
+  // Encode two integers (x, y) into a single integer
+  inline int pos(int x, int y) {
+    return (x << 16) | (y & 0xFFFF);
+  }
+
+  // Decode a single encoded integer back into a position (x, y)
+  inline pair<int, int> pos(int encoded) {
+    int x = encoded >> 16;
+    int y = encoded & 0xFFFF;
+    
+    // If y is negative, sign-extend it properly
+    return { x, (y & 0x8000 ) ? (y | 0xFFFF0000) : y };
+  }
+}
+
+------------------------------
+ FILE:  Process.hpp
+ PATH:  core\process\Process.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "ProcessState.hpp"
+#include "ProcessMemory.hpp"
+#include "ProcessProgram.hpp"
+#include "ProcessData.hpp"
+#include "ProcessExecutor.hpp"
+
+namespace csopesy {
+
+  class Process {
+    using list = ProcessData::list;
+    ProcessData data;
+
+    public:
+    Process(str name, uint pid) : data(move(name), pid) {}
+
+    // === ProcessExecutor interface ===
+    bool step() { return ProcessExecutor::step(data); }
+
+    // === ProcessData interface ===
+
+    // Mutators for ProcessData components
+    void log(str line) { data.log(move(line)); }
+    void set_core(int id) { data.set_core(id); }
+    void reset_core() { data.reset_core(); }
+
+    // Accessors for ProcessData components
+    const str& get_name() const { return data.get_name(); }
+    const uint get_id() const { return data.get_id(); }
+    const int  get_core() const { return data.get_core(); }
+    const Time& get_stime() const { return data.get_stime(); }
+    const list& get_logs() const { return data.get_logs(); }
+
+    // Accessors for ProcessData sub-components
+    ProcessData& get_data() { return data; }
+    ProcessState& get_state() { return data.get_state(); }
+    ProcessMemory& get_memory() { return data.get_memory(); }
+    ProcessProgram& get_program() { return data.get_program(); }
+    const ProcessData& get_data() const { return data; }
+    const ProcessState& get_state() const { return data.get_state(); }
+    const ProcessMemory& get_memory() const { return data.get_memory(); }
+    const ProcessProgram& get_program() const { return data.get_program(); }
+  };
+}
+
+------------------------------
+ FILE:  ProcessData.hpp
+ PATH:  core\process\ProcessData.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "ProcessMemory.hpp"
+#include "ProcessProgram.hpp"
+#include "ProcessState.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+
+  /**
+   * @brief Pure data container for process state.
+   * 
+   * This class holds all memory, program, state, and metadata
+   * related to a single process. It is only accessible by the
+   * Process class, which owns and manipulates this data.
+   */
+  class ProcessData {
+    public:
+    using list = vector<str>;
+
+    private:
+    str name;               // Human-readable process name (e.g. p01, p02)
+    uint id;                // Unique process ID
+    int core = -1;          // ID of the core this process is assigned to (-1 if unassigned)
+    list logs;              // Output logs collected from PRINT instructions
+    Time stime;             // Timestamp of when the process was created
+    ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
+    ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
+    ProcessProgram program; // List of instructions and execution context
+
+    public:
+
+    /** Constructs a process with a given name and process ID. */
+    ProcessData(str name, uint id): 
+      name(move(name)), id(id), stime(Clock::now()) {}
+
+    /** Append a log message (used for PRINT instructions) */
+    void log(str line) { logs.push_back(move(line)); }
+
+    // === Core mutators ===
+    void set_core(int id) { core = id; }
+    void reset_core() { core = -1; }
+
+    // === Getters ===
+    const str& get_name() const { return name; }
+    const uint get_id() const { return id; }
+    const int get_core() const { return core; }
+    const Time& get_stime() const { return stime; }
+    const list& get_logs() const { return logs; }
+
+    // === Accessors for sub-components ===
+    ProcessState& get_state() { return state; }
+    ProcessMemory& get_memory() { return memory; }
+    ProcessProgram& get_program() { return program; }
+    const ProcessState& get_state() const { return state; }
+    const ProcessMemory& get_memory() const { return memory; }
+    const ProcessProgram& get_program() const { return program; }
+  };
+}
+
+------------------------------
+ FILE:  ProcessExecutor.hpp
+ PATH:  core\process\ProcessExecutor.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/process/ProcessData.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+
+namespace csopesy {
+  /**
+   * @brief Executes one step of a process.
+   * 
+   * ProcessExecutor is a stateless utility that performs a single execution step
+   * for a given ProcessData object. It handles sleeping, instruction execution,
+   * and FOR loop semantics.
+   */
+  class ProcessExecutor {
+    using Interpreter = InstructionInterpreter;
+    inline static Interpreter interpreter = Interpreter::instance();
+
+    public:  
+    static bool step(ProcessData& proc) {
+      auto& prog  = proc.get_program();
+      auto& state = proc.get_state();
+
+      // Exit if program already finished
+      if (state.is_finished() || prog.is_finished())
+        return state.set_finished(), true;
+
+      // Fetch and execute instruction
+      const auto ip = prog.get_ip();
+      const auto& inst = prog.get_script()[ip];
+      
+      interpreter.execute(inst, proc);
+      
+      // This line checks if IP was changed. If not, advance it.
+      if (ip == prog.get_ip())
+        prog.set_ip(ip + 1);
+
+      return false;
+    }
+  };
+}
+
+------------------------------
+ FILE:  ProcessMemory.hpp
+ PATH:  core\process\ProcessMemory.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+  class ProcessMemory {
+    using map = unordered_map<str, uint>;
+    map symbol_table;
+
+    public:
+
+    /** Memory mutators */
+    void set(str key, uint value) {
+      symbol_table[move(key)] = value;
+    }
+
+    /** Memory accessors */
+    uint get(const str& key) const {
+      auto it = symbol_table.find(key);
+      return it != symbol_table.end() ? it->second : 0;
+    }
+    
+    /** Resolves a token as a literal or variable lookup */
+    uint resolve(const str& token) const {
+      return isdigit(token[0]) ? stoul(token) : get(token);
+    }
+
+    /** Exposes internal variable bindings */
+    const auto& get_symbol_table() const {
+      return symbol_table;
+    }
+  };
+}
+
+------------------------------
+ FILE:  ProcessProgram.hpp
+ PATH:  core\process\ProcessProgram.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+
+  /** A program that can be executed by a process. */
+  class ProcessProgram {
+    using Script = Instruction::Script;
+    using Stack = ContextStack;
+
+    Script script;  ///< Flat list of all program instructions
+    Stack context;  ///< Stack of active loop contexts
+    uint ip = 0;    ///< Current instruction pointer
+
+    public:
+
+    /** Append a new instruction to the program */
+    void load_script(Script new_script) { 
+      script = move(new_script);
+      context.clear();
+      ip = 0;  
+    }
+    
+    /** Check if the program has completed execution. */
+    bool is_finished() const { return ip >= script.size(); }
+
+    /** Get the total number of instructions in the program. */
+    uint size() const { return script.size(); }
+
+    /** Access and control the instruction pointer. */
+    void set_ip(uint new_ip) { ip = new_ip; }
+    uint get_ip() const { return ip; }
+
+    /** Returns a reference to the instruction at the given address. */
+    const Instruction& get_instruction(uint ip) { return script.at(ip); }
+
+    /** Access list of all instructions. */
+    Script& get_script() { return script; }
+    const Script& get_script() const { return script; }
+
+    /** Access the loop context stack. */
+    Stack& get_context() { return context; }
+    const Stack& get_context() const { return context; }
+
+    /** Returns a formatted view of all instructions with the current IP highlighted. */
+    str view_script() const {
+      auto stream = osstream();
+
+      // Compute padding width based on the number of instructions
+      uint addr_width = to_string(script.size()-1).length();
+      
+      for (uint i=0; i < script.size(); ++i) {
+        const auto& inst = script[i];
+        const auto marker = (i == ip) ? '>' : ' ';
+        const uint opcode_width = 10;
+        auto opcode = inst.opcode;
+
+        if (opcode.size() > opcode_width)
+          opcode = opcode.substr(0, opcode_width);
+
+        stream << format("{} [{:0{}}] {:<{}}", 
+          marker, i, addr_width, opcode, opcode_width);
+
+        for (const auto& arg: inst.args)
+          stream << ' ' << arg;
+        stream << '\n';
+      }
+
+      return move(stream).str();
+    }
+
+    /** Returns a formatted view of the current context stack. */
+    str view_context() const {
+      auto stream = osstream();
+
+      if (context.empty())
+        return stream << "  <empty>\n",  stream.str();
+
+      // Compute padding width based on the number of instructions
+      uint width = to_string(script.size()-1).length();
+
+      for (uint i=0; i < context.size(); ++i) {
+        const auto& frame = context.at(i);
+        const auto& inst  = script[frame.start];
+
+        stream << format("  [{}] {:<6} @{:0{}}  exit: {:0{}}  count: {}\n",
+          i, frame.opcode, frame.start, width, inst.exit, width, frame.count);
+      }
+
+      return move(stream).str();
+    }
+  };
+}
+
+------------------------------
+ FILE:  ProcessState.hpp
+ PATH:  core\process\ProcessState.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+  class ProcessState {
+    public:
+    State state = State::Ready;
+    uint sleep_ticks = 0;
+
+    void sleep_for(uint ticks) {
+      state = State::Sleeping;
+      sleep_ticks = ticks;
+    }
+
+    bool is_sleeping() const {
+      return state == State::Sleeping;
+    }
+
+    bool is_finished() const {
+      return state == State::Finished;
+    }
+
+    void set_ready() {
+      state = State::Ready;
+    }
+
+    void set_finished() {
+      state = State::Finished;
+    }
+  };
+}
+
+------------------------------
+ FILE:  types.hpp
+ PATH:  core\process\types.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
+
+namespace csopesy {
+
+  /** An enum representing the possible states of a process. */
+  enum class State {
+    Ready, Sleeping, Finished,
+  };
+
+  /** A loop frame from a FOR-like instruction. */
+  struct ContextFrame {
+    str  opcode;  ///< Control frame opcode, e.g., "FOR"
+    uint start;   ///< Address where the loop starts
+    uint count;   ///< Number of iterations remaining
+  };
+
+  class ContextStack {
+    using Stack = vector<ContextFrame>;
+    Stack stack;
+
+    public:
+    
+    /** Checks if top frame matches the opcode. */
+    bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }
+
+    /** Checks if top frame matches the opcode, start address, and has an initialized exit address. */
+    bool matches(const str& opcode, uint start) const {
+      return !empty() && top().opcode == opcode && top().start == start;
+    }
+
+    /** Returns true if the top frame starts at the given instruction pointer. */
+    bool starts_at(uint ip) const { return !empty() && top().start == ip; }
+
+    /** Push a new loop context onto the stack. */
+    void push(str opcode, uint start, uint count) {
+      stack.emplace_back(move(opcode), start, count);
+    }
+
+    /** Pop the top loop context from the stack. */
+    void pop() { stack.pop_back(); }
+
+    /** Check if the loop context stack is empty. */
+    bool empty() const { return stack.empty(); }
+
+    /** Get the number of loop contexts in the stack. */
+    uint size() const { return stack.size(); }
+
+    /** Clear all loop contexts from the stack. */
+    void clear() { stack.clear(); }
+
+    /** Access the top loop context */
+    ContextFrame& top() { return stack.back(); }
+    const ContextFrame& top() const { return stack.back(); }
+
+    /** Access a loop context by index. */
+    ContextFrame& at(uint index) { return stack.at(index); }
+    const ContextFrame& at(uint index) const { return stack.at(index); }
+  };
+}
+
+------------------------------
+ FILE:  Scheduler.hpp
+ PATH:  core\scheduler\Scheduler.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/process/Process.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+  class Scheduler {
+    using Interpreter = InstructionInterpreter;
+    using ProcList    = List<Process>;
+    using ProcRefList = vector<ref<const Process>>;
+    using CoreList    = vector<optional<ref<Process>>>;
+
+    ProcList processes;
+    ProcRefList finished;
+    queue<ref<Process>> rqueue;
+    CoreList cores;
+    SchedulerConfig config;
+    uint tick_count = 0;
+    bool generating = false;
+    uint next_process_id = 1;
+    Interpreter& interpreter;
+
+    public:
+
+    Scheduler(): interpreter(Interpreter::instance()) {}
+
+    /** Add a process to the global process list */
+    void add_process(Process proc) {
+      processes.push_back(move(proc));
+      rqueue.push(ref(processes.back()));
+    }
+
+    /** Advance 1 CPU tick */
+    void tick() {
+      ++tick_count;
+
+      // Dummy generation
+      if (generating && tick_count % config.batch_process_freq == 0)
+        create_dummy_process();
+
+      if (config.scheduler == "fcfs")
+        tick_fcfs();
+      else
+        return; 
+      tick_rr();
+    }
+
+    void tick_fcfs() {
+      // === Phase 1: Assign processes to idle cores
+      
+      for (uint i = 0; i < cores.size(); ++i) {
+        auto& core = cores[i];
+
+        // Skip if this core is already running something
+        if (core.has_value()) continue;
+
+        // Skip if no ready process available
+        while (!rqueue.empty()) {
+          auto proc_ref = rqueue.front(); rqueue.pop();
+          auto& proc = proc_ref.get();
+
+          // Sanity check: skip if process is already finished
+          if (proc.get_state().is_finished())
+            continue;
+
+          // Sanity check: should not be assigned to a core already
+          if (proc.get_core() != -1)
+            continue;
+
+          // Assign to this core
+          core = proc_ref;
+          proc.set_core(static_cast<int>(i));
+          break;
+        }
+      }
+
+      // === Phase 2: Step all active cores
+      for (uint i = 0; i < cores.size(); ++i) {
+        auto& core = cores[i];
+        if (!core.has_value()) continue;
+
+        auto& proc = core->get();
+
+        // Sanity check: core mismatch
+        if (proc.get_core() != static_cast<int>(i)) {
+          proc.log(format(
+            "[tick] ERROR: Core mismatch â€” process p{:02} claims core {}, but is on core {}",
+            proc.get_id(), proc.get_core(), i
+          ));
+        }
+
+        // Step the process
+        step_process(proc);
+
+        // If the process finished, release the core
+        if (proc.get_state().is_finished()) {
+          proc.log(format("[tick] finished on core {}", i));
+          proc.reset_core();
+          core.reset();
+        }
+      }
+    }
+
+    void tick_rr() {
+      // Round Robin: assign cores in a round-robin fashion
+      for (uint i = 0; i < cores.size(); ++i) {
+        auto& core = cores[i];
+
+        if (!core.has_value()) {
+          if (!rqueue.empty()) {
+            core = rqueue.front();
+            rqueue.pop();
+          }
+          continue;
+        }
+
+        auto& proc = core.value().get();
+        step_process(proc);
+
+        if (proc.get_state().state == State::Finished) {
+          core.reset();
+        } else {
+          // Re-queue the process if it is still running
+          rqueue.push(ref(proc));
+        }
+      }
+    }
+
+    /** Execute a single instruction for one process */
+    void step_process(Process& proc) {
+      if (proc.step())
+        finished.push_back(cref(proc));
+    }
+
+    /** Generate one dummy process */
+    void create_dummy_process() {
+      auto name = format("p{:02}", next_process_id);
+      auto proc = Process(name, next_process_id++);
+     
+      // Generate random instruction script
+      uint size = Random::num(config.min_ins, config.max_ins);
+      auto script = interpreter.generate_script(size);
+
+      // Load the script into the program
+      proc.get_program().load_script(move(script));
+
+      // Add process to process list
+      add_process(move(proc));
+    }
+
+    void start_generation() { generating = true; }
+    void stop_generation()  { generating = false; }
+    bool is_generating() const { return generating; }
+
+    const ProcList& get_processes() const { return processes; }
+    const Process& get_last_process() const { return processes.back(); }
+    const ProcRefList& get_finished_processes() const { return finished; }
+
+    vector<ref<const Process>> get_running_processes() const {
+      vector<ref<const Process>> running;
+      for (const auto& proc : processes) {
+        if (!proc.get_program().is_finished())
+          running.push_back(cref(proc));
+      }
+      return running;
+    }
+
+    bool all_finished() const {
+      for (const auto& proc : processes)
+        if (!proc.get_program().is_finished())
+          return false;
+      return true;
+    }
+
+    SchedulerConfig& get_config() { return config; }
+    const SchedulerConfig& get_config() const { return config; }
+
+    void set_config(SchedulerConfig new_config) {
+      config = move(new_config);
+
+      // Resize core list to match num_cpu, all cores unassigned (nullopt)
+      cores = CoreList(config.num_cpu, std::nullopt);
+
+      // Resize per-core quantum tracking for RR (default 0)
+      // core_quantums = vector<uint>(config.num_cpu, 0);
+
+      // Optional debug log
+      cout << format("[config] Initialized {} CPU cores.\n", config.num_cpu);
+    }
+
+    uint get_tick_count() const { return tick_count; }
+    bool is_initialized() const { return config.initialized; }
+  };
+}
+
+------------------------------
+ FILE:  Scheduler.new.hpp
+ PATH:  core\scheduler\Scheduler.new.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/execution/Core.hpp"
+#include "strategies/_all.hpp"
+#include "SchedulerStrategy.hpp"
+#include "SchedulerData.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+
+  /**
+   * @brief Central scheduler controller for the OS simulation.
+   * 
+   * Owns the strategy, configuration, interpreter, and high-level
+   * orchestration of ticks and process generation.
+   */
+  class Scheduler {
+    using Interpreter = InstructionInterpreter;
+    using ProcessRef = Core::ProcessRef;
+    using map = unordered_map<str, SchedulerStrategy>;
+    using list = vector<str>;
+
+    // === State ===
+    uint ticks = 0;           ///< Global tick counter
+    bool generating = false;  ///< Flag indicating auto-generation mode
+    list proc_queue;          ///< Deferred generation queue
+    
+    // === Components ===
+    Interpreter& interpreter; ///< Shared instruction generator instance
+    SchedulerData data;       ///< Internal state (cores, processes, queue)
+    map strategies;           ///< Map containing scheduler strategies
+
+    public:
+
+    /** Registers all available scheduling strategies. */
+    Scheduler(): interpreter(Interpreter::instance()) {
+      for (auto& strat: scheduler::get_all())
+        strategies.emplace(strat.get_name(), move(strat));
+    }
+
+    /** Executes the active strategy logic and increments the tick count. */
+    void tick() {
+      
+      // Handle any queued process generations
+      for (auto& name: proc_queue)
+        generate_process(move(name));
+      proc_queue.clear();
+      
+      // Generate process every `batch_process_freq` ticks
+      if (generating && interval_has_elapsed())
+        generate_process();
+
+      // get_strategy().preempt(data);
+      get_strategy().tick(data);
+      ++ticks;
+    }
+
+    /** Applies a new configuration and resizes core state accordingly. */
+    void set_config(SchedulerConfig config) {
+      if (!strategies.contains(config.scheduler))
+        throw runtime_error(format("Unknown scheduler strategy: {}", config.scheduler));
+
+      data.set_config(move(config));
+
+      // Hook up core event listeners for running/finished tracking
+      for (auto& ref: data.get_cores().get_all()) {
+        auto& core = ref.get();
+        core.on("assign", [this](any payload) { on_core_assign(payload); });
+        core.on("release", [this](any payload) { on_core_release(payload); });
+      }
+    }    
+    
+    // === Generation Control ===
+    void enqueue_process(str name) { proc_queue.push_back(move(name)); }
+    void generate(bool flag) { generating = flag; }
+    bool is_generating() const { return generating; }
+
+    // === Accessors ===
+    uint get_ticks() const { return ticks; }
+    bool is_initialized() const { return data.get_config().initialized; }
+    
+    // === Component Accessors ===
+    SchedulerData& get_data() { return data; }
+    SchedulerConfig& get_config() { return data.get_config(); }
+    SchedulerStrategy& get_strategy() { return strategies.at(data.get_config().scheduler); }
+    const SchedulerData& get_data() const { return data; }
+    const SchedulerConfig& get_config() const { return data.get_config(); }
+    const SchedulerStrategy& get_strategy() const { return strategies.at(data.get_config().scheduler); }
+
+    private:
+
+    // === Helper methods ===
+
+    /** Helper that returns true if the current tick matches the process generation interval. */
+    bool interval_has_elapsed() const {
+      uint freq = data.get_config().batch_process_freq;
+      return freq > 0 && (ticks % freq == 0);
+    }
+
+    /** Internal helper that generates a process with optional name. */
+    uint generate_process(Str name=nullopt) { 
+      // Instantiate the process, reserve 0 for main, so start PIDs from 1
+      uint pid = data.generate_pid();
+      str new_name = name.value_or(format("p{:02}", pid));
+      auto proc = Process(move(new_name), pid);
+      
+      // Randomly generate a script with random instructions and load into program
+      auto& config = data.get_config();
+      auto script = interpreter.generate_script(Random::num(config.min_ins, config.max_ins));
+      proc.get_program().load_script(move(script));
+
+      // Add to table first so it's owned and safe to reference
+      data.add_process(move(proc));
+
+      // Now call strategy with the stored instance
+      get_strategy().add(data.get_process(pid).get(), data);
+      return pid;
+    }
+
+    /** Tracks the process as running when it is assigned to a core. */
+    void on_core_assign(any payload) {
+      auto& proc = cast<ProcessRef&>(payload).get();
+      data.get_running().insert(proc.get_id());
+    }
+
+    /** Tracks the process as finished when it is released from a core. */
+    void on_core_release(any payload) {
+      auto& proc = cast<ProcessRef&>(payload).get();
+      data.get_running().erase(proc.get_id());
+      data.get_finished().push_back(proc.get_id());
+    }
+  };
+}
+
+------------------------------
+ FILE:  SchedulerData.hpp
+ PATH:  core\scheduler\SchedulerData.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/EventEmitter.hpp"
+#include "core/process/Process.hpp"
+#include "core/execution/Core.hpp"
+#include "core/execution/CoreManager.hpp"
+#include "types.hpp"
+
+namespace csopesy {
+
+  /**
+   * @brief Encapsulates scheduling context passed to strategy functions.
+   * 
+   * Provides access to the current core list, ready queue, and tick counter.
+   * Also handles state reset and tick progression during simulation.
+   */
+  class SchedulerData {
+    using ProcessCref = Core::ProcessCref;
+    using ProcessCrefs = vector<ProcessCref>;
+    using ProcessRef = Core::ProcessRef;
+    using ProcessPtr = unique_ptr<Process>;
+    using Cores = CoreManager;
+
+    using queue = queue<ProcessRef>;
+    using map = unordered_map<uint, ProcessPtr>;
+    using set = unordered_set<uint>;
+    using list = vector<uint>;
+
+    SchedulerConfig config; ///< Runtime configuration settings
+    map processes;          ///< Container for all processes
+    queue rqueue;           ///< Ready queue of processes waiting to be scheduled
+    Cores cores;            ///< Reference to the list of scheduler cores
+    set running;            ///< PIDs of currently running processes
+    list finished;          ///< PIDs of finished processes 
+    auint next_pid;         ///< Monotonic PID counter for generating unique process IDs
+
+    public:
+
+    /** Constructs a SchedulerData context with the given number of cores. */
+    SchedulerData(uint size=1): cores(size) {}
+
+    /** Sets configuration and resizes cores. */
+    void set_config(SchedulerConfig new_config) {
+      config = move(new_config);
+      cores.resize(config.num_cpu);
+    }
+
+    /** Returns a unique, incrementing process ID. */
+    uint generate_pid() { return next_pid++; }
+
+    /** Adds a process to the process table. */
+    void add_process(Process proc) {
+      processes.emplace(proc.get_id(), make_unique<Process>(move(proc)));
+    }
+
+    /** Check if a process with the given ID exists in the process table. */
+    bool has_process(uint id) const { return processes.contains(id); }
+      
+    /** Check if a process with the given name exists in the process table. */
+    bool has_process(const str& name) const {
+      return any_of(processes, [&](const auto& pair) {
+        return pair.second->get_name() == name;
+      });
+    }
+
+    // === Component Accessors ===
+    
+    /** Returns a reference wrapper to the process with the given PID. */
+    ProcessRef get_process(uint id) { return ref(*processes.at(id)); }
+    ProcessCref get_process(uint id) const { return cref(*processes.at(id)); }
+
+    /** Returns a reference wrapper to the process with the given name. */
+    ProcessRef get_process(const str& name) { return ref(find_process_by_name(name)); }
+    ProcessCref get_process(const str& name) const { return cref(find_process_by_name(name)); }
+    
+    /** Returns the scheduler configuration. */
+    SchedulerConfig& get_config() { return config; }
+    const SchedulerConfig& get_config() const { return config; }
+
+    /** Returns the number of processes in the global table. */
+    uint get_process_count() const { return processes.size(); }
+
+    // === Core Accessors ===
+
+    /** Core Access */ 
+    uint get_core_count() const { return cores.size(); }
+    Cores& get_cores() { return cores; }
+    const Cores& get_cores() const { return cores; }
+
+    /** Queue Access */ 
+    queue& get_rqueue() { return rqueue; }
+    const queue& get_rqueue() const { return rqueue; }
+
+    /** Process Table Access */
+    map& get_processes() { return processes; }
+    const map& get_processes() const { return processes; }
+
+    /** Returns the set of running process IDs. */
+    set& get_running() { return running; }
+    const set& get_running() const { return running; }
+    
+    /** Returns the list of finished process IDs. */
+    list& get_finished() { return finished; }
+    const list& get_finished() const { return finished; }
+
+    /** Returns const references to all currently running processes. */
+    ProcessCrefs get_running_processes() const { return collect_processes(running); }
+
+    /** Returns const references to all finished processes. */
+    ProcessCrefs get_finished_processes() const { return collect_processes(finished); }
+    
+    private:
+
+    // === Helpers ===
+  
+    Process& find_process_by_name(const str& name) {
+      for (auto& [_, proc]: processes)
+        if (proc->get_name() == name) return *proc;
+      throw runtime_error(format("Process with name '{}' not found.", name));
+    }
+
+    const Process& find_process_by_name(const str& name) const {
+      for (const auto& [_, proc]: processes)
+        if (proc->get_name() == name) return *proc;
+      throw runtime_error(format("Process with name '{}' not found.", name));
+    }
+  
+    template <typename Container>
+    ProcessCrefs collect_processes(const Container& pids) const {
+      auto refs = ProcessCrefs();
+      for (auto pid: pids)
+        refs.push_back(cref(*processes.at(pid)));
+      return refs;
+    }
+  };   
+}
+
+------------------------------
+ FILE:  SchedulerStrategy.hpp
+ PATH:  core\scheduler\SchedulerStrategy.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/execution/Core.hpp"
+#include "core/scheduler/SchedulerData.hpp"
+#include "core/process/Process.hpp"
+
+namespace csopesy {
+  
+  /**
+   * Represents a pluggable scheduling strategy (e.g., FCFS, Round Robin).
+   * Delegates scheduling logic to functional components.
+   */
+  class SchedulerStrategy {
+    
+    public:
+    using Job = Core::Job;          ///< A process assigned to a core, or empty if unassigned
+    using AddHandler = function<void(Process&, SchedulerData&)>;
+    using SelectHandler = function<Job(SchedulerData&)>;
+    using PreemptHandler = function<void(SchedulerData&)>;
+    using TickHandler = function<void(SchedulerData&, const SelectHandler&)>;
+    
+    private: 
+    str name;                       ///< Name of the scheduling algorithm
+    AddHandler handle_add;          ///< Called when a process is added
+    SelectHandler handle_next;      ///< Called to select the next process to run 
+    PreemptHandler handle_preempt;  ///< Called to determine which processes should be preempted
+    TickHandler handle_tick;        ///< Called to assign ready jobs to idle cores
+    
+    public:
+  
+    /** Sets the name of the scheduler algorithm. */
+    SchedulerStrategy(str name): name(name) {}
+    SchedulerStrategy() = delete;
+
+    /** Returns the name of the scheduler algorithm. */
+    const str& get_name() const { return name; }
+
+    // === Configuration ===
+
+    /** Sets the handler for when a process is added. */
+    SchedulerStrategy& on_add(AddHandler handler) {
+      return handle_add = move(handler), *this;
+    }
+
+    /** Sets the handler for selecting the next process. */
+    SchedulerStrategy& on_select(SelectHandler handler) {
+      return handle_next = move(handler), *this;
+    }
+
+    /** Sets the handler for preemption logic. */
+    SchedulerStrategy& on_preempt(PreemptHandler handler) {
+      return handle_preempt = move(handler), *this;
+    }
+
+    /** Sets the handler to be called each scheduler::tick. */
+    SchedulerStrategy& on_tick(TickHandler handler) {
+      return handle_tick = move(handler), *this;
+    }
+
+    // === Execution Interface ===
+
+    /** Called by the scheduler when a new process is added. */
+    void add(Process& process, SchedulerData& data) {
+      if (!handle_add) throw runtime_error("SchedulerStrategy::add called without an on_add handler.");
+      handle_add(process, data);
+    }
+
+    /** Called by the scheduler to evaluate and trigger preemptions. */
+    void preempt(SchedulerData& data) {
+      if (!handle_preempt) return;  // Optional handler, no error if missing
+      handle_preempt(data);
+    }
+
+    /** Called by the scheduler to choose the next process to schedule. */
+    Job select(SchedulerData& data) {
+      if (!handle_next) throw runtime_error("SchedulerStrategy::select called without an on_select handler.");
+      return handle_next(data);
+    }
+
+    /** Executes the scheduling logic for the current tick. */
+    void tick(SchedulerData& data) {
+      if (!handle_tick) throw runtime_error("SchedulerStrategy::assign called without an on_assign handler.");
+      handle_tick(data, handle_next);
+    }
+  };
+}
+
+------------------------------
+ FILE:  types.hpp
+ PATH:  core\scheduler\types.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+  struct SchedulerConfig {
+    uint num_cpu = 1;
+    str  scheduler = "fcfs";
+    uint quantum_cycles = 1;
+    uint batch_process_freq = 1;
+    uint min_ins = 1;
+    uint max_ins = 1;
+    uint delays_per_exec = 0;
+    bool initialized = false;
+
+    bool set(const str& key, str value) {
+      if (key == "scheduler")          return scheduler = move(value), true;
+      if (key == "num-cpu")            return num_cpu = stoul(value), true;
+      if (key == "quantum-cycles")     return quantum_cycles = stoul(value), true;
+      if (key == "batch-process-freq") return batch_process_freq = stoul(value), true;
+      if (key == "min-ins")            return min_ins = stoul(value), true;
+      if (key == "max-ins")            return max_ins = stoul(value), true;
+      if (key == "delays-per-exec")    return delays_per_exec = stoul(value), true;
+      return false;
+    }
+  };
+}
+
+------------------------------
+ FILE:  fcfs.hpp
+ PATH:  core\scheduler\strategies\fcfs.hpp
+------------------------------
+
+#include "core/common/imports/_all.hpp"
+#include "core/scheduler/SchedulerData.hpp"
+#include "core/scheduler/SchedulerStrategy.hpp"
+
+namespace csopesy::scheduler {
+
+/**
+ * Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS strategy.
+ *
+ * Characteristics:
+ * - Non-preemptive: process runs to completion once assigned
+ * - Lazy: cores pull from the queue only when idle
+ * - Immediate-arrival: processes are enqueued as soon as they arrive
+ */
+  inline SchedulerStrategy make_fcfs_strategy() {
+    using SelectHandler = SchedulerStrategy::SelectHandler;
+    using Job = SchedulerStrategy::Job;
+
+    // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
+    return SchedulerStrategy("fcfs")
+
+      // When a process is added, push it to the ready queue.
+      .on_add([](Process& process, SchedulerData& data) {
+        auto& rqueue = data.get_rqueue();
+        rqueue.push(ref(process));
+      })
+
+      // Select the next process by popping from the front of the queue.
+      .on_select([](SchedulerData& data) -> Job {
+        auto& rqueue = data.get_rqueue();
+        if (rqueue.empty()) return nullopt;
+
+        auto process = rqueue.front();
+        rqueue.pop();
+        return process;
+      })
+
+      // Each tick: assign next process to any idle core.
+      .on_tick([](SchedulerData& data, const SelectHandler& select) {
+        // For every idle cores
+        for (auto& ref : data.get_cores().get_idle()) {
+          auto& core = ref.get();
+          
+          // Select the next proces from the rqueue
+          auto job = select(data);  
+
+          // If no process is ready, stop assigning
+          if (!job) break;        
+
+          // Assign the selected process to the current idle core
+          core.assign(job.value());
+        }
+    });
+  }
+}
+
+------------------------------
+ FILE:  _all.hpp
+ PATH:  core\scheduler\strategies\_all.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/scheduler/SchedulerStrategy.hpp"
+#include "fcfs.hpp"
+
+namespace csopesy::scheduler {
+  using list = vector<SchedulerStrategy>;
+  
+  list get_all() {
+    return {
+      make_fcfs_strategy(),
+      // make_rr_strategy(),
+    };
+  }
+}
+
+------------------------------
+ FILE:  Shell.hpp
+ PATH:  core\shell\Shell.hpp
+------------------------------
+
+#include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
+#include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
+
+namespace csopesy {
+  
+  /**
+   * @brief Shell constructor with command registration.
+   * 
+   * Defined separately so the Shell class is fully known before
+   * including handlers that use Shell&. This constructor populates
+   * the CommandInterpreter with all available commands.
+   */
+  inline Shell::Shell(EventEmitter& emitter): 
+      Component(emitter), 
+      interpreter(Interpreter::instance()),
+      screen(storage) {
+    
+    // Register all command handlers
+    for (auto handler: command::get_all())
+      interpreter.register_command(move(handler));
+  }
+}
+
+------------------------------
+ FILE:  ShellScreen.hpp
+ PATH:  core\shell\ShellScreen.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/ShellStorage.hpp"
+#include "core/common/constants/banner.hpp"
+
+namespace csopesy {
+
+  class ShellScreen {
+    using Storage = ShellStorage;
+    Storage& storage;
+    
+    public:
+    
+    /** Initializes the screen and defaults to the main screen (ID 0). */
+    ShellScreen(Storage& storage): storage(storage) {
+      storage.set("screen.id", uint(0));
+    }
+
+    /** Switch to a screen by ID. Use "main" or "" for the main screen. */
+    void switch_to(uint id) {
+      storage.set("screen.id", id);
+      if (is_main()) cout << BANNER << '\n';
+    }
+
+    /** Switch to the main screen (empty ID). */
+    void switch_to_main() {
+      switch_to(0);
+    }
+
+    /** Returns the screen ID string. */
+    uint get_id() const {
+      return storage.get<uint>("screen.id");
+    }
+
+    /** Helper: Check if screen matches an exact string (e.g. "p01") */
+    bool is(uint id) const {
+      return get_id() == id;
+    }
+
+    /** True if current screen is the main screen. */
+    bool is_main() const {
+      return get_id() == 0;
+    }
+  };
+}
+
+------------------------------
+ FILE:  ShellStorage.hpp
+ PATH:  core\shell\ShellStorage.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /** A dynamic runtime key-value store for shell commands and internal state. */
+  class ShellStorage {
+    using map = unordered_map<str, any>;
+    
+    map storage;
+
+    public:
+
+    /** Set a value in shell's dynamic storage. */
+    template <typename Type>
+    void set(const str& key, Type value) {
+      storage[key] = move(value);
+    }
+
+    /** Get a reference to a stored value. Throws if key/type is incorrect. */
+    template <typename Type>
+    Type& get(const str& key) {
+      try { 
+        return any_cast<Type&>(storage.at(key)); 
+      } 
+      catch (const out_of_range&) {
+        throw runtime_error(format("ShellStorage: Missing key '{}'", key));
+      } 
+      catch (const bad_any_cast&) {
+        throw runtime_error(format("ShellStorage: Bad type cast for key '{}'", key));
+      }
+    }
+
+    /** Check if a key exists in the storage. */
+    bool has(const str& key) const {
+      return storage.contains(key);
+    }
+
+    /** Remove a key from storage. */
+    void remove(const str& key) {
+      storage.erase(key);
+    }
+  };
+}
+
+------------------------------
+ FILE:  Shell.impl.hpp
+ PATH:  core\shell\internal\Shell.impl.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/Ansi.hpp"
+#include "core/common/constants/banner.hpp"
+#include "core/common/utility/Component.hpp"
+#include "core/common/utility/EventEmitter.hpp"
+#include "core/scheduler/Scheduler.new.hpp"
+#include "core/command/CommandInterpreter.hpp"
+
+// Shell-specific includes
+#include "core/shell/ShellStorage.hpp"
+#include "core/shell/ShellScreen.hpp"
+
+namespace csopesy {
+
+  class Shell: public Component {
+    using Interpreter = CommandInterpreter;
+    using Storage = ShellStorage;
+    using Screen = ShellScreen;
+    
+    // === Core system components ===
+    Interpreter& interpreter;
+    Scheduler scheduler; 
+    
+    // === Shell subcomponents ===
+    Storage storage;  ///< Dynamic storage for shell data
+    Screen screen;
+    
+    // === Control & lifecycle ===
+    Thread thread;
+    abool active = true;
+    
+    public:
+
+    /** See Shell.hpp for implementation. */
+    Shell(EventEmitter& emitter); // 
+
+    /** Starts the shell loop in a separate thread and hooks into global ticks. */
+    void start() override {
+      system("cls");
+      Ansi::enable();
+
+      global.on("tick", [&] { 
+        scheduler.tick(); 
+      });
+
+      thread = Thread([&] {
+        cout << '\n';   // Lets make it a convention that line 1 is empty.
+        while (active) 
+          tick();
+      });
+    }
+
+    /** Stops the shell and joins the thread. Safe to call multiple times. */
+    void stop() override {
+      active = false;
+
+      if (thread.joinable()) 
+        thread.join();
+
+      system("cls");
+    }
+
+    /** Executes a single shell tick (input + command dispatch). */
+    void tick() override {
+      cout << ">>> " << flush;
+
+      if (str input; getline(cin, input)) {
+        interpreter.execute(move(input), *this);
+        cout << '\n';
+
+      } else {
+        cout << "[Shell] Input stream closed.\n";
+        active = false;
+      }
+    }
+
+    /** Signals the shell to stop from within the shell thread. */
+    void request_stop() { active = false; } 
+
+    /** Emits an event using the global EventEmitter. */
+    void emit(str name, any data={}) { global.emit(move(name), move(data)); }
+
+    /** Returns the command interpreter instance. */
+    Interpreter& get_interpreter() { return interpreter; }
+
+    /** Returns the scheduler instance. */
+    Scheduler& get_scheduler() { return scheduler; }
+
+    /** Returns the screen controller. */
+    Screen& get_screen() { return screen; }
+
+    /** Returns the shell storage. */
+    Storage& get_storage() { return storage; }
+  };
+}
