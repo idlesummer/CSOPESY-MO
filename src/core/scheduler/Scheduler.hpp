@@ -84,8 +84,10 @@ namespace csopesy {
 
         // Sanity check: core mismatch
         if (proc.get_core() != static_cast<int>(i)) {
-          proc.log(format("[tick] ERROR: Core mismatch — process p{:02} claims core {}, but is on core {}",
-                          proc.get_pid(), proc.get_core(), i));
+          proc.log(format(
+            "[tick] ERROR: Core mismatch — process p{:02} claims core {}, but is on core {}",
+            proc.get_id(), proc.get_core(), i
+          ));
         }
 
         // Step the process
@@ -136,7 +138,7 @@ namespace csopesy {
       auto name = format("p{:02}", next_process_id);
       auto proc = Process(name, next_process_id++);
      
-      // Randomly generate a script of a random instruction count
+      // Generate random instruction script
       uint size = Random::num(config.min_ins, config.max_ins);
       auto script = interpreter.generate_script(size);
 

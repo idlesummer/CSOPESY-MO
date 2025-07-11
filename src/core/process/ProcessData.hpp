@@ -20,10 +20,10 @@ namespace csopesy {
 
     private:
     str name;               // Human-readable process name (e.g. p01, p02)
-    uint pid;               // Unique process ID
+    uint id;                // Unique process ID
     int core = -1;          // ID of the core this process is assigned to (-1 if unassigned)
     list logs;              // Output logs collected from PRINT instructions
-    Time start_time;        // Timestamp of when the process was created
+    Time stime;             // Timestamp of when the process was created
     ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
     ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
     ProcessProgram program; // List of instructions and execution context
@@ -31,8 +31,8 @@ namespace csopesy {
     public:
 
     /** Constructs a process with a given name and process ID. */
-    ProcessData(str name, uint pid): 
-      name(move(name)), pid(pid), start_time(Clock::now()) {}
+    ProcessData(str name, uint id): 
+      name(move(name)), id(id), stime(Clock::now()) {}
 
     /** Append a log message (used for PRINT instructions) */
     void log(str line) { logs.push_back(move(line)); }
@@ -43,9 +43,9 @@ namespace csopesy {
 
     // === Getters ===
     const str& get_name() const { return name; }
-    const uint get_pid() const { return pid; }
+    const uint get_id() const { return id; }
     const int get_core() const { return core; }
-    const Time& get_start_time() const { return start_time; }
+    const Time& get_stime() const { return stime; }
     const list& get_logs() const { return logs; }
 
     // === Accessors for sub-components ===

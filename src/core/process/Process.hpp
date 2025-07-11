@@ -27,9 +27,9 @@ namespace csopesy {
 
     // Accessors for ProcessData components
     const str& get_name() const { return data.get_name(); }
-    const uint get_pid() const { return data.get_pid(); }
+    const uint get_id() const { return data.get_id(); }
     const int  get_core() const { return data.get_core(); }
-    const Time& get_start_time() const { return data.get_start_time(); }
+    const Time& get_stime() const { return data.get_stime(); }
     const list& get_logs() const { return data.get_logs(); }
 
     // Accessors for ProcessData sub-components

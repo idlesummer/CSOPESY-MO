@@ -17,16 +17,16 @@ namespace csopesy::command {
           return "Not in the Main Menu.";
         
         // Check if the scheduler is initialized
-        if (!shell.get_scheduler().get_config().initialized)
+        if (!shell.get_scheduler().is_initialized())
           return "Scheduler not initialized. Please run 'initialize' first.";
 
         return nullopt; // No validation errors
       },
 
       .execute = [](const Command &command, Shell &shell) {
-        auto& scheduler = shell.get_scheduler();
-        const auto& running = scheduler.get_running_processes();
-        const auto& finished = scheduler.get_finished_processes();
+        const auto& data = shell.get_scheduler().get_data();
+        const auto& running = data.get_running_processes();
+        const auto& finished = data.get_finished_processes();
 
         auto log = ofstream("csopesylog.txt");
         auto separator = "---------------------------------------------\n";
@@ -37,12 +37,12 @@ namespace csopesy::command {
         cout << "Running processes:\n";
         log << "Running processes:\n";
 
-        for (const auto& proc_ref : running) {
-          const auto& proc = proc_ref.get();
+        for (const auto& ref: running) {
+          const auto& proc = ref.get();
           auto line = format(
             "  {:<10} ({})  Core: {:<2}  {} / {}\n",
             proc.get_name(),
-            timestamp(proc.get_start_time()),
+            timestamp(proc.get_stime()),
             proc.get_core(),
             proc.get_program().get_ip(),
             proc.get_program().size()
@@ -54,12 +54,12 @@ namespace csopesy::command {
         cout << "\nFinished processes:\n";
         log << "\nFinished processes:\n";
 
-        for (const auto& proc_ref : finished) {
-          const auto& proc = proc_ref.get();
+        for (const auto& ref: finished) {
+          const auto& proc = ref.get();
           auto line = format(
             "  {:<10} ({})  Finished      {} / {}\n",
             proc.get_name(),
-            timestamp(proc.get_start_time()),
+            timestamp(proc.get_stime()),
             proc.get_program().size(),
             proc.get_program().size()
           );

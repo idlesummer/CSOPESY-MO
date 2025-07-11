@@ -25,7 +25,7 @@ namespace csopesy::command {
       },
 
       .execute = [](const Command&, Shell& shell) {
-        shell.get_scheduler().start_generation();
+        shell.get_scheduler().generate(true);
         cout << "[Shell] Dummy process generation started.\n";
       },
     };

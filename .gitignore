@@ -12,3 +12,6 @@ cmake_install.cmake
 
 # === Test folders ===
 test/
+
+# temp
+docs/

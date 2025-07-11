@@ -4,7 +4,7 @@
 #include "core/common/constants/banner.hpp"
 #include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
-#include "core/scheduler/Scheduler.hpp"
+#include "core/scheduler/Scheduler.new.hpp"
 #include "core/command/CommandInterpreter.hpp"
 
 // Shell-specific includes
@@ -76,33 +76,21 @@ namespace csopesy {
     }
 
     /** Signals the shell to stop from within the shell thread. */
-    void request_stop() {
-      active = false;  // safe from inside the shell thread
-    } 
+    void request_stop() { active = false; } 
 
     /** Emits an event using the global EventEmitter. */
-    void emit(str name, any data={}) {
-      global.emit(move(name), move(data));
-    }
+    void emit(str name, any data={}) { global.emit(move(name), move(data)); }
 
     /** Returns the command interpreter instance. */
-    Interpreter& get_interpreter() {
-      return interpreter;
-    }
+    Interpreter& get_interpreter() { return interpreter; }
 
     /** Returns the scheduler instance. */
-    Scheduler& get_scheduler() {
-      return scheduler;
-    }
+    Scheduler& get_scheduler() { return scheduler; }
 
     /** Returns the screen controller. */
-    Screen& get_screen() {
-      return screen;
-    }
+    Screen& get_screen() { return screen; }
 
     /** Returns the shell storage. */
-    Storage& get_storage() {
-      return storage;
-    }
+    Storage& get_storage() { return storage; }
   };
 }

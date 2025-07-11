@@ -9,38 +9,36 @@ namespace csopesy {
     Storage& storage;
     
     public:
-
+    
+    /** Initializes the screen and defaults to the main screen (ID 0). */
     ShellScreen(Storage& storage): storage(storage) {
-      storage.set("screen.id", str());
+      storage.set("screen.id", uint(0));
     }
 
     /** Switch to a screen by ID. Use "main" or "" for the main screen. */
-    void switch_to(const str& id) {
+    void switch_to(uint id) {
       storage.set("screen.id", id);
-      // system("cls"); 
-
-      if (is_main())
-        cout << BANNER << '\n';
+      if (is_main()) cout << BANNER << '\n';
     }
 
     /** Switch to the main screen (empty ID). */
     void switch_to_main() {
-      switch_to("");
+      switch_to(0);
     }
 
     /** Returns the screen ID string. */
-    str get_id() const {
-      return storage.get<str>("screen.id");
+    uint get_id() const {
+      return storage.get<uint>("screen.id");
     }
 
     /** Helper: Check if screen matches an exact string (e.g. "p01") */
-    bool is(const str& id) const {
+    bool is(uint id) const {
       return get_id() == id;
     }
 
     /** True if current screen is the main screen. */
     bool is_main() const {
-      return get_id().empty();
+      return get_id() == 0;
     }
   };
 }
