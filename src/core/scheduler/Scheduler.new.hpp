@@ -45,8 +45,10 @@ namespace csopesy {
     void tick() {
 
       // 1. Generate any explicitly enqueued processes
-      for (auto& name: proc_queue)
-        generate_process(move(name));
+      for (auto& name : proc_queue) {
+        if (generate_process(move(name)) == MAX)
+          cout << "[Scheduler] Skipped due to memory limit\n";
+      }
       proc_queue.clear();
       
       // 2. Possibly auto-generate processes this tick
@@ -95,6 +97,8 @@ namespace csopesy {
       if (quantum > 0 && ticks % quantum == 0) {
         dump_memory_snapshot(data, quantum_counter++);
       }
+
+
 
     }
 
@@ -145,7 +149,7 @@ namespace csopesy {
       uint pid = data.generate_pid();
 
       if (!data.get_memory().allocate(pid)) {
-        return -1;
+        return MAX;
       }
 
       str new_name = name.value_or(format("p{:02}", pid));
@@ -189,7 +193,7 @@ namespace csopesy {
       out << "Number of processes in memory: " << mem.count_active() << "\n";
       out << "Total external fragmentation in KB: " << mem.external_fragmentation() / 1024 << "\n";
 
-      out << "---end--- = " << 16384 << "\n";
+      out << "---end--- = " << 16384 << "\n" << "\n";
 
       // Print process blocks top-down
       for (auto it = blocks.rbegin(); it != blocks.rend(); ++it) {
@@ -197,52 +201,57 @@ namespace csopesy {
         if (b.pid != -1) {
           out << b.start + b.size << "\n";
           out << "P" << b.pid << "\n";
-          out << b.start << "\n";
+          out << b.start << "\n" <<"\n";
         }
       }
 
       out << "---start--- = 0\n";
     }
 
-    // void dump_memory_snapshot(const SchedulerData& data, uint snapshot_index) {
-    //   const auto& memory = data.get_memory();                // MemoryManager instance
-    //   const auto& blocks = memory.get_blocks();              // vector<Block>
+    // void dump_memory_snapshot(const csopesy::SchedulerData& data, uint quantum_count) {
+    //   using namespace std;
+    //   using namespace csopesy;
 
-    //   // Create the file
-    //   std::ofstream out(format("memory_stamp_{}.txt", snapshot_index));
+    //   const auto& mem = data.get_memory();
+    //   const auto& blocks = mem.get_blocks();
 
-    //   // Add timestamp
-    //   auto now = std::chrono::system_clock::now();
-    //   std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    //   out << "Timestamp: " << std::put_time(std::localtime(&now_time), "%m/%d/%Y %I:%M:%S %p") << "\n";
+    //   // Get current timestamp
+    //   auto now = chrono::system_clock::now();
+    //   auto time = chrono::system_clock::to_time_t(now);
+    //   stringstream timestamp;
+    //   timestamp << put_time(localtime(&time), "%m/%d/%Y %I:%M:%S %p");
 
-    //   // Count active processes
-    //   out << "Number of processes in memory: " << memory.count_active() << "\n";
+    //   // Start file output
+    //   string filename = format("memory_stamp_{}.txt", quantum_count);
+    //   ofstream out(filename);
+    //   if (!out) {
+    //     cerr << "[error] Could not write to " << filename << "\n";
+    //     return;
+    //   }
 
-    //   // Fragmentation in KB
-    //   out << "Total external fragmentation in KB: " << (memory.external_fragmentation() / 1024) << "\n";
-
-    //   // Start layout
+    //   out << "Timestamp: " << timestamp.str() << "\n";
+    //   out << "Number of processes in memory: " << mem.count_active() << "\n";
+    //   out << "Total external fragmentation in KB: " << mem.external_fragmentation() / 1024 << "\n";
     //   out << "---end--- = 16384\n";
 
-    //   // Walk blocks from high address to low (sort by start descending)
-    //   std::vector<csopesy::Block> reversed = blocks;
-    //   std::sort(reversed.begin(), reversed.end(), [](const auto& a, const auto& b) {
-    //     return a.start > b.start;
-    //   });
+    //   // Print blocks from high to low (reverse order)
+    //   for (auto it = blocks.rbegin(); it != blocks.rend(); ++it) {
+    //     const auto& b = *it;
+    //     const auto label = (b.pid == -1 ? "" : format("P{}", b.pid));
+    //     const uint32_t start = b.start;
+    //     const uint32_t end = b.start + b.size;
 
-    //   for (const auto& block : reversed) {
-    //     uint32_t upper = block.start + block.size;
-    //     uint32_t lower = block.start;
-
-    //     out << upper << "\n";
-    //     if (block.pid != -1)
-    //       out << "P" << block.pid << "\n";
-    //     out << lower << "\n";
+    //     // Print each 16-byte frame inside the block
+    //     for (uint32_t addr = end; addr > start; addr -= 16) {
+    //       out << addr << "\n";
+    //       if (!label.empty()) out << label << "\n";
+    //     }
     //   }
 
     //   out << "---start--- = 0\n";
     // }
+
+
 
 
   };

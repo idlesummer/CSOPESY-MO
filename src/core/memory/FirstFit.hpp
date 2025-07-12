@@ -19,6 +19,7 @@ namespace csopesy {
     }
 
     bool allocate(int pid) {
+
       for (size_t i = 0; i < blocks.size(); ++i) {
         auto& b = blocks[i];
         if (b.pid == -1 && b.size >= proc_size) {
