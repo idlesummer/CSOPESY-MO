@@ -23,8 +23,8 @@ namespace csopesy {
       if (data.state.finished() || data.program.finished())
         return data.state.finish(), true;
 
-      const auto ip = data.program.ip;
-      const auto& inst = data.program.script.at(ip);
+      auto ip = data.program.ip;
+      auto& inst = data.program.script.at(ip);
 
       interpreter.execute(inst, data);
 
@@ -36,10 +36,10 @@ namespace csopesy {
 
     /** @brief Creates a process with a random instruction script (to be implemented). */
     static Process create(uint pid, str name, uint size) {
-      auto proc = Process(pid, move(name));
+      auto process = Process(pid, move(name));
       auto script = interpreter.generate_script(size);
-      proc.data.program.load_script(script);
-      return move(proc);
+      process.data.program.load_script(script);
+      return move(process);
     }
   };
 }
