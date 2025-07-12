@@ -3,6 +3,7 @@
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "core/process/Process.hpp"
 #include "core/execution/Core.hpp"
+#include "core/memory/MemoryManager.hpp"
 #include "strategies/_all.hpp"
 #include "SchedulerStrategy.hpp"
 #include "SchedulerData.hpp"
