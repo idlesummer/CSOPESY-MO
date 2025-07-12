@@ -7,61 +7,53 @@
 
 namespace csopesy::command {
   inline const CommandHandler make_process_smi() {
-    using ProcessRef = Core::ProcessRef;
-
     return {
       .name = "process-smi",
       .desc = "Shows the current process status, logs, and info.",
       .min_args = 0,
       .max_args = 0,
       .flags = {},
-      
+
       .validate = [](const Command& command, Shell& shell) -> Str {
         return access([&]() -> Str {
           if (shell.get_screen().is_main())
             return "Not in a process screen.";
-  
+
           uint pid = shell.get_screen().get_id();
           const auto& scheduler = shell.get_scheduler();
           const auto& data = scheduler.get_data();
-  
+
           if (!data.has_process(pid))
             return format("Active process with ID \"{}\" not found.", pid);
-  
-          auto process = data.get_process(pid); // Returns a process ref
-          auto& storage = shell.get_storage();
-          storage.set("process-smi.cache", process);
+
+          shell.get_storage().set("process-smi.pid", pid);  // ✅ Store PID instead of ref
           return nullopt;
         });
       },
-      
+
       .execute = [](const Command& command, Shell& shell) {
         access([&] {
+          const auto& scheduler = shell.get_scheduler();
+          const auto& data = scheduler.get_data();
           auto& storage = shell.get_storage();
-          auto& ref = storage.get<ProcessRef>("process-smi.cache");
-  
-          const auto& process = ref.get();;
-          const auto& logs = process.get_logs();
-          const auto& program = process.get_program();
-  
-          cout << "Process name: " << process.get_name() << '\n';
-          cout << "ID: " << process.get_id() << '\n';
-  
+
+          uint pid = storage.get<uint>("process-smi.pid"); // ✅ Retrieve PID
+          const auto& proc = data.get_process(pid).get();  // ✅ Access by PID
+
+          const auto& logs = proc.get_logs();
+          const auto& program = proc.get_program();
+
+          cout << "Process name: " << proc.get_name() << '\n';
+          cout << "ID: " << proc.get_id() << '\n';
+
           cout << "Logs:\n";
           for (const auto& log: logs)
             cout << log << '\n';
-  
-          // if (process.is_finished()) {
-          //   cout << "Finished!\n\n";
-          // 
-          // } else {
-          //   cout << "Current instruction line: " << program.get_ip() << '\n';
-          //   cout << "Lines of code: " << program.size() << "\n\n";
-          // }
-  
+
           cout << "Current instruction line: " << program.get_ip() << '\n';
           cout << "Lines of code: " << program.size() << "\n\n";
-          storage.remove("process-smi.cache");
+
+          shell.get_storage().remove("process-smi.pid");
         });
       },
     };

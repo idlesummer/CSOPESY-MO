@@ -57,5 +57,17 @@ namespace csopesy {
       }
       return idle;
     }
+
+    /** Returns a list of references to all busy (non-idle) cores. */
+    CoreRefs get_busy() {
+      auto busy = CoreRefs();
+      busy.reserve(cores.size());
+
+      for (auto& ptr: cores) {
+        if (!ptr->is_idle())
+          busy.push_back(ref(*ptr));
+      }
+      return busy;
+    }
   };
 }

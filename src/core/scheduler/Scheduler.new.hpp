@@ -19,58 +19,90 @@ namespace csopesy {
   class Scheduler {
     using Interpreter = InstructionInterpreter;
     using ProcessRef = Core::ProcessRef;
-    using map = unordered_map<str, SchedulerStrategy>;
-    using list = vector<str>;
+    using queue = vector<str>;
+    using list = vector<uint>;
 
     // === State ===
-    uint ticks = 0;           ///< Global tick counter
-    bool generating = false;  ///< Flag indicating auto-generation mode
-    list proc_queue;          ///< Deferred generation queue
+    uint ticks = 0;             ///< Global tick counter
+    bool generating = false;    ///< Flag indicating auto-generation mode
+    queue proc_queue;           ///< Deferred generation queue
     
     // === Components ===
-    Interpreter& interpreter; ///< Shared instruction generator instance
-    SchedulerData data;       ///< Internal state (cores, processes, queue)
-    map strategies;           ///< Map containing scheduler strategies
+    Interpreter& interpreter;   ///< Shared instruction generator instance
+    SchedulerData data;         ///< Internal state (cores, processes, queue)
+    SchedulerStrategy strategy; ///< Contains the scheduler strategy
 
     public:
 
     /** Registers all available scheduling strategies. */
-    Scheduler(): interpreter(Interpreter::instance()) {
-      for (auto& strat: scheduler::get_all())
-        strategies.emplace(strat.get_name(), move(strat));
-    }
+    Scheduler(): 
+      interpreter(Interpreter::instance()), 
+      strategy(scheduler::make_strategy("fcfs", SchedulerConfig())){}
 
     /** Executes the active strategy logic and increments the tick count. */
     void tick() {
 
-      // Handle any queued process generations
+      // 1. Generate any explicitly enqueued processes
       for (auto& name: proc_queue)
         generate_process(move(name));
       proc_queue.clear();
       
-      // Generate process every `batch_process_freq` ticks
+      // 2. Possibly auto-generate processes this tick
       if (generating && interval_has_elapsed())
         generate_process();
 
-      // get_strategy().preempt(data);
-      get_strategy().tick(data);
+      // 3. Update running/finished state and handle preemption
+      auto& running = data.get_running();
+      auto& finished = data.get_finished();
+      running.clear();
+
+      for (auto& ref : data.get_cores().get_all()) {
+        auto& core = ref.get();
+        bool idle = core.is_idle();
+
+        if (!idle)
+          running.insert(core.get_job().get_id());
+
+        if (!idle && core.wants_release()) {
+          auto& proc = core.get_job();
+          core.release();
+
+          if (proc.get_state().is_finished())
+            finished.push_back(proc.get_id());
+          else
+            data.get_rqueue().push(proc.get_id());
+        }
+      }
+
+      // // Debug: Show current running and finished sets
+      // cout << format("[Tick {}] Running PIDs: ", ticks);
+      // for (auto pid : running) cout << pid << " ";
+      // cout << "\n";
+
+      // cout << format("[Tick {}] Finished PIDs: ", ticks);
+      // for (auto pid : finished) cout << pid << " ";
+      // cout << "\n";
+
+      // 4. Schedule ready processes to idle cores
+      strategy.tick(data);
       ++ticks;
     }
 
     /** Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      if (!strategies.contains(config.scheduler))
-        throw runtime_error(format("Unknown scheduler strategy: {}", config.scheduler));
+      // 1. Store config inside SchedulerData
+      data.set_config(config);
 
-      data.set_config(move(config));
+      // 2. Build and install the selected strategy
+      strategy = scheduler::make_strategy(config.scheduler, config);
 
-      // Hook up core event listeners for running/finished tracking
-      for (auto& ref: data.get_cores().get_all()) {
-        auto& core = ref.get();
-        core.on("assign", [this](any payload) { on_core_assign(payload); });
-        core.on("release", [this](any payload) { on_core_release(payload); });
+      // 3. Inject per-core preemption policy from strategy
+      if (strategy.get_preemption_policy()) {
+        for (auto& ref : data.get_cores().get_all()) {
+          ref.get().set_preemption_policy(strategy.get_preemption_policy());
+        }
       }
-    }    
+    }
 
     // === Generation Control ===
     void enqueue_process(str name) { proc_queue.push_back(move(name)); }
@@ -84,10 +116,8 @@ namespace csopesy {
     // === Component Accessors ===
     SchedulerData& get_data() { return data; }
     SchedulerConfig& get_config() { return data.get_config(); }
-    SchedulerStrategy& get_strategy() { return strategies.at(data.get_config().scheduler); }
     const SchedulerData& get_data() const { return data; }
     const SchedulerConfig& get_config() const { return data.get_config(); }
-    const SchedulerStrategy& get_strategy() const { return strategies.at(data.get_config().scheduler); }
 
     private:
 
@@ -114,22 +144,9 @@ namespace csopesy {
       // Add to table first so it's owned and safe to reference
       data.add_process(move(proc));
 
-      // Now call strategy with the stored instance
-      get_strategy().add(data.get_process(pid).get(), data);
+      // Enqueue by PID
+      data.get_rqueue().push(pid);
       return pid;
-    }
-
-    /** Tracks the process as running when it is assigned to a core. */
-    void on_core_assign(any payload) {
-      auto& proc = cast<ProcessRef&>(payload).get();
-      data.get_running().insert(proc.get_id());
-    }
-
-    /** Tracks the process as finished when it is released from a core. */
-    void on_core_release(any payload) {
-      auto& proc = cast<ProcessRef&>(payload).get();
-      data.get_running().erase(proc.get_id());
-      data.get_finished().push_back(proc.get_id());
     }
   };
 }

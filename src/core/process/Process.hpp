@@ -41,5 +41,12 @@ namespace csopesy {
     const ProcessState& get_state() const { return data.get_state(); }
     const ProcessMemory& get_memory() const { return data.get_memory(); }
     const ProcessProgram& get_program() const { return data.get_program(); }
+
+    /** Creates a random process with the given name. */
+    static Process create(str name, uint pid, Instruction::Script script) {
+      Process proc(std::move(name), pid);
+      proc.get_program().load_script(move(script));
+      return proc;
+    }
   };
 }

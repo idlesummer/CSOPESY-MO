@@ -21,7 +21,7 @@ namespace csopesy {
     using ProcessPtr = unique_ptr<Process>;
     using Cores = CoreManager;
 
-    using queue = queue<ProcessRef>;
+    using queue = queue<uint>;
     using map = unordered_map<uint, ProcessPtr>;
     using set = unordered_set<uint>;
     using list = vector<uint>;
@@ -102,12 +102,6 @@ namespace csopesy {
     /** Returns the list of finished process IDs. */
     list& get_finished() { return finished; }
     const list& get_finished() const { return finished; }
-
-    /** Returns const references to all currently running processes. */
-    ProcessCrefs get_running_processes() const { return collect_processes(running); }
-
-    /** Returns const references to all finished processes. */
-    ProcessCrefs get_finished_processes() const { return collect_processes(finished); }
     
     private:
 
@@ -123,14 +117,6 @@ namespace csopesy {
       for (const auto& [_, proc]: processes)
         if (proc->get_name() == name) return *proc;
       throw runtime_error(format("Process with name '{}' not found.", name));
-    }
-  
-    template <typename Container>
-    ProcessCrefs collect_processes(const Container& pids) const {
-      auto refs = ProcessCrefs();
-      for (auto pid: pids)
-        refs.push_back(cref(*processes.at(pid)));
-      return refs;
     }
   };   
 }

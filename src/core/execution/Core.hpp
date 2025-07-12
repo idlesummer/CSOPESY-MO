@@ -1,5 +1,4 @@
 #pragma once
-#include "core/common/utility/EventEmitter.hpp"
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
 
@@ -14,23 +13,23 @@ namespace csopesy {
     using ProcessRef = ref<Process>;
     using ProcessCref = ref<const Process>;
     using Job = optional<ProcessRef>;
-    using func = EventHandler::func;
-    
+    using PreemptionPolicy = function<bool(const Core&)>;
+
     private:   
     static constexpr auto tick_delay = 1ms;
     
     uint id;                  ///< Core ID
-    uint ticks;               ///< Ticks since the current job was assigned
-    Job job;                  ///< Current assigned process (if any)
+    uint ticks = 0;           ///< Ticks since the current job was assigned
+    Job job;                  ///< Currently assigned process (if any)
     Thread thread;            ///< Background ticking thread
-    abool running = false;    ///< Atomic flag to keep the tick loop alive
-    abool preempting = false; ///< Flag set to forcefully release the process
-    EventEmitter emitter;     ///< Used for event hooks
+    abool running = false;    ///< Atomic flag for tick loop
+    PreemptionPolicy preempt_policy; ///< Optional strategy-injected logic
+    bool should_release = false;     ///< Flag to indicate pending release
 
     public:
 
     /** Constructs a scheduler core with the given ID and starts the thread. */
-    Core(uint id=0): id(id) { start(); }
+    Core(uint id = 0) : id(id) { start(); }
 
     /** Destructor stops the tick thread cleanly. */
     ~Core() { stop(); }
@@ -40,35 +39,44 @@ namespace csopesy {
       job = move(ref);
       job->get().set_core(id);
       ticks = 0;
-      
-      emitter.emit("assign", any(job.value()));
-      emitter.dispatch();
+      should_release = false;
     }
 
-    /** Returns the currently assigned job, or throws if none exists. */
+    /** Returns the currently assigned job. */
     Process& get_job() {
       if (job) return job->get();
-      throw runtime_error("Core::get_job: No job is currently assigned to this core");
+      throw runtime_error("Core::get_job: No job is currently assigned");
     }
 
-    /** Flags this core to preempt its current job. */
-    void preempt() { preempting = true; }
-
-    /** Returns the ID of the processor. */
+    /** Returns the core ID. */
     uint get_id() const { return id; }
 
-    /** Returns true if the processor is currently idle (no job assigned). */
+    /** True if idle. */
     bool is_idle() const { return !job.has_value(); }
 
-    /** Returns the number of ticks the current job has run. */
-    uint time_on_job() const { return ticks; }
+    /** True if this core wants to release the current job. */
+    bool wants_release() const { return should_release; }
 
-    /** Registers an event listener for this core (e.g., "assign", "release"). */
-    void on(const str& name, func handler) { emitter.on(name, handler); }
+    /** Returns ticks since this job started. */
+    uint ticks_on_job() const { return ticks; }
+
+    /** Injects a preemption policy (optional). */
+    void set_preemption_policy(PreemptionPolicy policy) {
+      preempt_policy = policy;
+    }
+
+    /** Releases the current job (must be called manually by scheduler). */
+    void release() {
+      if (!job) return;
+      job->get().reset_core();
+      job.reset();
+      ticks = 0;
+      should_release = false;
+    }
 
     private:
 
-    /** Launches a background thread that ticks in a loop. */
+    /** Starts background thread. */
     void start() {
       running = true;
       thread = Thread([this] {
@@ -78,43 +86,27 @@ namespace csopesy {
         }
       });
     }
-  
-    /** Stops the tick loop and joins the thread. */
+
+    /** Stops thread cleanly. */
     void stop() {
       running = false;
       if (thread.joinable()) 
         thread.join();
     }
 
-    /** Executes one instruction for the current job, and releases if done. */
+    /** Simulates one CPU tick. */
     void tick() {
       if (!job) return;
- 
-      // Preemption has priority over stepping
-      if (preempting)         
-        return release(); 
 
       auto& process = job->get();
       process.step();
       ++ticks;
-      
-      // Finish after this tick
-      auto& state = process.get_state();
-      if (state.is_finished())  
-        release();
-    }
 
-    // === Helpers ===
+      if (process.get_state().is_finished())
+        should_release = true;
 
-    /** Helper to release the current job and clears its core assignment. */
-    void release() {
-      emitter.emit("release", any(job.value()));
-      emitter.dispatch();
-      
-      preempting = false;
-      job->get().reset_core();
-      job.reset();
-      ticks = 0;
+      if (preempt_policy && preempt_policy(*this))
+        should_release = true;
     }
   };
 }
