@@ -5,6 +5,7 @@
 #include "core/execution/Core.hpp"
 #include "core/execution/CoreManager.hpp"
 #include "types.hpp"
+#include "core/memory/MemoryManager.hpp"
 
 namespace csopesy {
 
@@ -102,8 +103,14 @@ namespace csopesy {
     /** Returns the list of finished process IDs. */
     list& get_finished() { return finished; }
     const list& get_finished() const { return finished; }
+
+    /** Returns a reference to the memory manager instance. */
+    MemoryManager& get_memory() { return memory; }
+    const MemoryManager& get_memory() const { return memory; }
     
     private:
+
+    MemoryManager memory;
 
     // === Helpers ===
   

@@ -67,8 +67,10 @@ namespace csopesy {
           auto& proc = core.get_job();
           core.release();
 
-          if (proc.get_state().is_finished())
+          if (proc.get_state().is_finished()) {
+            data.get_memory().release(proc.get_id()); // ✅ Release memory
             finished.push_back(proc.get_id());
+          }
           else
             data.get_rqueue().push(proc.get_id());
         }
@@ -86,6 +88,10 @@ namespace csopesy {
       // 4. Schedule ready processes to idle cores
       strategy.tick(data);
       ++ticks;
+
+      if (ticks % get_config().quantum_cycles == 0) {
+        data.get_memory().dump_snapshot(ticks / get_config().quantum_cycles);
+      }
     }
 
     /** Applies a new configuration and resizes core state accordingly. */

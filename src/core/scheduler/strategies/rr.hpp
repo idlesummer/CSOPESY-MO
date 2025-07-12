@@ -31,6 +31,7 @@ namespace csopesy::scheduler {
         // cout << endl;
 
         auto& rqueue = data.get_rqueue();
+        auto& memory = data.get_memory();
 
         for (auto& ref: data.get_cores().get_idle()) {
           auto& core = ref.get();
@@ -40,7 +41,15 @@ namespace csopesy::scheduler {
           uint pid = rqueue.front(); 
           rqueue.pop();
 
-          core.assign(data.get_process(pid));
+          auto& proc = data.get_process(pid);
+
+          // allocate memory before assigning
+          if (!memory.allocate(proc.get_id())) { 
+            rqueue.push(pid); // memory full - retry later
+            continue;
+          }
+
+          core.assign(ref(proc)); // assign only if memory is allocated
         }
       })
       

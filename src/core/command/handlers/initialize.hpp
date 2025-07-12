@@ -23,9 +23,9 @@ namespace csopesy::command {
             return "Already initialized.";
           
           // Check if the file could not be opened or is empty
-          auto lines = read_lines("config.txt");
+          auto lines = read_lines("config2.txt");
           if (lines.empty())
-            return "Failed to open config.txt";
+            return "Failed to open config2.txt";
   
           auto& storage = shell.get_storage();
           storage.set("initialize.cache", move(lines));
