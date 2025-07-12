@@ -771,7 +771,9 @@ namespace csopesy::command {
 
             for (uint pid : running) {
               const auto& proc = data.get_process(pid).get();
-              if (proc.get_core() == -1) continue;
+
+              // ðŸ› Debugging core state
+              cout << format("[DEBUG] Running PID {} is on core {}\n", pid, proc.get_core());
 
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
@@ -782,6 +784,7 @@ namespace csopesy::command {
                 proc.get_program().size()
               );
             }
+
 
             cout << "\nFinished processes:\n";
             for (uint pid : finished) {
@@ -1848,7 +1851,6 @@ namespace csopesy {
 ------------------------------
 
 #pragma once
-#include "core/common/utility/EventEmitter.hpp"
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
 
@@ -1863,24 +1865,23 @@ namespace csopesy {
     using ProcessRef = ref<Process>;
     using ProcessCref = ref<const Process>;
     using Job = optional<ProcessRef>;
-    using func = EventHandler::func;
     using PreemptionPolicy = function<bool(const Core&)>;
 
     private:   
     static constexpr auto tick_delay = 1ms;
     
     uint id;                  ///< Core ID
-    uint ticks;               ///< Ticks since the current job was assigned
-    Job job;                  ///< Current assigned process (if any)
+    uint ticks = 0;           ///< Ticks since the current job was assigned
+    Job job;                  ///< Currently assigned process (if any)
     Thread thread;            ///< Background ticking thread
-    abool running = false;    ///< Atomic flag to keep the tick loop alive
-    EventEmitter emitter;     ///< Used for event hooks
-    PreemptionPolicy preempt_policy; ///< Strategy-injected preemption logic
+    abool running = false;    ///< Atomic flag for tick loop
+    PreemptionPolicy preempt_policy; ///< Optional strategy-injected logic
+    bool should_release = false;     ///< Flag to indicate pending release
 
     public:
 
     /** Constructs a scheduler core with the given ID and starts the thread. */
-    Core(uint id=0): id(id) { start(); }
+    Core(uint id = 0) : id(id) { start(); }
 
     /** Destructor stops the tick thread cleanly. */
     ~Core() { stop(); }
@@ -1890,37 +1891,44 @@ namespace csopesy {
       job = move(ref);
       job->get().set_core(id);
       ticks = 0;
-
-      emitter.emit("assign", any(job.value()));
-      emitter.dispatch();
+      should_release = false;
     }
 
-    /** Returns the currently assigned job, or throws if none exists. */
+    /** Returns the currently assigned job. */
     Process& get_job() {
       if (job) return job->get();
-      throw runtime_error("Core::get_job: No job is currently assigned to this core");
+      throw runtime_error("Core::get_job: No job is currently assigned");
     }
 
-    /** Returns the ID of the processor. */
+    /** Returns the core ID. */
     uint get_id() const { return id; }
 
-    /** Returns true if the processor is currently idle (no job assigned). */
+    /** True if idle. */
     bool is_idle() const { return !job.has_value(); }
 
-    /** Returns the number of ticks the current job has run. */
-    uint ticks_on_job() const { return ticks; }
+    /** True if this core wants to release the current job. */
+    bool wants_release() const { return should_release; }
 
-    /** Registers an event listener for this core (e.g., "assign", "release"). */
-    void on(const str& name, func handler) { emitter.on(name, handler); }
+    /** Returns ticks since this job started. */
+    uint ticks_on_job() const { return ticks; }
 
     /** Injects a preemption policy (optional). */
     void set_preemption_policy(PreemptionPolicy policy) {
       preempt_policy = policy;
     }
 
+    /** Releases the current job (must be called manually by scheduler). */
+    void release() {
+      if (!job) return;
+      job->get().reset_core();
+      job.reset();
+      ticks = 0;
+      should_release = false;
+    }
+
     private:
 
-    /** Launches a background thread that ticks in a loop. */
+    /** Starts background thread. */
     void start() {
       running = true;
       thread = Thread([this] {
@@ -1930,15 +1938,15 @@ namespace csopesy {
         }
       });
     }
-  
-    /** Stops the tick loop and joins the thread. */
+
+    /** Stops thread cleanly. */
     void stop() {
       running = false;
       if (thread.joinable()) 
         thread.join();
     }
 
-    /** Executes one instruction for the current job, and releases if done. */
+    /** Simulates one CPU tick. */
     void tick() {
       if (!job) return;
 
@@ -1946,28 +1954,11 @@ namespace csopesy {
       process.step();
       ++ticks;
 
-      // Finish after this tick
-      if (process.get_state().is_finished())  
-        release();
+      if (process.get_state().is_finished())
+        should_release = true;
 
-            // Evaluate preemption after tick
-      if (job && preempt_policy && preempt_policy(*this))
-        release();  // Forced release
-      
-    }
-
-    // === Helpers ===
-
-    /** Helper to release the current job and clear its core assignment. */
-    void release() {
-      if (!job) return;
-
-      emitter.emit("release", any(job.value()));
-      emitter.dispatch();
-
-      job->get().reset_core();
-      job.reset();
-      ticks = 0;
+      if (preempt_policy && preempt_policy(*this))
+        should_release = true;
     }
   };
 }
@@ -3420,7 +3411,39 @@ namespace csopesy {
       if (generating && interval_has_elapsed())
         generate_process();
 
-      // 3. Schedule ready processes to idle cores
+      // 3. Update running/finished state and handle preemption
+      auto& running = data.get_running();
+      auto& finished = data.get_finished();
+      running.clear();
+
+      for (auto& ref : data.get_cores().get_all()) {
+        auto& core = ref.get();
+        bool idle = core.is_idle();
+
+        if (!idle)
+          running.insert(core.get_job().get_id());
+
+        if (!idle && core.wants_release()) {
+          auto& proc = core.get_job();
+          core.release();
+
+          if (proc.get_state().is_finished())
+            finished.push_back(proc.get_id());
+          else
+            data.get_rqueue().push(proc.get_id());
+        }
+      }
+
+      // // Debug: Show current running and finished sets
+      // cout << format("[Tick {}] Running PIDs: ", ticks);
+      // for (auto pid : running) cout << pid << " ";
+      // cout << "\n";
+
+      // cout << format("[Tick {}] Finished PIDs: ", ticks);
+      // for (auto pid : finished) cout << pid << " ";
+      // cout << "\n";
+
+      // 4. Schedule ready processes to idle cores
       strategy.tick(data);
       ++ticks;
     }
@@ -3438,13 +3461,6 @@ namespace csopesy {
         for (auto& ref : data.get_cores().get_all()) {
           ref.get().set_preemption_policy(strategy.get_preemption_policy());
         }
-      }
-
-      // 4. Hook up core lifecycle event listeners
-      for (auto& ref : data.get_cores().get_all()) {
-        auto& core = ref.get();
-        core.on("assign", [this](any payload) { on_core_assign(payload); });
-        core.on("release", [this](any payload) { on_core_release(payload); });
       }
     }
 
@@ -3491,21 +3507,6 @@ namespace csopesy {
       // Enqueue by PID
       data.get_rqueue().push(pid);
       return pid;
-    }
-
-    /** Tracks the process as running when it is assigned to a core. */
-    void on_core_assign(any payload) {
-      auto& proc = cast<ProcessRef&>(payload).get();
-      data.get_running().insert(proc.get_id());
-    }
-
-    /** Tracks the process as finished when it is released from a core. */
-    void on_core_release(any payload) {
-      auto& proc = cast<ProcessRef&>(payload).get();
-      data.get_running().erase(proc.get_id());
-
-      if (proc.get_state().is_finished())
-        data.get_finished().push_back(proc.get_id());
     }
   };
 }
@@ -3816,6 +3817,17 @@ namespace csopesy::scheduler {
 
       // Tick: assign ready jobs to idle cores
       .on_tick([](SchedulerData& data) {
+
+        // cout << "[Tick] Rqueue front-to-back: ";
+        // auto& running = data.get_running();
+        // auto rqueue_copy = data.get_rqueue();
+
+        // while (!rqueue_copy.empty()) {
+        //   cout << rqueue_copy.front() << " ";
+        //   rqueue_copy.pop();
+        // }
+        // cout << endl;
+
         auto& rqueue = data.get_rqueue();
 
         for (auto& ref: data.get_cores().get_idle()) {
@@ -3825,6 +3837,7 @@ namespace csopesy::scheduler {
 
           uint pid = rqueue.front(); 
           rqueue.pop();
+
           core.assign(data.get_process(pid));
         }
       })
