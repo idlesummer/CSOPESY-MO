@@ -36,6 +36,7 @@ namespace csopesy {
   using std::ranges::any_of;
   using std::ranges::find_if;
   using std::ranges::none_of;
+  using std::ranges::count_if;
   using std::any_cast;
   using std::erase_if;
   using std::move;

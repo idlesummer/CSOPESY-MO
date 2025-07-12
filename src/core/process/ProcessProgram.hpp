@@ -3,47 +3,38 @@
 #include "types.hpp"
 
 namespace csopesy {
-
-  /** A program that can be executed by a process. */
+  
+  /**
+   * @brief A program that can be executed by a process.
+   * 
+   * Contains a flat list of instructions, an instruction pointer,
+   * and a control context stack (used by FOR loops).
+   */
   class ProcessProgram {
     using Script = Instruction::Script;
     using Stack = ContextStack;
 
+    public:
     Script script;  ///< Flat list of all program instructions
     Stack context;  ///< Stack of active loop contexts
     uint ip = 0;    ///< Current instruction pointer
 
-    public:
+    // === Methods ===
 
-    /** Append a new instruction to the program */
+    /** @brief Loads a new instruction script and resets execution state. */
     void load_script(Script new_script) { 
       script = move(new_script);
       context.clear();
       ip = 0;  
     }
     
-    /** Check if the program has completed execution. */
-    bool is_finished() const { return ip >= script.size(); }
-
-    /** Get the total number of instructions in the program. */
+    /** @brief Returns the size of the script. */
     uint size() const { return script.size(); }
+    
+    /** @brief Check if the program has completed execution. */
+    bool finished() const { return ip >= script.size(); }
 
-    /** Access and control the instruction pointer. */
-    void set_ip(uint new_ip) { ip = new_ip; }
-    uint get_ip() const { return ip; }
-
-    /** Returns a reference to the instruction at the given address. */
-    const Instruction& get_instruction(uint ip) { return script.at(ip); }
-
-    /** Access list of all instructions. */
-    Script& get_script() { return script; }
-    const Script& get_script() const { return script; }
-
-    /** Access the loop context stack. */
-    Stack& get_context() { return context; }
-    const Stack& get_context() const { return context; }
-
-    /** Returns a formatted view of all instructions with the current IP highlighted. */
+    /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
     str view_script() const {
       auto stream = osstream();
 
@@ -70,7 +61,7 @@ namespace csopesy {
       return move(stream).str();
     }
 
-    /** Returns a formatted view of the current context stack. */
+    /** @brief Returns a formatted view of the current context stack. */
     str view_context() const {
       auto stream = osstream();
 

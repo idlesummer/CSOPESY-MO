@@ -4,8 +4,8 @@
 #include "core/common/constants/banner.hpp"
 #include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
-#include "core/scheduler/Scheduler.new.hpp"
 #include "core/command/CommandInterpreter.hpp"
+#include "core/scheduler/Scheduler.hpp"
 
 // Shell-specific includes
 #include "core/shell/ShellStorage.hpp"
@@ -18,33 +18,35 @@ namespace csopesy {
     using Storage = ShellStorage;
     using Screen = ShellScreen;
     
+    public:
+
     // === Core system components ===
     Interpreter& interpreter;
-    Scheduler scheduler; 
     
     // === Shell subcomponents ===
+    Scheduler scheduler; 
     Storage storage;  ///< Dynamic storage for shell data
     Screen screen;
-    
+
     // === Control & lifecycle ===
     Thread thread;
     abool active = true;
-    
-    public:
 
-    /** See Shell.hpp for implementation. */
-    Shell(EventEmitter& emitter); // 
+    // === Methods ===
 
-    /** Starts the shell loop in a separate thread and hooks into global ticks. */
+    /** @brief See Shell.hpp for implementation. */
+    Shell(EventEmitter& emitter);
+
+    /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
     void start() override {
-      system("cls");
+      // system("cls");
       Ansi::enable();
 
       // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 
         // Ensures scheduler.tick() does not conflict with shell command access
         // Uses global access(...) wrapper to synchronize with shared SchedulerData
-        access([&] { scheduler.tick(); });
+        // access([&] { scheduler.tick(); });
       });
     
       // Start CLI in a separate thread
@@ -55,7 +57,7 @@ namespace csopesy {
       });
     }
 
-    /** Stops the shell and joins the thread. Safe to call multiple times. */
+    /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
     void stop() override {
       active = false;
 
@@ -65,7 +67,7 @@ namespace csopesy {
       system("cls");
     }
 
-    /** Executes a single shell tick (input + command dispatch). */
+    /** @brief Executes a single shell tick (input + command dispatch). */
     void tick() override {
       cout << ">>> " << flush;
 
@@ -79,22 +81,10 @@ namespace csopesy {
       }
     }
 
-    /** Signals the shell to stop from within the shell thread. */
+    /** @brief Signals the shell to stop from within the shell thread. */
     void request_stop() { active = false; } 
 
-    /** Emits an event using the global EventEmitter. */
+    /** @brief Emits an event using the global EventEmitter. */
     void emit(str name, any data={}) { global.emit(move(name), move(data)); }
-
-    /** Returns the command interpreter instance. */
-    Interpreter& get_interpreter() { return interpreter; }
-
-    /** Returns the scheduler instance. */
-    Scheduler& get_scheduler() { return scheduler; }
-
-    /** Returns the screen controller. */
-    Screen& get_screen() { return screen; }
-
-    /** Returns the shell storage. */
-    Storage& get_storage() { return storage; }
   };
 }

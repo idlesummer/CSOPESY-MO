@@ -22,70 +22,57 @@ namespace csopesy::command {
         if (has_s + has_ls + has_r > 1)
           return "You must use only one of -s, -r, or -ls.";
 
-        if (!shell.get_screen().is_main())
+        if (!shell.screen.is_main())
           return "Not in the Main Menu.";
 
         return nullopt;
       },
 
       .execute = [&](const Command& command, Shell& shell) {
-        using set = unordered_set<int>;
+        using set = unordered_set<uint>;
 
-        auto& screen = shell.get_screen();
-        auto& scheduler = shell.get_scheduler();
+        auto& screen = shell.screen;
+        auto& scheduler = shell.scheduler;
 
         // === -ls: List screen info
         if (command.flags.contains("-ls")) {
           access([&] {
-            auto& data = scheduler.get_data();
-            const auto& config = scheduler.get_config();
+            auto& data = scheduler.data;
+            auto& config = data.config;
+            auto& cores = data.cores;
 
-            const auto& busy_cores = data.get_cores().get_busy();
-            unordered_set<uint> running;
-
-            // Collect running PIDs and core usage
-            set used_cores;
-            for (const auto& ref : busy_cores) {
-              auto& core = ref.get();
-
-              if (!core.is_idle()) {
-                uint pid = core.get_job().get_id();
-                running.insert(pid);
-                used_cores.insert(core.get_id());
-              }
-            }
-
-            int total_cores = config.num_cpu;
-            int used = used_cores.size();
-            float cpu_util = total_cores ? (float)used / total_cores * 100.0f : 0.0f;
+            uint size = cores.size();
+            uint busy = cores.get_busy().size();
+            float cpu_util = cores.get_usage();
 
             cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
-            cout << format("Cores used: {} / {}\n\n", used, total_cores);
+            cout << format("Cores used: {} / {}\n\n", busy, size);
             cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
             cout << "Running processes:\n";
 
-            for (uint pid : running) {
-              const auto& proc = data.get_process(pid).get();
+            for (uint pid: cores.get_running_pids()) {
+              auto& process = data.get_process(pid);
 
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
-                proc.get_name(),
-                timestamp(proc.get_stime()),
-                proc.get_core(),
-                proc.get_program().get_ip(),
-                proc.get_program().size()
+                process.data.name,
+                timestamp(process.data.stime),
+                process.data.core_id,
+                process.data.program.ip,
+                process.data.program.size()
               );
             }
 
             cout << "\nFinished processes:\n";
-            for (uint pid : data.get_finished()) {
-              const auto& proc = data.get_process(pid).get();
+
+            for (uint pid: data.finished_pids) {
+              auto& process = data.get_process(pid);
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
-                proc.get_name(),
-                timestamp(proc.get_stime()),
-                proc.get_program().size(),
-                proc.get_program().size()
+                process.data.name,
+                timestamp(process.data.stime),
+                process.data.program.size(),
+                process.data.program.size()
               );
             }
 
@@ -93,14 +80,13 @@ namespace csopesy::command {
           });
         }
 
-
         // === -s: Spawn and switch to new process screen
         else if (command.flags.contains("-s")) {
           const str& name = command.flags.at("-s");
 
           auto process_exists = [&](const str& name) -> bool {
             return access([&] {
-              const auto& data = scheduler.get_data();
+              const auto& data = scheduler.data;
               return data.has_process(name);
             });
           };
@@ -108,9 +94,7 @@ namespace csopesy::command {
           if (process_exists(name))
             return void(cout << format("Process '{}' already exists\n", name));
 
-          access([&] {
-            scheduler.enqueue_process(name);
-          });
+          access([&] { scheduler.enqueue_process(name); });
 
           cout << format("\nWaiting for process creation: {}", name);
           bool created = false;
@@ -127,21 +111,21 @@ namespace csopesy::command {
             return void(cout << "\nTimed out.\n");
 
           access([&] {
-            auto& data = scheduler.get_data();
-            const auto& proc = data.get_process(name).get();
-            uint pid = proc.get_id(); // ✅ Extract PID
+            auto& data = scheduler.data;
+            auto& process = data.get_process(name);
+            uint pid = process.data.id; // ✅ Extract PID
 
             screen.switch_to(pid);    // ✅ Use only PID
             cout << "\n";
-            cout << format("Process name: {}\n", proc.get_name());
+            cout << format("Process name: {}\n", process.data.name);
             cout << format("ID: {}\n", pid);
 
             cout << "Logs:\n";
-            for (const auto& log : proc.get_logs())
+            for (auto& log : process.data.logs)
               cout << format("  {}\n", log);
 
-            const auto& program = proc.get_program();
-            cout << format("Current instruction line: {}\n", program.get_ip());
+            const auto& program = process.data.program;
+            cout << format("Current instruction line: {}\n", program.ip);
             cout << format("Lines of code: {}\n", program.size());
           });
         }
@@ -150,25 +134,24 @@ namespace csopesy::command {
         else if (command.flags.contains("-r")) {
           access([&] {
             const auto& name = command.flags.at("-r");
-            auto& data = scheduler.get_data();
+            auto& data = scheduler.data;
 
             if (!data.has_process(name))
               return void(cout << format("Process <{}> not found.\n", name));
 
-            const auto& proc = data.get_process(name).get();
-            uint pid = proc.get_id(); // ✅ Use PID
+            auto& process = data.get_process(name);
+            uint pid = process.data.id; // ✅ Use PID
 
-            screen.switch_to(pid);    // ✅ PID-based only
-
-            cout << format("Process name: {}\n", proc.get_name());
+            screen.switch_to(pid);      // ✅ PID-based only
+            cout << format("Process name: {}\n", process.data.name);
             cout << format("ID: {}\n", pid);
 
             cout << "Logs:\n";
-            for (const auto& log : proc.get_logs())
+            for (const auto& log : process.data.logs)
               cout << format("  {}\n", log);
 
-            cout << format("Current instruction line: {}\n", proc.get_program().get_ip());
-            cout << format("Lines of code: {}\n", proc.get_program().size());
+            cout << format("Current instruction line: {}\n", process.data.program.ip);
+            cout << format("Lines of code: {}\n", process.data.program.size());
           });
         }
       }

@@ -13,18 +13,22 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](const Command&, Shell& shell) -> Str {
-        if (!shell.get_scheduler().is_initialized())
-          return "[Shell] Please run 'initialize' first.";
-
-        if (!shell.get_scheduler().is_generating())
-          return "[Shell] Dummy process generation is not running.";
-        
-        return nullopt;
+        return access([&]() -> Str {
+          if (!shell.scheduler.data.config.initialized)
+            return "[Shell] Please run 'initialize' first.";
+  
+          if (!shell.scheduler.generating)
+            return "[Shell] Dummy process generation is not running.";
+          
+          return nullopt;
+        });
       },
 
       .execute = [](const Command&, Shell& shell) {
-        shell.get_scheduler().generate(false);
-        cout << "[Shell] Dummy process generation stopped.\n";
+        access([&] {
+          shell.scheduler.generate(false);
+          cout << "[Shell] Dummy process generation stopped.\n";
+        });
       },
     };
   }

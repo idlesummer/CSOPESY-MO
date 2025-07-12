@@ -14,12 +14,12 @@ namespace csopesy::command {
       .flags = {},
 
       .execute = [](const Command &command, Shell &shell) {   
-        if (!shell.get_screen().is_main())
+        if (!shell.screen.is_main())
           return void(cout << "Not in the Main Menu.\n");
 
-        const auto& data = shell.get_scheduler().get_data();
-        const auto& running = data.get_running_processes();
-        const auto& finished = data.get_finished_processes();
+        auto& data = shell.scheduler.data;
+        auto running = data.cores.get_running_pids();
+        auto& finished = data.finished_pids;
 
         auto log = ofstream("csopesylog.txt");
         auto separator = "---------------------------------------------\n";
@@ -30,15 +30,15 @@ namespace csopesy::command {
         cout << "Running processes:\n";
         log << "Running processes:\n";
 
-        for (const auto& ref: running) {
-          const auto& proc = ref.get();
+        for (const auto& pid: running) {
+          auto& process = data.get_process(pid);
           auto line = format(
             "  {:<10} ({})  Core: {:<2}  {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_core(),
-            proc.get_program().get_ip(),
-            proc.get_program().size()
+            process.data.name,
+            timestamp(process.data.stime),
+            process.data.core_id,
+            process.data.program.ip,
+            process.data.program.size()
           );
           cout << "\033[36m" << line << "\033[0m";
           log << line;
@@ -47,14 +47,14 @@ namespace csopesy::command {
         cout << "\nFinished processes:\n";
         log << "\nFinished processes:\n";
 
-        for (const auto& ref: finished) {
-          const auto& proc = ref.get();
+        for (const auto& pid: finished) {
+          auto& process = data.get_process(pid);
           auto line = format(
             "  {:<10} ({})  Finished      {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_program().size(),
-            proc.get_program().size()
+            process.data.name,
+            timestamp(process.data.stime),
+            process.data.program.size(),
+            process.data.program.size()
           );
           cout << "\033[36m" << line << "\033[0m";
           log << line;

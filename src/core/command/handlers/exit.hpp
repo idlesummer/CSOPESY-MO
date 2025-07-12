@@ -13,7 +13,7 @@ namespace csopesy::command {
       .flags = {},
       
       .execute = [](const Command&, Shell& shell) {
-        auto& screen = shell.get_screen();
+        auto& screen = shell.screen;
 
         if (screen.is_main()) {
           shell.request_stop();

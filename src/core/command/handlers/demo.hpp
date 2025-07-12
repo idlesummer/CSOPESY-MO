@@ -14,17 +14,18 @@ namespace csopesy::command {
       .max_args = 0,
 
       .execute = [](const Command&, Shell& shell) {
-        auto& storage = shell.get_storage();
+        auto& storage = shell.storage;
         
-        if (!storage.has("demo.counter")) {
+        if (!shell.storage.has("demo.counter")) {
+          cout << "Counter created! Run demo again to increment counter.\n";
+          cout << "Counter: 0\n";
           storage.set("demo.counter", 0);
           return;
         }
 
-        int counter = storage.get<int>("demo.counter");
-        counter++;
+        int counter = storage.get<int>("demo.counter") + 1;
         storage.set("demo.counter", counter);
-        cout << counter << endl;
+        cout << format("Counter: {}\n", counter);;
       },
     };
   }

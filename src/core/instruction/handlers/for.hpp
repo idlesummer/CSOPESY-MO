@@ -14,10 +14,10 @@ namespace csopesy::instruction {
       
       // Use cached exit if available
       if (inst.exit != 0)
-        return program.set_ip(inst.exit);
+        return void(program.ip = inst.exit);
       
-      auto start = program.get_ip();
-      auto& script = program.get_script();
+      auto start = program.ip;
+      auto& script = program.script;
       uint depth = 1;
 
       // Otherwise, scan ahead to find the matching ENDFOR
@@ -28,8 +28,7 @@ namespace csopesy::instruction {
         
         // If matching ENDFOR is found, cache exit address and exit loop
         if (depth == 0) {
-          inst.exit = i+1;  
-          program.set_ip(inst.exit);
+          program.ip = inst.exit = i + 1;
           return;
         }
       }
@@ -42,15 +41,15 @@ namespace csopesy::instruction {
       .exit_opcode = "ENDFOR",
       .signatures = {{ Param::UInt(1, 5) }},
       .execute = [&](const Instruction& inst, ProcessData& process) {
-        auto& program = process.get_program();
+        auto& program = process.program;
         auto count = stoul(inst.args[0]);
         
         // Skip loop entirely if loop count is zero
         if (count == 0)
           return skip_block(program, inst);
         
-        auto& context = program.get_context();
-        auto ip = program.get_ip();
+        auto& context = program.context;
+        auto ip = program.ip;
         
         // Push context if this FOR hasn't been visited yet
         if (!context.starts_at(ip))

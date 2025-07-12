@@ -11,13 +11,20 @@ namespace csopesy {
 
   /** A loop frame from a FOR-like instruction. */
   struct ContextFrame {
-    str  opcode;  ///< Control frame opcode, e.g., "FOR"
-    uint start;   ///< Address where the loop starts
-    uint count;   ///< Number of iterations remaining
+    str  opcode;  // Control frame opcode, e.g., "FOR"
+    uint start;   // Address where the loop starts
+    uint count;   // Number of iterations remaining
   };
 
+  /**
+    * @brief A stack structure used for managing nested FOR loop contexts.
+    * 
+    * Stores control frames for tracking loop entry points, exit conditions, 
+    * and iteration counts during process execution.
+    */
   class ContextStack {
     using Stack = vector<ContextFrame>;
+    
     Stack stack;
 
     public:

@@ -1,195 +1,141 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/process/Process.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
+// #include "core/instruction/InstructionInterpreter.hpp"
+// #include "core/process/Process.hpp"
+
+// #include "strategies/_all.hpp"
+// #include "SchedulerStrategy.hpp"
+#include "SchedulerData.hpp"
 #include "types.hpp"
 
 namespace csopesy {
+
+  /**
+   * @brief Central scheduler controller for the OS simulation.
+   * 
+   * Owns the strategy, configuration, interpreter, and high-level
+   * orchestration of ticks and process generation.
+   */
   class Scheduler {
     using Interpreter = InstructionInterpreter;
-    using ProcList    = List<Process>;
-    using ProcRefList = vector<ref<const Process>>;
-    using CoreList    = vector<optional<ref<Process>>>;
+    using queue = vector<str>;
+    using list = vector<uint>;
 
-    ProcList processes;
-    ProcRefList finished;
-    queue<ref<Process>> rqueue;
-    CoreList cores;
-    SchedulerConfig config;
-    uint tick_count = 0;
-    bool generating = false;
-    uint next_process_id = 1;
-    Interpreter& interpreter;
-
+    queue names;                // Deferred generation queue for user-inserted processes
+    
     public:
 
-    Scheduler(): interpreter(Interpreter::instance()) {}
+    // === Internal State ===
+    uint ticks = 0;             // Global tick counter
+    bool generating = false;    // Flag indicating auto-generation mode
+    
+    // === Components ===
+    // Interpreter& interpreter;   // Shared instruction generator instance
+    SchedulerData data;         // Internal state (cores, processes, queue)
+    // SchedulerStrategy strategy; // Contains the scheduler strategy
 
-    /** Add a process to the global process list */
-    void add_process(Process proc) {
-      processes.push_back(move(proc));
-      rqueue.push(ref(processes.back()));
-    }
+    // === Methods ===
 
-    /** Advance 1 CPU tick */
-    void tick() {
-      ++tick_count;
+    /** @brief Registers all available scheduling strategies. */
+    // Scheduler()
+    //   interpreter(Interpreter::instance()),
+    //   strategy(scheduler::make_strategy("fcfs", SchedulerConfig())) {}
 
-      // Dummy generation
-      if (generating && tick_count % config.batch_process_freq == 0)
-        create_dummy_process();
+    /** @brief Executes the active strategy logic and increments the tick count. */
+    // void tick() {
 
-      if (config.scheduler == "fcfs")
-        tick_fcfs();
-      else
-        return; 
-      tick_rr();
-    }
-
-    void tick_fcfs() {
-      // === Phase 1: Assign processes to idle cores
+    //   // 1. Generate any explicitly enqueued processes
+    //   cout << "[tick] Stage 1: enqueue\n";
+    //   for (auto& name: names)
+    //     generate_process(move(name));
+    //   names.clear();
       
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
+    //   // 2. Possibly auto-generate processes this tick
+    //   cout << "[tick] Stage 2: dummy\n";
+    //   if (generating && interval_has_elapsed())
+    //     generate_process();
 
-        // Skip if this core is already running something
-        if (core.has_value()) continue;
+    //   // 3. Update running/finished state and handle preemption
+    //   cout << "[tick] Stage 3: core release\n";
+    //   for (auto& ref: data.cores.get_busy()) {
+    //   auto& core = ref.get();
 
-        // Skip if no ready process available
-        while (!rqueue.empty()) {
-          auto proc_ref = rqueue.front(); rqueue.pop();
-          auto& proc = proc_ref.get();
+    //     // 🔒 Avoid access violation
+    //     if (core.is_idle()) {
+    //       cout << "[tick]   skipped: core idle\n";
+    //       continue;
+    //     }
 
-          // Sanity check: skip if process is already finished
-          if (proc.get_state().is_finished())
-            continue;
+    //     if (core.can_release) {
+    //       cout << "[tick]   core " << core.id << " releasing process\n";
+    //       auto& process = core.get_job();
+    //       core.release();
 
-          // Sanity check: should not be assigned to a core already
-          if (proc.get_core() != -1)
-            continue;
+    //       if (process.data.state.finished()) {
+    //         data.finished_pids.push_back(process.data.id);
+    //         cout << "[tick]   process " << process.data.id << " finished\n";
+    //       } else {
+    //         data.rqueue.push(process.data.id);
+    //         cout << "[tick]   process " << process.data.id << " re-queued\n";
+    //       }
+    //     }
+    //   }
 
-          // Assign to this core
-          core = proc_ref;
-          proc.set_core(static_cast<int>(i));
-          break;
-        }
-      }
+    //   // 4. Schedule ready processes to idle cores
+    //   cout << "[tick] Stage 4: strategy\n";
+    //   // strategy.tick(data);
+    //   ++ticks;
+    //   cout << "[tick] End (tick " << ticks << ")\n";
+    // }
 
-      // === Phase 2: Step all active cores
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
-        if (!core.has_value()) continue;
+    /** @brief Applies a new configuration and resizes core state accordingly. */
+    void set_config(SchedulerConfig config) {
+      // // 1. Store config inside SchedulerData
+      // data.set_config(config);
 
-        auto& proc = core->get();
+      // // 2. Build and install the selected strategy
+      // strategy = scheduler::make_strategy(config.scheduler, config);
 
-        // Sanity check: core mismatch
-        if (proc.get_core() != static_cast<int>(i)) {
-          proc.log(format(
-            "[tick] ERROR: Core mismatch — process p{:02} claims core {}, but is on core {}",
-            proc.get_id(), proc.get_core(), i
-          ));
-        }
-
-        // Step the process
-        step_process(proc);
-
-        // If the process finished, release the core
-        if (proc.get_state().is_finished()) {
-          proc.log(format("[tick] finished on core {}", i));
-          proc.reset_core();
-          core.reset();
-        }
-      }
+      // // 3. Inject per-core preemption policy from strategy
+      // if (strategy.get_prempt()) {
+      //   for (auto& ref: data.cores.get_all())
+      //     ref.get().set_preempt(strategy.get_prempt());
+      // }
     }
 
-    void tick_rr() {
-      // Round Robin: assign cores in a round-robin fashion
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
+    // // === Generation Control ===
+    // void enqueue_process(str name) { names.push_back(move(name)); }
+    // void generate(bool flag) { generating = flag; }
 
-        if (!core.has_value()) {
-          if (!rqueue.empty()) {
-            core = rqueue.front();
-            rqueue.pop();
-          }
-          continue;
-        }
+    // private:
 
-        auto& proc = core.value().get();
-        step_process(proc);
+    // // === Helper methods ===
 
-        if (proc.get_state().state == State::Finished) {
-          core.reset();
-        } else {
-          // Re-queue the process if it is still running
-          rqueue.push(ref(proc));
-        }
-      }
-    }
+    // /** @brief Helper that returns true if the current tick matches the process generation interval. */
+    // bool interval_has_elapsed() const {
+    //   uint freq = data.config.batch_process_freq;
+    //   return freq > 0 && (ticks % freq == 0);
+    // }
 
-    /** Execute a single instruction for one process */
-    void step_process(Process& proc) {
-      if (proc.step())
-        finished.push_back(cref(proc));
-    }
+    // /** @brief Internal helper that generates a process with optional name. */
+    // uint generate_process(Str name=nullopt) { 
 
-    /** Generate one dummy process */
-    void create_dummy_process() {
-      auto name = format("p{:02}", next_process_id);
-      auto proc = Process(name, next_process_id++);
-     
-      // Generate random instruction script
-      uint size = Random::num(config.min_ins, config.max_ins);
-      auto script = interpreter.generate_script(size);
+    //   cout << "[debug] should never see this if names is empty\n";
 
-      // Load the script into the program
-      proc.get_program().load_script(move(script));
+    //   // Instantiate the process
+    //   uint pid = data.new_pid();
+    //   auto process = Process::create(
+    //     pid,
+    //     name.value_or(format("p{:02}", pid)), 
+    //     Random::num(data.config.min_ins, data.config.max_ins)
+    //   );
 
-      // Add process to process list
-      add_process(move(proc));
-    }
+    //   // Add to table first so it's owned and safe to reference
+    //   data.add_process(move(process));
 
-    void start_generation() { generating = true; }
-    void stop_generation()  { generating = false; }
-    bool is_generating() const { return generating; }
-
-    const ProcList& get_processes() const { return processes; }
-    const Process& get_last_process() const { return processes.back(); }
-    const ProcRefList& get_finished_processes() const { return finished; }
-
-    vector<ref<const Process>> get_running_processes() const {
-      vector<ref<const Process>> running;
-      for (const auto& proc : processes) {
-        if (!proc.get_program().is_finished())
-          running.push_back(cref(proc));
-      }
-      return running;
-    }
-
-    bool all_finished() const {
-      for (const auto& proc : processes)
-        if (!proc.get_program().is_finished())
-          return false;
-      return true;
-    }
-
-    SchedulerConfig& get_config() { return config; }
-    const SchedulerConfig& get_config() const { return config; }
-
-    void set_config(SchedulerConfig new_config) {
-      config = move(new_config);
-
-      // Resize core list to match num_cpu, all cores unassigned (nullopt)
-      cores = CoreList(config.num_cpu, std::nullopt);
-
-      // Resize per-core quantum tracking for RR (default 0)
-      // core_quantums = vector<uint>(config.num_cpu, 0);
-
-      // Optional debug log
-      cout << format("[config] Initialized {} CPU cores.\n", config.num_cpu);
-    }
-
-    uint get_tick_count() const { return tick_count; }
-    bool is_initialized() const { return config.initialized; }
+    //   // Enqueue by PID
+    //   data.rqueue.push(pid);
+    //   return pid;
+    // }
   };
 }

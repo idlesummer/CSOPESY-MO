@@ -131,23 +131,24 @@ namespace csopesy {
     using map = unordered_map<str, Handler>;
     using set = unordered_set<str>;
     
-    // Registry of available command handlers
-    map handlers;   
-    
     public:
 
-    /** Returns the global singleton instance of the CommandInterpreter. */
+    map handlers; // Registry of available command handlers
+    
+    // === Methods ===
+
+    /** @brief Returns the global singleton instance of the CommandInterpreter. */
     static CommandInterpreter& instance() {
       static CommandInterpreter inst;
       return inst;
     }
 
-    /** Registers a command with its name and handlers. */
+    /** @brief Registers a command with its name and handlers. */
     void register_command(Handler handler) {
       handlers[handler.name] = move(handler);
     }
 
-    /** Executes a command in the shell context. */ 
+    /** @brief Executes a command in the shell context. */ 
     void execute(const str& line, Shell& shell) {
 
       // Parse the command line into a Command (name, args, flags)
@@ -171,19 +172,20 @@ namespace csopesy {
         return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
 
       // Run optional command-specific validation logic
-      if (auto msg = validate_command(command, handler, shell))
+      if (auto msg = custom_validation(command, handler, shell))
         return void(cout << format("[Shell] {}\n", *msg));
       
       // Execute the command
+      cout << '\n';
       handler.execute(command, shell);
     }
 
     private:
 
-    /** Private constructor to enforce singleton access via instance(). */
+    /** @brief Private constructor to enforce singleton access via instance(). */
     CommandInterpreter() = default;
     
-    /** Returns true if any flag is invalid or misused. */
+    /** @brief Returns true if any flag is invalid or misused. */
     static bool invalid_flags(const Command& command, const Handler& handler) {
       // If any user flag has no valid match (in name and usage), 
       // then the set of flags is invalid.
@@ -194,14 +196,14 @@ namespace csopesy {
       });
     }
 
-    /** Checks if argument count is within bounds. */
+    /** @brief Checks if argument count is within bounds. */
     static bool invalid_args(const Command& command, const Handler& handler) {
       const auto argc = command.args.size();
       return argc < handler.min_args || argc > handler.max_args;
     }
 
     /** Runs the handler's custom validator and returns an optional error message. */
-    static Str validate_command(const Command& command, const Handler& handler, Shell& shell) {
+    static Str custom_validation(const Command& command, const Handler& handler, Shell& shell) {
       if (!handler.validate) return nullopt;
       if (const auto& err = handler.validate(command, shell))
         return err->empty() ? "Handler disabled or invalid." : *err;
@@ -229,7 +231,7 @@ namespace csopesy {
 
     public:
 
-    /** A helper that parses a handler line string into a Handler Command object. */
+    /** @brief A helper that parses a handler line string into a Handler Command object. */
     static Command parse(const str& line) {
       auto tokens = tokenize(line);
       if (tokens.empty()) return {};
@@ -252,7 +254,7 @@ namespace csopesy {
 
     private:
     
-    /** A helper that splits a string into whitespace-separated tokens. */
+    /** @brief A helper that splits a string into whitespace-separated tokens. */
     static list tokenize(const str& line) {
       if (line.empty()) return {};
       auto stream = isstream(line);
@@ -328,17 +330,18 @@ namespace csopesy::command {
       .max_args = 0,
 
       .execute = [](const Command&, Shell& shell) {
-        auto& storage = shell.get_storage();
+        auto& storage = shell.storage;
         
-        if (!storage.has("demo.counter")) {
+        if (!shell.storage.has("demo.counter")) {
+          cout << "Counter created! Run demo again to increment counter.\n";
+          cout << "Counter: 0\n";
           storage.set("demo.counter", 0);
           return;
         }
 
-        int counter = storage.get<int>("demo.counter");
-        counter++;
+        int counter = storage.get<int>("demo.counter") + 1;
         storage.set("demo.counter", counter);
-        cout << counter << endl;
+        cout << format("Counter: {}\n", counter);;
       },
     };
   }
@@ -392,7 +395,7 @@ namespace csopesy::command {
       .flags = {},
       
       .execute = [](const Command&, Shell& shell) {
-        auto& screen = shell.get_screen();
+        auto& screen = shell.screen;
 
         if (screen.is_main()) {
           shell.request_stop();
@@ -433,7 +436,7 @@ namespace csopesy::command {
       .validate = [](const Command& command, Shell& shell) -> Str {
         return access([&]() -> Str {
           // Check if the scheduler has already been initialized
-          if (shell.get_scheduler().get_config().initialized)
+          if (shell.scheduler.data.config.initialized)
             return "Already initialized.";
           
           // Check if the file could not be opened or is empty
@@ -441,7 +444,7 @@ namespace csopesy::command {
           if (lines.empty())
             return "Failed to open config.txt";
   
-          auto& storage = shell.get_storage();
+          auto& storage = shell.storage;
           storage.set("initialize.cache", move(lines));
           return nullopt;
         });
@@ -449,7 +452,7 @@ namespace csopesy::command {
 
       .execute = [](const Command& command, Shell& shell) {
         access([&] {
-          auto& storage = shell.get_storage();
+          auto& storage = shell.storage;
           const auto& lines = storage.get<list>("initialize.cache");
           auto config = SchedulerConfig();
   
@@ -462,7 +465,7 @@ namespace csopesy::command {
           }
   
           config.initialized = true;
-          shell.get_scheduler().set_config(config);
+          shell.scheduler.set_config(config);
   
           cout << BANNER << '\n';
           cout << "[Shell] Scheduler config loaded.\n";
@@ -496,44 +499,38 @@ namespace csopesy::command {
 
       .validate = [](const Command& command, Shell& shell) -> Str {
         return access([&]() -> Str {
-          if (shell.get_screen().is_main())
+          if (shell.screen.is_main())
             return "Not in a process screen.";
 
-          uint pid = shell.get_screen().get_id();
-          const auto& scheduler = shell.get_scheduler();
-          const auto& data = scheduler.get_data();
+            auto& scheduler = shell.scheduler;
+            uint pid = shell.screen.get_id();
 
-          if (!data.has_process(pid))
+          if (!scheduler.data.has_process(pid))
             return format("Active process with ID \"{}\" not found.", pid);
-
-          shell.get_storage().set("process-smi.pid", pid);  // âœ… Store PID instead of ref
           return nullopt;
         });
       },
 
       .execute = [](const Command& command, Shell& shell) {
         access([&] {
-          const auto& scheduler = shell.get_scheduler();
-          const auto& data = scheduler.get_data();
-          auto& storage = shell.get_storage();
+          auto& scheduler = shell.scheduler;
+          auto& storage = shell.storage;
 
-          uint pid = storage.get<uint>("process-smi.pid"); // âœ… Retrieve PID
-          const auto& proc = data.get_process(pid).get();  // âœ… Access by PID
+          uint pid = shell.screen.get_id();                 // âœ… Retrieve PID
+          auto& process = scheduler.data.get_process(pid);  // âœ… Access by PID
+          auto& program = process.data.program;
 
-          const auto& logs = proc.get_logs();
-          const auto& program = proc.get_program();
-
-          cout << "Process name: " << proc.get_name() << '\n';
-          cout << "ID: " << proc.get_id() << '\n';
+          cout << format("Process name: {}\n", process.data.name);
+          cout << format("ID: {}\n", process.data.core_id);
 
           cout << "Logs:\n";
-          for (const auto& log: logs)
+          for (auto& log: process.data.logs)
             cout << log << '\n';
 
-          cout << "Current instruction line: " << program.get_ip() << '\n';
-          cout << "Lines of code: " << program.size() << "\n\n";
+          cout << "Current instruction line: " << program.ip << '\n';
+          cout << "Lines of code: " << program.script.size() << "\n\n";
 
-          shell.get_storage().remove("process-smi.pid");
+          shell.storage.remove("process-smi.pid");
         });
       },
     };
@@ -559,11 +556,11 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](const Command& command, Shell& shell) -> Str {
-        if (!shell.get_screen().is_main())
+        if (!shell.screen.is_main())
           return "Not in the Main Menu.";
         
         return access([&]() -> Str {
-          if (!shell.get_scheduler().is_initialized())
+          if (!shell.scheduler.data.config.initialized)
             return "Scheduler not initialized. Please run 'initialize' first.";
           return nullopt;
         });
@@ -571,10 +568,10 @@ namespace csopesy::command {
 
       .execute = [](const Command& command, Shell& shell) {
         access([&] {
-          const auto& scheduler = shell.get_scheduler();
-          const auto& data = scheduler.get_data();
-          const auto& running = data.get_running();
-          const auto& finished = data.get_finished();
+          auto& scheduler = shell.scheduler;
+          auto& data = scheduler.data;
+          auto running = data.get_running_pids();
+          auto& finished = data.finished_pids;
 
           auto log = ofstream("csopesylog.txt");
           auto separator = "---------------------------------------------\n";
@@ -586,14 +583,14 @@ namespace csopesy::command {
           log << "Running processes:\n";
 
           for (uint pid: running) {
-            const auto& proc = data.get_process(pid).get();
+            auto& proc = data.get_process(pid);
             auto line = format(
               "  {:<10} ({})  Core: {:<2}  {} / {}\n",
-              proc.get_name(),
-              timestamp(proc.get_stime()),
-              proc.get_core(),
-              proc.get_program().get_ip(),
-              proc.get_program().size()
+              proc.data.name,
+              timestamp(proc.data.stime),
+              proc.data.core_id,
+              proc.data.program.ip,
+              proc.data.program.size()
             );
             cout << "\033[36m" << line << "\033[0m";
             log << line;
@@ -603,13 +600,13 @@ namespace csopesy::command {
           log << "\nFinished processes:\n";
 
           for (uint pid: finished) {
-            const auto& proc = data.get_process(pid).get();
+            const auto& proc = data.get_process(pid);
             auto line = format(
               "  {:<10} ({})  Finished      {} / {}\n",
-              proc.get_name(),
-              timestamp(proc.get_stime()),
-              proc.get_program().size(),
-              proc.get_program().size()
+              proc.data.name,
+              timestamp(proc.data.stime),
+              proc.data.program.size(),
+              proc.data.program.size()
             );
             cout << "\033[36m" << line << "\033[0m";
             log << line;
@@ -648,18 +645,22 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](const Command&, Shell& shell) -> Str {
-        if (!shell.get_scheduler().is_initialized())
-          return "[Shell] Please run 'initialize' first.";
-
-        if (shell.get_scheduler().is_generating())
-          return "[Shell] Dummy process generation already active.";
-
-        return nullopt;
+        return access([&]() -> Str {
+          if (!shell.scheduler.data.config.initialized)
+            return "[Shell] Please run 'initialize' first.";
+  
+          if (shell.scheduler.generating)
+            return "[Shell] Dummy process generation already active.";
+  
+          return nullopt;
+        });
       },
 
       .execute = [](const Command&, Shell& shell) {
-        shell.get_scheduler().generate(true);
-        cout << "[Shell] Dummy process generation started.\n";
+        access([&] {
+          shell.scheduler.generate(true);
+          cout << "[Shell] Dummy process generation started.\n";
+        });
       },
     };
   }
@@ -685,18 +686,22 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](const Command&, Shell& shell) -> Str {
-        if (!shell.get_scheduler().is_initialized())
-          return "[Shell] Please run 'initialize' first.";
-
-        if (!shell.get_scheduler().is_generating())
-          return "[Shell] Dummy process generation is not running.";
-        
-        return nullopt;
+        return access([&]() -> Str {
+          if (!shell.scheduler.data.config.initialized)
+            return "[Shell] Please run 'initialize' first.";
+  
+          if (!shell.scheduler.generating)
+            return "[Shell] Dummy process generation is not running.";
+          
+          return nullopt;
+        });
       },
 
       .execute = [](const Command&, Shell& shell) {
-        shell.get_scheduler().generate(false);
-        cout << "[Shell] Dummy process generation stopped.\n";
+        access([&] {
+          shell.scheduler.generate(false);
+          cout << "[Shell] Dummy process generation stopped.\n";
+        });
       },
     };
   }
@@ -731,70 +736,57 @@ namespace csopesy::command {
         if (has_s + has_ls + has_r > 1)
           return "You must use only one of -s, -r, or -ls.";
 
-        if (!shell.get_screen().is_main())
+        if (!shell.screen.is_main())
           return "Not in the Main Menu.";
 
         return nullopt;
       },
 
       .execute = [&](const Command& command, Shell& shell) {
-        using set = unordered_set<int>;
+        using set = unordered_set<uint>;
 
-        auto& screen = shell.get_screen();
-        auto& scheduler = shell.get_scheduler();
+        auto& screen = shell.screen;
+        auto& scheduler = shell.scheduler;
 
         // === -ls: List screen info
         if (command.flags.contains("-ls")) {
           access([&] {
-            auto& data = scheduler.get_data();
-            const auto& config = scheduler.get_config();
+            auto& data = scheduler.data;
+            auto& config = data.config;
+            auto& cores = data.cores;
 
-            const auto& busy_cores = data.get_cores().get_busy();
-            unordered_set<uint> running;
-
-            // Collect running PIDs and core usage
-            set used_cores;
-            for (const auto& ref : busy_cores) {
-              auto& core = ref.get();
-
-              if (!core.is_idle()) {
-                uint pid = core.get_job().get_id();
-                running.insert(pid);
-                used_cores.insert(core.get_id());
-              }
-            }
-
-            int total_cores = config.num_cpu;
-            int used = used_cores.size();
-            float cpu_util = total_cores ? (float)used / total_cores * 100.0f : 0.0f;
+            uint size = cores.size();
+            uint busy = cores.get_busy().size();
+            float cpu_util = cores.get_usage();
 
             cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
-            cout << format("Cores used: {} / {}\n\n", used, total_cores);
+            cout << format("Cores used: {} / {}\n\n", busy, size);
             cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
             cout << "Running processes:\n";
 
-            for (uint pid : running) {
-              const auto& proc = data.get_process(pid).get();
+            for (uint pid: cores.get_running_pids()) {
+              auto& process = data.get_process(pid);
 
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
-                proc.get_name(),
-                timestamp(proc.get_stime()),
-                proc.get_core(),
-                proc.get_program().get_ip(),
-                proc.get_program().size()
+                process.data.name,
+                timestamp(process.data.stime),
+                process.data.core_id,
+                process.data.program.ip,
+                process.data.program.size()
               );
             }
 
             cout << "\nFinished processes:\n";
-            for (uint pid : data.get_finished()) {
-              const auto& proc = data.get_process(pid).get();
+
+            for (uint pid: data.finished_pids) {
+              auto& process = data.get_process(pid);
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
-                proc.get_name(),
-                timestamp(proc.get_stime()),
-                proc.get_program().size(),
-                proc.get_program().size()
+                process.data.name,
+                timestamp(process.data.stime),
+                process.data.program.size(),
+                process.data.program.size()
               );
             }
 
@@ -802,14 +794,13 @@ namespace csopesy::command {
           });
         }
 
-
         // === -s: Spawn and switch to new process screen
         else if (command.flags.contains("-s")) {
           const str& name = command.flags.at("-s");
 
           auto process_exists = [&](const str& name) -> bool {
             return access([&] {
-              const auto& data = scheduler.get_data();
+              const auto& data = scheduler.data;
               return data.has_process(name);
             });
           };
@@ -817,9 +808,7 @@ namespace csopesy::command {
           if (process_exists(name))
             return void(cout << format("Process '{}' already exists\n", name));
 
-          access([&] {
-            scheduler.enqueue_process(name);
-          });
+          access([&] { scheduler.enqueue_process(name); });
 
           cout << format("\nWaiting for process creation: {}", name);
           bool created = false;
@@ -836,21 +825,21 @@ namespace csopesy::command {
             return void(cout << "\nTimed out.\n");
 
           access([&] {
-            auto& data = scheduler.get_data();
-            const auto& proc = data.get_process(name).get();
-            uint pid = proc.get_id(); // âœ… Extract PID
+            auto& data = scheduler.data;
+            auto& process = data.get_process(name);
+            uint pid = process.data.id; // âœ… Extract PID
 
             screen.switch_to(pid);    // âœ… Use only PID
             cout << "\n";
-            cout << format("Process name: {}\n", proc.get_name());
+            cout << format("Process name: {}\n", process.data.name);
             cout << format("ID: {}\n", pid);
 
             cout << "Logs:\n";
-            for (const auto& log : proc.get_logs())
+            for (auto& log : process.data.logs)
               cout << format("  {}\n", log);
 
-            const auto& program = proc.get_program();
-            cout << format("Current instruction line: {}\n", program.get_ip());
+            const auto& program = process.data.program;
+            cout << format("Current instruction line: {}\n", program.ip);
             cout << format("Lines of code: {}\n", program.size());
           });
         }
@@ -859,25 +848,24 @@ namespace csopesy::command {
         else if (command.flags.contains("-r")) {
           access([&] {
             const auto& name = command.flags.at("-r");
-            auto& data = scheduler.get_data();
+            auto& data = scheduler.data;
 
             if (!data.has_process(name))
               return void(cout << format("Process <{}> not found.\n", name));
 
-            const auto& proc = data.get_process(name).get();
-            uint pid = proc.get_id(); // âœ… Use PID
+            auto& process = data.get_process(name);
+            uint pid = process.data.id; // âœ… Use PID
 
-            screen.switch_to(pid);    // âœ… PID-based only
-
-            cout << format("Process name: {}\n", proc.get_name());
+            screen.switch_to(pid);      // âœ… PID-based only
+            cout << format("Process name: {}\n", process.data.name);
             cout << format("ID: {}\n", pid);
 
             cout << "Logs:\n";
-            for (const auto& log : proc.get_logs())
+            for (const auto& log : process.data.logs)
               cout << format("  {}\n", log);
 
-            cout << format("Current instruction line: {}\n", proc.get_program().get_ip());
-            cout << format("Lines of code: {}\n", proc.get_program().size());
+            cout << format("Current instruction line: {}\n", process.data.program.ip);
+            cout << format("Lines of code: {}\n", process.data.program.size());
           });
         }
       }
@@ -896,7 +884,6 @@ namespace csopesy::command {
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "core/process/Process.hpp"
 #include "core/process/ProcessProgram.hpp"
-#include "core/process/ProcessExecutor.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
@@ -910,28 +897,21 @@ namespace csopesy::command {
       .flags = {{ "-r", false }},
 
       .execute = [](const Command& command, Shell& shell) {
-        using Script = Instruction::list;
         using Interpreter = InstructionInterpreter;
         
         auto& interpreter = Interpreter::instance();
-        auto& storage = shell.get_storage();
+        auto& storage = shell.storage;
 
         // 0. Reset process if requested
         if (command.flags.contains("-r")) {
-          shell.get_storage().remove("test.process");
+          shell.storage.remove("test.process");
           cout << "[loop-test] Dummy process reset.\n";
           return;
         }
 
         // 1. Spawn process if not already present
         if (!storage.has("test.process")) {
-          auto process = Process("test.process", 999);
-          auto& program = process.get_program();
-          
-          // Generate a random list of instructions
-          auto script = interpreter.generate_script(10);
-          program.load_script(move(script));
-
+          auto process = Process::create(999, "test.process", 10);
           storage.set("test.process", move(process));
           cout << "[loop-test] Process created.\n";
           return;
@@ -940,10 +920,10 @@ namespace csopesy::command {
         // 2. Access process
         system("cls");
         auto& process = storage.get<Process>("test.process");
-        auto& program = process.get_program();
-        auto& state = process.get_state();
+        auto& program = process.data.program;
+        auto& state = process.data.state;
 
-        if (state.is_finished())
+        if (state.finished())
           return void(cout << "[loop-test] Process already finished.");
 
         // === Debug: Show context stack ===
@@ -985,12 +965,12 @@ namespace csopesy::command {
       .flags = {},
 
       .execute = [](const Command &command, Shell &shell) {   
-        if (!shell.get_screen().is_main())
+        if (!shell.screen.is_main())
           return void(cout << "Not in the Main Menu.\n");
 
-        const auto& data = shell.get_scheduler().get_data();
-        const auto& running = data.get_running_processes();
-        const auto& finished = data.get_finished_processes();
+        auto& data = shell.scheduler.data;
+        auto running = data.cores.get_running_pids();
+        auto& finished = data.finished_pids;
 
         auto log = ofstream("csopesylog.txt");
         auto separator = "---------------------------------------------\n";
@@ -1001,15 +981,15 @@ namespace csopesy::command {
         cout << "Running processes:\n";
         log << "Running processes:\n";
 
-        for (const auto& ref: running) {
-          const auto& proc = ref.get();
+        for (const auto& pid: running) {
+          auto& process = data.get_process(pid);
           auto line = format(
             "  {:<10} ({})  Core: {:<2}  {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_core(),
-            proc.get_program().get_ip(),
-            proc.get_program().size()
+            process.data.name,
+            timestamp(process.data.stime),
+            process.data.core_id,
+            process.data.program.ip,
+            process.data.program.size()
           );
           cout << "\033[36m" << line << "\033[0m";
           log << line;
@@ -1018,14 +998,14 @@ namespace csopesy::command {
         cout << "\nFinished processes:\n";
         log << "\nFinished processes:\n";
 
-        for (const auto& ref: finished) {
-          const auto& proc = ref.get();
+        for (const auto& pid: finished) {
+          auto& process = data.get_process(pid);
           auto line = format(
             "  {:<10} ({})  Finished      {} / {}\n",
-            proc.get_name(),
-            timestamp(proc.get_stime()),
-            proc.get_program().size(),
-            proc.get_program().size()
+            process.data.name,
+            timestamp(process.data.stime),
+            process.data.program.size(),
+            process.data.program.size()
           );
           cout << "\033[36m" << line << "\033[0m";
           log << line;
@@ -1347,6 +1327,7 @@ namespace csopesy {
   using std::ranges::any_of;
   using std::ranges::find_if;
   using std::ranges::none_of;
+  using std::ranges::count_if;
   using std::any_cast;
   using std::erase_if;
   using std::move;
@@ -1859,107 +1840,105 @@ namespace csopesy {
 
   /**
    * Represents a single CPU core in the scheduler system.
-   * Each core may run one process job at a time and ticks independently in a thread.
+   * Each core may run one process job at a time and job_ticks independently in a thread.
    */
   class Core {
     public:
-    using ProcessRef = ref<Process>;
-    using ProcessCref = ref<const Process>;
-    using Job = optional<ProcessRef>;
-    using PreemptionPolicy = function<bool(const Core&)>;
+    using Job = Process*;
+    using PreemptHandler = function<bool(const Core&)>;
 
-    private:   
-    static constexpr auto tick_delay = 1ms;
-    
+    public:  
     uint id;                  ///< Core ID
-    uint ticks = 0;           ///< Ticks since the current job was assigned
-    Job job;                  ///< Currently assigned process (if any)
-    Thread thread;            ///< Background ticking thread
+    
+    // === Job State ===
+    Job job;                  ///< A 'slot' for the currently assigned process (if any)
+    uint job_ticks = 0;       ///< Ticks since the current job was assigned
+    bool can_release = false; ///< Flag to indicate pending release
+    PreemptHandler preempt_handler; ///< Optional strategy-injected logic
+    
+    // === Execution Control ===
     abool running = false;    ///< Atomic flag for tick loop
-    PreemptionPolicy preempt_policy; ///< Optional strategy-injected logic
-    bool should_release = false;     ///< Flag to indicate pending release
+    Thread thread;            ///< Background ticking thread
 
-    public:
+    // === Methods ===
 
-    /** Constructs a scheduler core with the given ID and starts the thread. */
-    Core(uint id = 0) : id(id) { start(); }
+    /** @brief Constructs a scheduler core with the given ID and starts the thread. */
+    Core(uint id=0) : id(id) { start(); }
 
-    /** Destructor stops the tick thread cleanly. */
+    /** @brief Destructor stops the tick thread cleanly. */
     ~Core() { stop(); }
 
-    /** Assigns a process to this core and updates its core ID. */
-    void assign(ProcessRef ref) {
-      job = move(ref);
-      job->get().set_core(id);
-      ticks = 0;
-      should_release = false;
-    }
+    /** @brief Called by scheduller to assign a process to this core. */
+    void assign(Process& process) { set_job(&process, id, true, false); }
 
-    /** Returns the currently assigned job. */
+    /** @brief Called by scheduller to release the current job. */
+    void release() { if (job) set_job(nullptr, -1, true, false); }
+
+    /** @brief True if idle. */
+    bool is_idle() const { return job == nullptr; }
+
+    /** @brief Returns the currently assigned job. */
     Process& get_job() {
-      if (job) return job->get();
+      if (job) return *job;
       throw runtime_error("Core::get_job: No job is currently assigned");
     }
 
-    /** Returns the core ID. */
-    uint get_id() const { return id; }
+    /** @brief Injects a preemption handler (optional). */
+    void set_preempt(PreemptHandler handler) { preempt_handler = handler; }
 
-    /** True if idle. */
-    bool is_idle() const { return !job.has_value(); }
-
-    /** True if this core wants to release the current job. */
-    bool wants_release() const { return should_release; }
-
-    /** Returns ticks since this job started. */
-    uint ticks_on_job() const { return ticks; }
-
-    /** Injects a preemption policy (optional). */
-    void set_preemption_policy(PreemptionPolicy policy) {
-      preempt_policy = policy;
-    }
-
-    /** Releases the current job (must be called manually by scheduler). */
-    void release() {
-      if (!job) return;
-      job->get().reset_core();
-      job.reset();
-      ticks = 0;
-      should_release = false;
-    }
 
     private:
 
-    /** Starts background thread. */
+
+    /** @brief Simulates one CPU tick. */
+    void tick() {
+      // Skip tick if no job is currently assigned
+      if (!job) return;
+
+      // Execute one instruction step for the assigned process
+      auto& process = *job;
+      process.step();
+
+      // Increment the tick counter for time tracking
+      ++job_ticks;
+
+      // Mark the process as releasable if it has finished execution
+      if (process.data.state.finished())
+        can_release = true;
+
+      // Check if preemption conditions are met (e.g., quantum exceeded)
+      if (preempt_handler && preempt_handler(*this))
+        can_release = true;
+    }
+
+    /** @brief Starts background thread. */
     void start() {
       running = true;
       thread = Thread([this] {
         while (running) {
           tick();
-          sleep_for(tick_delay);
+          sleep_for(1ms);
         }
       });
     }
 
-    /** Stops thread cleanly. */
+    /** @brief Stops thread cleanly. */
     void stop() {
       running = false;
       if (thread.joinable()) 
         thread.join();
     }
 
-    /** Simulates one CPU tick. */
-    void tick() {
-      if (!job) return;
+    // === Helper methods ===
 
-      auto& process = job->get();
-      process.step();
-      ++ticks;
+    void set_job(Job new_job, int core_id, bool reset_ticks, bool release_flag) {
+      job = new_job;
 
-      if (process.get_state().is_finished())
-        should_release = true;
+      if (auto& process = *job; new_job) 
+        process.data.core_id = core_id;
 
-      if (preempt_policy && preempt_policy(*this))
-        should_release = true;
+      job_ticks = reset_ticks ? 0 : job_ticks;
+      can_release = release_flag;
     }
   };
 }
@@ -1982,32 +1961,42 @@ namespace csopesy {
    * control (start/stop) for all managed `Core`s.
    */
   class CoreManager {
-    using CorePtr = unique_ptr<Core>;   // We need pointers since we can't move or copy threads
-    using Cores = vector<CorePtr>;
-    using CoreRefs = vector<ref<Core>>;
+    using CorePtr = unique_ptr<Core>;    // Internal ownership via unique_ptr
+    using CoreRefs = vector<ref<Core>>;  // For exposing multiple cores
+    using Cores = vector<CorePtr>;       // Internal list of cores
+    using list = vector<uint>;           // For returning PID lists
     
     Cores cores;
 
     public:
 
-    /** Constructs and initializes a given number of cores. */
+    /** Constructs and initializes a given number of cores */
     CoreManager(uint size=0) { resize(size); }
 
-    /** Clears and reinitializes the core list with the specified number of cores. */
+    /** Clears and reinitializes the core list with the specified number of cores */
     void resize(uint size) {
       cores.clear();
       cores.reserve(size);
-      for (uint i = 0; i < size; ++i)
+      for (uint i=0; i < size; ++i)
         cores.emplace_back(make_unique<Core>(i));
     }
 
     // === Accessors ===
 
+    /** @brief Returns number of cores. */
     uint size() const { return cores.size(); }
-    Core& get(uint i) { return *cores[i]; }
-    const Core& get(uint i) const { return *cores[i]; }
 
-    /** Returns references to all cores. */
+    /** @brief Access a specific core by index. */
+    Core& get(uint i) { return *cores[i]; }
+
+    /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
+    float get_usage() const {
+      if (cores.empty()) return 0.0f;
+      uint busy = count_if(cores, [](auto& ptr) { return !ptr->is_idle(); });
+      return cast<float>(busy) / cast<float>(cores.size());
+    }
+
+    /** Returns references to all cores */
     CoreRefs get_all() {
       auto all = CoreRefs();
       all.reserve(cores.size());
@@ -2017,7 +2006,7 @@ namespace csopesy {
       return all;
     }
 
-    /** Returns a list of references to all idle cores. */
+    /** Returns a list of references to all idle cores */
     CoreRefs get_idle() {
       auto idle = CoreRefs();
       idle.reserve(cores.size());
@@ -2029,7 +2018,7 @@ namespace csopesy {
       return idle;
     }
 
-    /** Returns a list of references to all busy (non-idle) cores. */
+    /** Returns a list of references to all busy (non-idle) cores */
     CoreRefs get_busy() {
       auto busy = CoreRefs();
       busy.reserve(cores.size());
@@ -2039,6 +2028,22 @@ namespace csopesy {
           busy.push_back(ref(*ptr));
       }
       return busy;
+    }
+
+    /** @brief Returns a list of IDs for all busy (non-idle) cores. */
+    list get_busy_core_ids() {
+      list ids;
+      for (auto& ref: get_busy())
+        ids.push_back(ref.get().id);
+      return ids;
+    }
+
+    /** Returns a list of pids to all busy (non-idle) cores */
+    list get_running_pids() {
+      list pids;
+      for (auto& ref: get_busy())
+        pids.push_back(ref.get().get_job().data.id);
+      return pids;
     }
   };
 }
@@ -2391,9 +2396,9 @@ namespace csopesy::instruction {
     return {
       .opcode = "ENDFOR",
       .open_opcode = "FOR",
-      .execute = [](const Instruction& inst, ProcessData& proc) {
-        auto& program = proc.get_program();
-        auto& context = program.get_context();
+      .execute = [](const Instruction& inst, ProcessData& process) {
+        auto& program = process.program;
+        auto& context = program.context;
 
         // Check if block is inside a FOR loop
         if (!context.matches("FOR"))
@@ -2402,13 +2407,13 @@ namespace csopesy::instruction {
         auto& frame = context.top();
 
         // Cache exit address if it's not set
-        const auto& for_inst = program.get_instruction(frame.start);
+        auto& for_inst = program.script.at(frame.start);
         if (for_inst.exit == 0)
-          for_inst.exit = program.get_ip() + 1;
+          for_inst.exit = program.ip + 1;
 
         // Decrement loop count; jump back if more iterations remain
         if (--frame.count > 0)
-          return void(program.set_ip(frame.start));
+          return void(program.ip = frame.start);
 
         // Loop finished - pop the context frame
         context.pop();
@@ -2438,10 +2443,10 @@ namespace csopesy::instruction {
       
       // Use cached exit if available
       if (inst.exit != 0)
-        return program.set_ip(inst.exit);
+        return void(program.ip = inst.exit);
       
-      auto start = program.get_ip();
-      auto& script = program.get_script();
+      auto start = program.ip;
+      auto& script = program.script;
       uint depth = 1;
 
       // Otherwise, scan ahead to find the matching ENDFOR
@@ -2452,8 +2457,7 @@ namespace csopesy::instruction {
         
         // If matching ENDFOR is found, cache exit address and exit loop
         if (depth == 0) {
-          inst.exit = i+1;  
-          program.set_ip(inst.exit);
+          program.ip = inst.exit = i + 1;
           return;
         }
       }
@@ -2466,15 +2470,15 @@ namespace csopesy::instruction {
       .exit_opcode = "ENDFOR",
       .signatures = {{ Param::UInt(1, 5) }},
       .execute = [&](const Instruction& inst, ProcessData& process) {
-        auto& program = process.get_program();
+        auto& program = process.program;
         auto count = stoul(inst.args[0]);
         
         // Skip loop entirely if loop count is zero
         if (count == 0)
           return skip_block(program, inst);
         
-        auto& context = program.get_context();
-        auto ip = program.get_ip();
+        auto& context = program.context;
+        auto ip = program.ip;
         
         // Push context if this FOR hasn't been visited yet
         if (!context.starts_at(ip))
@@ -2504,8 +2508,8 @@ namespace csopesy::instruction {
         { Param::Str() },
         { Param::Str(), Param::Var()},
       },
-      .execute = [](const Instruction& inst, ProcessData& proc) {
-        proc.log(inst.args[0]);
+      .execute = [](const Instruction& inst, ProcessData& process) {
+        process.log(inst.args[0]);
       },
     };
   }
@@ -2747,53 +2751,46 @@ namespace csopesy::Position {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "ProcessState.hpp"
-#include "ProcessMemory.hpp"
-#include "ProcessProgram.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
 #include "ProcessData.hpp"
-#include "ProcessExecutor.hpp"
 
 namespace csopesy {
 
   class Process {
-    using list = ProcessData::list;
-    ProcessData data;
-
+    using Interpreter = InstructionInterpreter;
+    inline static Interpreter interpreter = Interpreter::instance();
+    
     public:
-    Process(str name, uint pid) : data(move(name), pid) {}
+    ProcessData data; ///< Data container of process
 
-    // === ProcessExecutor interface ===
-    bool step() { return ProcessExecutor::step(data); }
-
-    // === ProcessData interface ===
-
-    // Mutators for ProcessData components
+    // === Methods ===
+    Process(uint pid, str name): data(move(name), pid) {}
+    
+    /** @brief Appends a log message (e.g. from PRINT instruction). */
     void log(str line) { data.log(move(line)); }
-    void set_core(int id) { data.set_core(id); }
-    void reset_core() { data.reset_core(); }
 
-    // Accessors for ProcessData components
-    const str& get_name() const { return data.get_name(); }
-    const uint get_id() const { return data.get_id(); }
-    const int  get_core() const { return data.get_core(); }
-    const Time& get_stime() const { return data.get_stime(); }
-    const list& get_logs() const { return data.get_logs(); }
+    /** @brief Executes a single instruction step for the given process. */
+    bool step() {
+      if (data.state.finished() || data.program.finished())
+        return data.state.finish(), true;
 
-    // Accessors for ProcessData sub-components
-    ProcessData& get_data() { return data; }
-    ProcessState& get_state() { return data.get_state(); }
-    ProcessMemory& get_memory() { return data.get_memory(); }
-    ProcessProgram& get_program() { return data.get_program(); }
-    const ProcessData& get_data() const { return data; }
-    const ProcessState& get_state() const { return data.get_state(); }
-    const ProcessMemory& get_memory() const { return data.get_memory(); }
-    const ProcessProgram& get_program() const { return data.get_program(); }
+      const auto ip = data.program.ip;
+      const auto& inst = data.program.script.at(ip);
 
-    /** Creates a random process with the given name. */
-    static Process create(str name, uint pid, Instruction::Script script) {
-      Process proc(std::move(name), pid);
-      proc.get_program().load_script(move(script));
-      return proc;
+      interpreter.execute(inst, data);
+
+      if (ip == data.program.ip)
+        data.program.ip = ip + 1;
+
+      return false;
+    }
+
+    /** @brief Creates a process with a random instruction script (to be implemented). */
+    static Process create(uint pid, str name, uint size) {
+      auto proc = Process(pid, move(name));
+      auto script = interpreter.generate_script(size);
+      proc.data.program.load_script(script);
+      return move(proc);
     }
   };
 }
@@ -2821,91 +2818,33 @@ namespace csopesy {
    */
   class ProcessData {
     public:
+
     using list = vector<str>;
 
-    private:
-    str name;               // Human-readable process name (e.g. p01, p02)
-    uint id;                // Unique process ID
-    int core = -1;          // ID of the core this process is assigned to (-1 if unassigned)
-    list logs;              // Output logs collected from PRINT instructions
-    Time stime;             // Timestamp of when the process was created
-    ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
-    ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
-    ProcessProgram program; // List of instructions and execution context
+    // === Identity ===
+    str name;               ///< Human-readable process name (e.g. p01, p02)
+    uint id;                ///< Unique process ID
+    
+    // === Properties ===
+    list logs;              ///< Output logs collected from PRINT instructions
+    
+    // === Scheduling/Execution Metadata ===
+    int core_id = -1;       ///< ID of the core this process is assigned to (-1 if unassigned)
+    Time stime;             ///< Timestamp of when the process was created
+    
+    // === Components ===
+    ProcessState state;     ///< Current state of the process (Ready, Running, Sleeping, Finished)
+    ProcessMemory memory;   ///< Key-value variable store (e.g. for DECLARE, ADD, etc.)
+    ProcessProgram program; ///< List of instructions and execution context
 
-    public:
+    // === Methods ===
 
-    /** Constructs a process with a given name and process ID. */
+    /** @brief Constructs a process given name and process ID. */
     ProcessData(str name, uint id): 
       name(move(name)), id(id), stime(Clock::now()) {}
 
-    /** Append a log message (used for PRINT instructions) */
+    /** @brief Append a log message (used for PRINT instructions) */
     void log(str line) { logs.push_back(move(line)); }
-
-    // === Core mutators ===
-    void set_core(int id) { core = id; }
-    void reset_core() { core = -1; }
-
-    // === Getters ===
-    const str& get_name() const { return name; }
-    const uint get_id() const { return id; }
-    const int get_core() const { return core; }
-    const Time& get_stime() const { return stime; }
-    const list& get_logs() const { return logs; }
-
-    // === Accessors for sub-components ===
-    ProcessState& get_state() { return state; }
-    ProcessMemory& get_memory() { return memory; }
-    ProcessProgram& get_program() { return program; }
-    const ProcessState& get_state() const { return state; }
-    const ProcessMemory& get_memory() const { return memory; }
-    const ProcessProgram& get_program() const { return program; }
-  };
-}
-
-------------------------------
- FILE:  ProcessExecutor.hpp
- PATH:  core\process\ProcessExecutor.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
-#include "core/process/ProcessData.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
-
-namespace csopesy {
-  /**
-   * @brief Executes one step of a process.
-   * 
-   * ProcessExecutor is a stateless utility that performs a single execution step
-   * for a given ProcessData object. It handles sleeping, instruction execution,
-   * and FOR loop semantics.
-   */
-  class ProcessExecutor {
-    using Interpreter = InstructionInterpreter;
-    inline static Interpreter interpreter = Interpreter::instance();
-
-    public:  
-    static bool step(ProcessData& proc) {
-      auto& prog  = proc.get_program();
-      auto& state = proc.get_state();
-
-      // Exit if program already finished
-      if (state.is_finished() || prog.is_finished())
-        return state.set_finished(), true;
-
-      // Fetch and execute instruction
-      const auto ip = prog.get_ip();
-      const auto& inst = prog.get_script()[ip];
-      
-      interpreter.execute(inst, proc);
-      
-      // This line checks if IP was changed. If not, advance it.
-      if (ip == prog.get_ip())
-        prog.set_ip(ip + 1);
-
-      return false;
-    }
   };
 }
 
@@ -2921,9 +2860,9 @@ namespace csopesy {
 namespace csopesy {
   class ProcessMemory {
     using map = unordered_map<str, uint>;
-    map symbol_table;
-
+    
     public:
+    map symbol_table;
 
     /** Memory mutators */
     void set(str key, uint value) {
@@ -2958,47 +2897,38 @@ namespace csopesy {
 #include "types.hpp"
 
 namespace csopesy {
-
-  /** A program that can be executed by a process. */
+  
+  /**
+   * @brief A program that can be executed by a process.
+   * 
+   * Contains a flat list of instructions, an instruction pointer,
+   * and a control context stack (used by FOR loops).
+   */
   class ProcessProgram {
     using Script = Instruction::Script;
     using Stack = ContextStack;
 
+    public:
     Script script;  ///< Flat list of all program instructions
     Stack context;  ///< Stack of active loop contexts
     uint ip = 0;    ///< Current instruction pointer
 
-    public:
+    // === Methods ===
 
-    /** Append a new instruction to the program */
+    /** @brief Loads a new instruction script and resets execution state. */
     void load_script(Script new_script) { 
       script = move(new_script);
       context.clear();
       ip = 0;  
     }
     
-    /** Check if the program has completed execution. */
-    bool is_finished() const { return ip >= script.size(); }
-
-    /** Get the total number of instructions in the program. */
+    /** @brief Returns the size of the script. */
     uint size() const { return script.size(); }
+    
+    /** @brief Check if the program has completed execution. */
+    bool finished() const { return ip >= script.size(); }
 
-    /** Access and control the instruction pointer. */
-    void set_ip(uint new_ip) { ip = new_ip; }
-    uint get_ip() const { return ip; }
-
-    /** Returns a reference to the instruction at the given address. */
-    const Instruction& get_instruction(uint ip) { return script.at(ip); }
-
-    /** Access list of all instructions. */
-    Script& get_script() { return script; }
-    const Script& get_script() const { return script; }
-
-    /** Access the loop context stack. */
-    Stack& get_context() { return context; }
-    const Stack& get_context() const { return context; }
-
-    /** Returns a formatted view of all instructions with the current IP highlighted. */
+    /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
     str view_script() const {
       auto stream = osstream();
 
@@ -3025,7 +2955,7 @@ namespace csopesy {
       return move(stream).str();
     }
 
-    /** Returns a formatted view of the current context stack. */
+    /** @brief Returns a formatted view of the current context stack. */
     str view_context() const {
       auto stream = osstream();
 
@@ -3058,30 +2988,39 @@ namespace csopesy {
 #include "types.hpp"
 
 namespace csopesy {
+
+  /**
+   * @brief Tracks the execution state of a process.
+   * 
+   * Supports transitions between Ready, Sleeping, and Finished states,
+   * and stores the number of ticks remaining for a sleeping process.
+   */
   class ProcessState {
-    public:
-    State state = State::Ready;
     uint sleep_ticks = 0;
+    
+    public:
+    State value = State::Ready;
 
+    // === State Queries ===
+
+    /** @brief Returns true if the process is currently sleeping. */
+    bool sleeping() const { return value == State::Sleeping; }
+    
+    /** @brief Returns true if the process has finished execution. */
+    bool finished() const { return value == State::Finished; }
+    
+    // === State Transitions ===
+
+    /** @brief Sets the process state to Ready. */
+    void ready() { value = State::Ready; }
+
+    /** @brief Sets the process state to Finished. */
+    void finish() { value = State::Finished; }
+
+    /** @brief Puts the process to sleep for a number of ticks. */
     void sleep_for(uint ticks) {
-      state = State::Sleeping;
+      value = State::Sleeping;
       sleep_ticks = ticks;
-    }
-
-    bool is_sleeping() const {
-      return state == State::Sleeping;
-    }
-
-    bool is_finished() const {
-      return state == State::Finished;
-    }
-
-    void set_ready() {
-      state = State::Ready;
-    }
-
-    void set_finished() {
-      state = State::Finished;
     }
   };
 }
@@ -3104,13 +3043,20 @@ namespace csopesy {
 
   /** A loop frame from a FOR-like instruction. */
   struct ContextFrame {
-    str  opcode;  ///< Control frame opcode, e.g., "FOR"
-    uint start;   ///< Address where the loop starts
-    uint count;   ///< Number of iterations remaining
+    str  opcode;  // Control frame opcode, e.g., "FOR"
+    uint start;   // Address where the loop starts
+    uint count;   // Number of iterations remaining
   };
 
+  /**
+    * @brief A stack structure used for managing nested FOR loop contexts.
+    * 
+    * Stores control frames for tracking loop entry points, exit conditions, 
+    * and iteration counts during process execution.
+    */
   class ContextStack {
     using Stack = vector<ContextFrame>;
+    
     Stack stack;
 
     public:
@@ -3160,210 +3106,9 @@ namespace csopesy {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/process/Process.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
-#include "types.hpp"
-
-namespace csopesy {
-  class Scheduler {
-    using Interpreter = InstructionInterpreter;
-    using ProcList    = List<Process>;
-    using ProcRefList = vector<ref<const Process>>;
-    using CoreList    = vector<optional<ref<Process>>>;
-
-    ProcList processes;
-    ProcRefList finished;
-    queue<ref<Process>> rqueue;
-    CoreList cores;
-    SchedulerConfig config;
-    uint tick_count = 0;
-    bool generating = false;
-    uint next_process_id = 1;
-    Interpreter& interpreter;
-
-    public:
-
-    Scheduler(): interpreter(Interpreter::instance()) {}
-
-    /** Add a process to the global process list */
-    void add_process(Process proc) {
-      processes.push_back(move(proc));
-      rqueue.push(ref(processes.back()));
-    }
-
-    /** Advance 1 CPU tick */
-    void tick() {
-      ++tick_count;
-
-      // Dummy generation
-      if (generating && tick_count % config.batch_process_freq == 0)
-        create_dummy_process();
-
-      if (config.scheduler == "fcfs")
-        tick_fcfs();
-      else
-        return; 
-      tick_rr();
-    }
-
-    void tick_fcfs() {
-      // === Phase 1: Assign processes to idle cores
-      
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
-
-        // Skip if this core is already running something
-        if (core.has_value()) continue;
-
-        // Skip if no ready process available
-        while (!rqueue.empty()) {
-          auto proc_ref = rqueue.front(); rqueue.pop();
-          auto& proc = proc_ref.get();
-
-          // Sanity check: skip if process is already finished
-          if (proc.get_state().is_finished())
-            continue;
-
-          // Sanity check: should not be assigned to a core already
-          if (proc.get_core() != -1)
-            continue;
-
-          // Assign to this core
-          core = proc_ref;
-          proc.set_core(static_cast<int>(i));
-          break;
-        }
-      }
-
-      // === Phase 2: Step all active cores
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
-        if (!core.has_value()) continue;
-
-        auto& proc = core->get();
-
-        // Sanity check: core mismatch
-        if (proc.get_core() != static_cast<int>(i)) {
-          proc.log(format(
-            "[tick] ERROR: Core mismatch â€” process p{:02} claims core {}, but is on core {}",
-            proc.get_id(), proc.get_core(), i
-          ));
-        }
-
-        // Step the process
-        step_process(proc);
-
-        // If the process finished, release the core
-        if (proc.get_state().is_finished()) {
-          proc.log(format("[tick] finished on core {}", i));
-          proc.reset_core();
-          core.reset();
-        }
-      }
-    }
-
-    void tick_rr() {
-      // Round Robin: assign cores in a round-robin fashion
-      for (uint i = 0; i < cores.size(); ++i) {
-        auto& core = cores[i];
-
-        if (!core.has_value()) {
-          if (!rqueue.empty()) {
-            core = rqueue.front();
-            rqueue.pop();
-          }
-          continue;
-        }
-
-        auto& proc = core.value().get();
-        step_process(proc);
-
-        if (proc.get_state().state == State::Finished) {
-          core.reset();
-        } else {
-          // Re-queue the process if it is still running
-          rqueue.push(ref(proc));
-        }
-      }
-    }
-
-    /** Execute a single instruction for one process */
-    void step_process(Process& proc) {
-      if (proc.step())
-        finished.push_back(cref(proc));
-    }
-
-    /** Generate one dummy process */
-    void create_dummy_process() {
-      auto name = format("p{:02}", next_process_id);
-      auto proc = Process(name, next_process_id++);
-     
-      // Generate random instruction script
-      uint size = Random::num(config.min_ins, config.max_ins);
-      auto script = interpreter.generate_script(size);
-
-      // Load the script into the program
-      proc.get_program().load_script(move(script));
-
-      // Add process to process list
-      add_process(move(proc));
-    }
-
-    void start_generation() { generating = true; }
-    void stop_generation()  { generating = false; }
-    bool is_generating() const { return generating; }
-
-    const ProcList& get_processes() const { return processes; }
-    const Process& get_last_process() const { return processes.back(); }
-    const ProcRefList& get_finished_processes() const { return finished; }
-
-    vector<ref<const Process>> get_running_processes() const {
-      vector<ref<const Process>> running;
-      for (const auto& proc : processes) {
-        if (!proc.get_program().is_finished())
-          running.push_back(cref(proc));
-      }
-      return running;
-    }
-
-    bool all_finished() const {
-      for (const auto& proc : processes)
-        if (!proc.get_program().is_finished())
-          return false;
-      return true;
-    }
-
-    SchedulerConfig& get_config() { return config; }
-    const SchedulerConfig& get_config() const { return config; }
-
-    void set_config(SchedulerConfig new_config) {
-      config = move(new_config);
-
-      // Resize core list to match num_cpu, all cores unassigned (nullopt)
-      cores = CoreList(config.num_cpu, std::nullopt);
-
-      // Resize per-core quantum tracking for RR (default 0)
-      // core_quantums = vector<uint>(config.num_cpu, 0);
-
-      // Optional debug log
-      cout << format("[config] Initialized {} CPU cores.\n", config.num_cpu);
-    }
-
-    uint get_tick_count() const { return tick_count; }
-    bool is_initialized() const { return config.initialized; }
-  };
-}
-
-------------------------------
- FILE:  Scheduler.new.hpp
- PATH:  core\scheduler\Scheduler.new.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "core/process/Process.hpp"
-#include "core/execution/Core.hpp"
+
 #include "strategies/_all.hpp"
 #include "SchedulerStrategy.hpp"
 #include "SchedulerData.hpp"
@@ -3379,77 +3124,62 @@ namespace csopesy {
    */
   class Scheduler {
     using Interpreter = InstructionInterpreter;
-    using ProcessRef = Core::ProcessRef;
     using queue = vector<str>;
     using list = vector<uint>;
 
-    // === State ===
-    uint ticks = 0;             ///< Global tick counter
-    bool generating = false;    ///< Flag indicating auto-generation mode
-    queue proc_queue;           ///< Deferred generation queue
+    queue names;                // Deferred generation queue for user-inserted processes
     
-    // === Components ===
-    Interpreter& interpreter;   ///< Shared instruction generator instance
-    SchedulerData data;         ///< Internal state (cores, processes, queue)
-    SchedulerStrategy strategy; ///< Contains the scheduler strategy
-
     public:
 
-    /** Registers all available scheduling strategies. */
-    Scheduler(): 
-      interpreter(Interpreter::instance()), 
-      strategy(scheduler::make_strategy("fcfs", SchedulerConfig())){}
+    // === Internal State ===
+    uint ticks = 0;             // Global tick counter
+    bool generating = false;    // Flag indicating auto-generation mode
+    
+    // === Components ===
+    Interpreter& interpreter;   // Shared instruction generator instance
+    SchedulerData data;         // Internal state (cores, processes, queue)
+    SchedulerStrategy strategy; // Contains the scheduler strategy
 
-    /** Executes the active strategy logic and increments the tick count. */
+    // === Methods ===
+
+    /** @brief Registers all available scheduling strategies. */
+    Scheduler(): 
+      interpreter(Interpreter::instance()),
+      strategy(scheduler::make_strategy("fcfs", SchedulerConfig())) {}
+
+    /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
 
       // 1. Generate any explicitly enqueued processes
-      for (auto& name: proc_queue)
+      for (auto& name: names)
         generate_process(move(name));
-      proc_queue.clear();
+      names.clear();
       
       // 2. Possibly auto-generate processes this tick
       if (generating && interval_has_elapsed())
         generate_process();
 
       // 3. Update running/finished state and handle preemption
-      auto& running = data.get_running();
-      auto& finished = data.get_finished();
-      running.clear();
-
-      for (auto& ref : data.get_cores().get_all()) {
+      for (auto& ref: data.cores.get_busy()) {
         auto& core = ref.get();
-        bool idle = core.is_idle();
 
-        if (!idle)
-          running.insert(core.get_job().get_id());
-
-        if (!idle && core.wants_release()) {
-          auto& proc = core.get_job();
+        if (core.can_release) {
+          auto& process = core.get_job();
           core.release();
 
-          if (proc.get_state().is_finished())
-            finished.push_back(proc.get_id());
+          if (process.data.state.finished())
+            data.finished_pids.push_back(process.data.id);
           else
-            data.get_rqueue().push(proc.get_id());
+            data.rqueue.push(process.data.id);
         }
       }
-
-      // // Debug: Show current running and finished sets
-      // cout << format("[Tick {}] Running PIDs: ", ticks);
-      // for (auto pid : running) cout << pid << " ";
-      // cout << "\n";
-
-      // cout << format("[Tick {}] Finished PIDs: ", ticks);
-      // for (auto pid : finished) cout << pid << " ";
-      // cout << "\n";
 
       // 4. Schedule ready processes to idle cores
       strategy.tick(data);
       ++ticks;
     }
 
-    /** Applies a new configuration and resizes core state accordingly. */
+    /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
       // 1. Store config inside SchedulerData
       data.set_config(config);
@@ -3458,55 +3188,42 @@ namespace csopesy {
       strategy = scheduler::make_strategy(config.scheduler, config);
 
       // 3. Inject per-core preemption policy from strategy
-      if (strategy.get_preemption_policy()) {
-        for (auto& ref : data.get_cores().get_all()) {
-          ref.get().set_preemption_policy(strategy.get_preemption_policy());
-        }
+      if (strategy.get_prempt()) {
+        for (auto& ref: data.cores.get_all())
+          ref.get().set_preempt(strategy.get_prempt());
       }
     }
 
     // === Generation Control ===
-    void enqueue_process(str name) { proc_queue.push_back(move(name)); }
+    void enqueue_process(str name) { names.push_back(move(name)); }
     void generate(bool flag) { generating = flag; }
-    bool is_generating() const { return generating; }
-
-    // === Accessors ===
-    uint get_ticks() const { return ticks; }
-    bool is_initialized() const { return data.get_config().initialized; }
-    
-    // === Component Accessors ===
-    SchedulerData& get_data() { return data; }
-    SchedulerConfig& get_config() { return data.get_config(); }
-    const SchedulerData& get_data() const { return data; }
-    const SchedulerConfig& get_config() const { return data.get_config(); }
 
     private:
 
     // === Helper methods ===
 
-    /** Helper that returns true if the current tick matches the process generation interval. */
+    /** @brief Helper that returns true if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
-      uint freq = data.get_config().batch_process_freq;
+      uint freq = data.config.batch_process_freq;
       return freq > 0 && (ticks % freq == 0);
     }
 
-    /** Internal helper that generates a process with optional name. */
+    /** @brief Internal helper that generates a process with optional name. */
     uint generate_process(Str name=nullopt) { 
-      // Instantiate the process, reserve 0 for main, so start PIDs from 1
-      uint pid = data.generate_pid();
-      str new_name = name.value_or(format("p{:02}", pid));
-      auto proc = Process(move(new_name), pid);
-      
-      // Randomly generate a script with random instructions and load into program
-      auto& config = data.get_config();
-      auto script = interpreter.generate_script(Random::num(config.min_ins, config.max_ins));
-      proc.get_program().load_script(move(script));
+
+      // Instantiate the process
+      uint pid = data.new_pid();
+      auto process = Process::create(
+        pid,
+        name.value_or(format("p{:02}", pid)), 
+        Random::num(data.config.min_ins, data.config.max_ins)
+      );
 
       // Add to table first so it's owned and safe to reference
-      data.add_process(move(proc));
+      data.add_process(move(process));
 
       // Enqueue by PID
-      data.get_rqueue().push(pid);
+      data.rqueue.push(pid);
       return pid;
     }
   };
@@ -3519,9 +3236,7 @@ namespace csopesy {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/utility/EventEmitter.hpp"
 #include "core/process/Process.hpp"
-#include "core/execution/Core.hpp"
 #include "core/execution/CoreManager.hpp"
 #include "types.hpp"
 
@@ -3534,108 +3249,69 @@ namespace csopesy {
    * Also handles state reset and tick progression during simulation.
    */
   class SchedulerData {
-    using ProcessCref = Core::ProcessCref;
-    using ProcessCrefs = vector<ProcessCref>;
-    using ProcessRef = Core::ProcessRef;
-    using ProcessPtr = unique_ptr<Process>;
     using Cores = CoreManager;
-
+    using ProcessPtr = unique_ptr<Process>;
     using queue = queue<uint>;
     using map = unordered_map<uint, ProcessPtr>;
-    using set = unordered_set<uint>;
     using list = vector<uint>;
 
+    auint next_pid;         ///< Monotonic PID counter for generating unique process IDs
+    
+    public:
     SchedulerConfig config; ///< Runtime configuration settings
+    Cores cores;            ///< Reference to the list of scheduler cores
     map processes;          ///< Container for all processes
     queue rqueue;           ///< Ready queue of processes waiting to be scheduled
-    Cores cores;            ///< Reference to the list of scheduler cores
-    set running;            ///< PIDs of currently running processes
-    list finished;          ///< PIDs of finished processes 
-    auint next_pid;         ///< Monotonic PID counter for generating unique process IDs
+    list finished_pids;     ///< PIDs of finished processes 
 
-    public:
+    // === Methods ===
 
-    /** Constructs a SchedulerData context with the given number of cores. */
-    SchedulerData(uint size=1): cores(size) {}
+    /** @brief Constructs a SchedulerData context with the given number of cores. */
+    SchedulerData(uint size=1): cores(size), next_pid(1) {}
 
-    /** Sets configuration and resizes cores. */
+    /** @brief Sets configuration and resizes cores. */
     void set_config(SchedulerConfig new_config) {
       config = move(new_config);
       cores.resize(config.num_cpu);
     }
 
-    /** Returns a unique, incrementing process ID. */
-    uint generate_pid() { return next_pid++; }
+    /** @brief Returns a unique, incrementing process ID. */
+    uint new_pid() { return next_pid++; }
 
-    /** Adds a process to the process table. */
+    /** @brief Adds a process to the process table. */
     void add_process(Process proc) {
-      processes.emplace(proc.get_id(), make_unique<Process>(move(proc)));
+      processes.emplace(proc.data.id, make_unique<Process>(move(proc)));
     }
 
-    /** Check if a process with the given ID exists in the process table. */
+    /** @brief Check if a process with the given ID exists in the process table. */
     bool has_process(uint id) const { return processes.contains(id); }
       
-    /** Check if a process with the given name exists in the process table. */
-    bool has_process(const str& name) const {
-      return any_of(processes, [&](const auto& pair) {
-        return pair.second->get_name() == name;
-      });
-    }
+    /** @brief Check if a process with the given name exists in the process table. */
+    bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
 
-    // === Component Accessors ===
+    // === Accessors ===
     
-    /** Returns a reference wrapper to the process with the given PID. */
-    ProcessRef get_process(uint id) { return ref(*processes.at(id)); }
-    ProcessCref get_process(uint id) const { return cref(*processes.at(id)); }
+    /** @brief Returns a reference wrapper to the process with the given PID. */
+    Process& get_process(uint id) { return *processes.at(id); }
 
-    /** Returns a reference wrapper to the process with the given name. */
-    ProcessRef get_process(const str& name) { return ref(find_process_by_name(name)); }
-    ProcessCref get_process(const str& name) const { return cref(find_process_by_name(name)); }
+    /** @brief Returns a reference wrapper to the process with the given name. */
+    Process& get_process(const str& name) { return *find_process_by_name(name); }
     
-    /** Returns the scheduler configuration. */
-    SchedulerConfig& get_config() { return config; }
-    const SchedulerConfig& get_config() const { return config; }
+    /** @brief Returns the list of running process IDs. */
+    list get_running_pids() { return cores.get_running_pids(); }
 
-    /** Returns the number of processes in the global table. */
-    uint get_process_count() const { return processes.size(); }
-
-    // === Core Accessors ===
-
-    /** Core Access */ 
-    uint get_core_count() const { return cores.size(); }
-    Cores& get_cores() { return cores; }
-    const Cores& get_cores() const { return cores; }
-
-    /** Queue Access */ 
-    queue& get_rqueue() { return rqueue; }
-    const queue& get_rqueue() const { return rqueue; }
-
-    /** Process Table Access */
-    map& get_processes() { return processes; }
-    const map& get_processes() const { return processes; }
-
-    /** Returns the set of running process IDs. */
-    set& get_running() { return running; }
-    const set& get_running() const { return running; }
-    
-    /** Returns the list of finished process IDs. */
-    list& get_finished() { return finished; }
-    const list& get_finished() const { return finished; }
-    
     private:
 
     // === Helpers ===
   
-    Process& find_process_by_name(const str& name) {
-      for (auto& [_, proc]: processes)
-        if (proc->get_name() == name) return *proc;
-      throw runtime_error(format("Process with name '{}' not found.", name));
-    }
-
-    const Process& find_process_by_name(const str& name) const {
-      for (const auto& [_, proc]: processes)
-        if (proc->get_name() == name) return *proc;
-      throw runtime_error(format("Process with name '{}' not found.", name));
+    Process* find_process_by_name(const str& name, bool throw_if_missing=true) const {
+      for (const auto& [_, proc] : processes)
+        if (proc->data.name == name)
+          return proc.get();
+    
+      if (throw_if_missing)
+        throw runtime_error(format("Process with name '{}' not found.", name));
+      return nullptr;
     }
   };   
 }
@@ -3655,58 +3331,59 @@ namespace csopesy {
   /**
    * @brief Represents a pluggable scheduling strategy (e.g., FCFS, RR).
    * 
-   * Delegates scheduling logic and per-core preemption logic.
+   * Allows dynamic assignment of tick behavior and preemption policy.
+   * Each strategy defines how processes are selected for execution,
+   * and whether/when a running process should be preempted.
    */
   class SchedulerStrategy {
     public:
     using Job = Core::Job;
+    using PreemptHandler = Core::PreemptHandler;
     using TickHandler = function<void(SchedulerData&)>;
-    using PreemptPolicy = function<bool(const Core&)>;
 
     private:
-    SchedulerConfig config;
-    str name;
-    TickHandler handle_tick;
-    PreemptPolicy handle_preempt;
+    str name;                       // Strategy identifier (e.g., "fcfs", "rr")
+    TickHandler handle_tick;        // Main strategy logic executed each tick
+    PreemptHandler handle_preempt;  // Core-level preemption policy (optional)
+    SchedulerConfig config;         // Strategy-specific configuration
 
     public:
-    SchedulerStrategy(str name): name(name) {
 
-    }
+    /** @brief Constructs a strategy with the given name. */
+    SchedulerStrategy(str name): name(move(name)) {}
 
-    // === Metadata ===
-
+    /** @brief Returns the name of the strategy. */
     const str& get_name() const { return name; }
 
     // === Configuration ===
 
+    /** @brief Sets the configuration for this strategy. */
     SchedulerStrategy& with_config(SchedulerConfig cfg) {
       config = move(cfg);
       return *this;
     }
 
+    /** @brief Sets the main logic to run on each tick. */
     SchedulerStrategy& on_tick(TickHandler handler) {
-      handle_tick = move(handler);
-      return *this;
+      return handle_tick = move(handler), *this;
     }
 
-    SchedulerStrategy& on_preempt(PreemptPolicy policy) {
-      handle_preempt = move(policy);
-      return *this;
+    /** @brief Sets the per-core preemption policy. */
+    SchedulerStrategy& on_preempt(PreemptHandler policy) {
+      return handle_preempt = move(policy), *this;
     }
 
     // === Accessors ===
 
-    const PreemptPolicy& get_preemption_policy() const {
-      return handle_preempt;
-    }
+    /** @brief Returns the scheduler configuration. */
+    const SchedulerConfig& get_config() const { return config; }
 
-    const SchedulerConfig& get_config() const {
-      return config;
-    }
+    /** @brief Returns the core preemption policy handler. */
+    const PreemptHandler& get_prempt() const { return handle_preempt; }
 
     // === Execution ===
 
+    /** @brief Invokes the tick handler logic on the current scheduler data. */
     void tick(SchedulerData& data) {
       if (!handle_tick)
         throw runtime_error("SchedulerStrategy::tick called without on_tick handler.");
@@ -3773,19 +3450,18 @@ namespace csopesy::scheduler {
       .with_config(config)
 
       // Each tick: assign next process to any idle core.
-      .on_tick([](SchedulerData& data) {
-        auto& rqueue = data.get_rqueue();
+      .on_tick([](SchedulerData& data) {;
 
         // For every idle cores
-        for (auto& ref: data.get_cores().get_idle()) {
+        for (auto& ref: data.cores.get_idle()) {
           auto& core = ref.get();
 
           // If no process is ready, stop assigning
-          if (rqueue.empty()) break;     
+          if (data.rqueue.empty()) break;     
 
           // Assign the selected process to the current idle core
-          uint pid = rqueue.front(); 
-          rqueue.pop();
+          uint pid = data.rqueue.front(); 
+          data.rqueue.pop();
           core.assign(data.get_process(pid));
         }
     });
@@ -3818,33 +3494,20 @@ namespace csopesy::scheduler {
 
       // Tick: assign ready jobs to idle cores
       .on_tick([](SchedulerData& data) {
-
-        // cout << "[Tick] Rqueue front-to-back: ";
-        // auto& running = data.get_running();
-        // auto rqueue_copy = data.get_rqueue();
-
-        // while (!rqueue_copy.empty()) {
-        //   cout << rqueue_copy.front() << " ";
-        //   rqueue_copy.pop();
-        // }
-        // cout << endl;
-
-        auto& rqueue = data.get_rqueue();
-
-        for (auto& ref: data.get_cores().get_idle()) {
+        for (auto& ref: data.cores.get_idle()) {
           auto& core = ref.get();
 
-          if (rqueue.empty()) break;
+          if (data.rqueue.empty()) break;
 
-          uint pid = rqueue.front(); 
-          rqueue.pop();
+          uint pid = data.rqueue.front(); 
+          data.rqueue.pop();
 
           core.assign(data.get_process(pid));
         }
       })
-      
+
       .on_preempt([quantum = config.quantum_cycles](const Core& core) {
-        return core.ticks_on_job() >= quantum;  
+        return core.job_ticks >= quantum;  
       });
   }
 }
@@ -4008,7 +3671,7 @@ namespace csopesy {
 #include "core/common/constants/banner.hpp"
 #include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
-#include "core/scheduler/Scheduler.new.hpp"
+#include "core/scheduler/Scheduler.hpp"
 #include "core/command/CommandInterpreter.hpp"
 
 // Shell-specific includes
@@ -4022,6 +3685,8 @@ namespace csopesy {
     using Storage = ShellStorage;
     using Screen = ShellScreen;
     
+    public:
+
     // === Core system components ===
     Interpreter& interpreter;
     Scheduler scheduler; 
@@ -4029,17 +3694,17 @@ namespace csopesy {
     // === Shell subcomponents ===
     Storage storage;  ///< Dynamic storage for shell data
     Screen screen;
-    
+
     // === Control & lifecycle ===
     Thread thread;
     abool active = true;
-    
-    public:
 
-    /** See Shell.hpp for implementation. */
-    Shell(EventEmitter& emitter); // 
+    // === Methods ===
 
-    /** Starts the shell loop in a separate thread and hooks into global ticks. */
+    /** @brief See Shell.hpp for implementation. */
+    Shell(EventEmitter& emitter);
+
+    /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
     void start() override {
       system("cls");
       Ansi::enable();
@@ -4059,7 +3724,7 @@ namespace csopesy {
       });
     }
 
-    /** Stops the shell and joins the thread. Safe to call multiple times. */
+    /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
     void stop() override {
       active = false;
 
@@ -4069,7 +3734,7 @@ namespace csopesy {
       system("cls");
     }
 
-    /** Executes a single shell tick (input + command dispatch). */
+    /** @brief Executes a single shell tick (input + command dispatch). */
     void tick() override {
       cout << ">>> " << flush;
 
@@ -4083,22 +3748,10 @@ namespace csopesy {
       }
     }
 
-    /** Signals the shell to stop from within the shell thread. */
+    /** @brief Signals the shell to stop from within the shell thread. */
     void request_stop() { active = false; } 
 
-    /** Emits an event using the global EventEmitter. */
+    /** @brief Emits an event using the global EventEmitter. */
     void emit(str name, any data={}) { global.emit(move(name), move(data)); }
-
-    /** Returns the command interpreter instance. */
-    Interpreter& get_interpreter() { return interpreter; }
-
-    /** Returns the scheduler instance. */
-    Scheduler& get_scheduler() { return scheduler; }
-
-    /** Returns the screen controller. */
-    Screen& get_screen() { return screen; }
-
-    /** Returns the shell storage. */
-    Storage& get_storage() { return storage; }
   };
 }

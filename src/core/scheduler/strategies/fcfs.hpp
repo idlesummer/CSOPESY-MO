@@ -19,19 +19,18 @@ namespace csopesy::scheduler {
       .with_config(config)
 
       // Each tick: assign next process to any idle core.
-      .on_tick([](SchedulerData& data) {
-        auto& rqueue = data.get_rqueue();
+      .on_tick([](SchedulerData& data) {;
 
         // For every idle cores
-        for (auto& ref: data.get_cores().get_idle()) {
+        for (auto& ref: data.cores.get_idle()) {
           auto& core = ref.get();
 
           // If no process is ready, stop assigning
-          if (rqueue.empty()) break;     
+          if (data.rqueue.empty()) break;     
 
           // Assign the selected process to the current idle core
-          uint pid = rqueue.front(); 
-          rqueue.pop();
+          uint pid = data.rqueue.front(); 
+          data.rqueue.pop();
           core.assign(data.get_process(pid));
         }
     });

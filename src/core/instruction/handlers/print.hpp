@@ -13,8 +13,8 @@ namespace csopesy::instruction {
         { Param::Str() },
         { Param::Str(), Param::Var()},
       },
-      .execute = [](const Instruction& inst, ProcessData& proc) {
-        proc.log(inst.args[0]);
+      .execute = [](const Instruction& inst, ProcessData& process) {
+        process.log(inst.args[0]);
       },
     };
   }

@@ -16,44 +16,38 @@ namespace csopesy::command {
 
       .validate = [](const Command& command, Shell& shell) -> Str {
         return access([&]() -> Str {
-          if (shell.get_screen().is_main())
+          if (shell.screen.is_main())
             return "Not in a process screen.";
 
-          uint pid = shell.get_screen().get_id();
-          const auto& scheduler = shell.get_scheduler();
-          const auto& data = scheduler.get_data();
+            auto& scheduler = shell.scheduler;
+            uint pid = shell.screen.get_id();
 
-          if (!data.has_process(pid))
+          if (!scheduler.data.has_process(pid))
             return format("Active process with ID \"{}\" not found.", pid);
-
-          shell.get_storage().set("process-smi.pid", pid);  // ✅ Store PID instead of ref
           return nullopt;
         });
       },
 
       .execute = [](const Command& command, Shell& shell) {
         access([&] {
-          const auto& scheduler = shell.get_scheduler();
-          const auto& data = scheduler.get_data();
-          auto& storage = shell.get_storage();
+          auto& scheduler = shell.scheduler;
+          auto& storage = shell.storage;
 
-          uint pid = storage.get<uint>("process-smi.pid"); // ✅ Retrieve PID
-          const auto& proc = data.get_process(pid).get();  // ✅ Access by PID
+          uint pid = shell.screen.get_id();                 // ✅ Retrieve PID
+          auto& process = scheduler.data.get_process(pid);  // ✅ Access by PID
+          auto& program = process.data.program;
 
-          const auto& logs = proc.get_logs();
-          const auto& program = proc.get_program();
-
-          cout << "Process name: " << proc.get_name() << '\n';
-          cout << "ID: " << proc.get_id() << '\n';
+          cout << format("Process name: {}\n", process.data.name);
+          cout << format("ID: {}\n", process.data.core_id);
 
           cout << "Logs:\n";
-          for (const auto& log: logs)
+          for (auto& log: process.data.logs)
             cout << log << '\n';
 
-          cout << "Current instruction line: " << program.get_ip() << '\n';
-          cout << "Lines of code: " << program.size() << "\n\n";
+          cout << "Current instruction line: " << program.ip << '\n';
+          cout << "Lines of code: " << program.script.size() << "\n\n";
 
-          shell.get_storage().remove("process-smi.pid");
+          shell.storage.remove("process-smi.pid");
         });
       },
     };

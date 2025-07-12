@@ -10,9 +10,9 @@ namespace csopesy::instruction {
     return {
       .opcode = "ENDFOR",
       .open_opcode = "FOR",
-      .execute = [](const Instruction& inst, ProcessData& proc) {
-        auto& program = proc.get_program();
-        auto& context = program.get_context();
+      .execute = [](const Instruction& inst, ProcessData& process) {
+        auto& program = process.program;
+        auto& context = program.context;
 
         // Check if block is inside a FOR loop
         if (!context.matches("FOR"))
@@ -21,13 +21,13 @@ namespace csopesy::instruction {
         auto& frame = context.top();
 
         // Cache exit address if it's not set
-        const auto& for_inst = program.get_instruction(frame.start);
+        auto& for_inst = program.script.at(frame.start);
         if (for_inst.exit == 0)
-          for_inst.exit = program.get_ip() + 1;
+          for_inst.exit = program.ip + 1;
 
         // Decrement loop count; jump back if more iterations remain
         if (--frame.count > 0)
-          return void(program.set_ip(frame.start));
+          return void(program.ip = frame.start);
 
         // Loop finished - pop the context frame
         context.pop();

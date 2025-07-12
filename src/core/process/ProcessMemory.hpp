@@ -5,9 +5,9 @@
 namespace csopesy {
   class ProcessMemory {
     using map = unordered_map<str, uint>;
-    map symbol_table;
-
+    
     public:
+    map symbol_table;
 
     /** Memory mutators */
     void set(str key, uint value) {

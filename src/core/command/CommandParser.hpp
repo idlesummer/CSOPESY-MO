@@ -12,7 +12,7 @@ namespace csopesy {
 
     public:
 
-    /** A helper that parses a handler line string into a Handler Command object. */
+    /** @brief A helper that parses a handler line string into a Handler Command object. */
     static Command parse(const str& line) {
       auto tokens = tokenize(line);
       if (tokens.empty()) return {};
@@ -35,7 +35,7 @@ namespace csopesy {
 
     private:
     
-    /** A helper that splits a string into whitespace-separated tokens. */
+    /** @brief A helper that splits a string into whitespace-separated tokens. */
     static list tokenize(const str& line) {
       if (line.empty()) return {};
       auto stream = isstream(line);
