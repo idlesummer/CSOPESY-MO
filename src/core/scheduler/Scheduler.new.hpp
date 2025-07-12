@@ -22,6 +22,8 @@ namespace csopesy {
     using queue = vector<str>;
     using list = vector<uint>;
 
+    uint quantum_counter = 1;
+
     // === State ===
     uint ticks = 0;             ///< Global tick counter
     bool generating = false;    ///< Flag indicating auto-generation mode
@@ -67,8 +69,10 @@ namespace csopesy {
           auto& proc = core.get_job();
           core.release();
 
-          if (proc.get_state().is_finished())
+          if (proc.get_state().is_finished()){
+            data.get_memory().deallocate(proc.get_id());
             finished.push_back(proc.get_id());
+          }
           else
             data.get_rqueue().push(proc.get_id());
         }
@@ -86,6 +90,12 @@ namespace csopesy {
       // 4. Schedule ready processes to idle cores
       strategy.tick(data);
       ++ticks;
+
+      // uint quantum = data.get_config().quantum_cycles;
+      // if (quantum > 0 && ticks % quantum == 0) {
+      //   dump_memory_snapshot(data, quantum_counter++);
+      // }
+
     }
 
     /** Applies a new configuration and resizes core state accordingly. */
@@ -148,5 +158,87 @@ namespace csopesy {
       data.get_rqueue().push(pid);
       return pid;
     }
+
+    void dump_memory_snapshot(const csopesy::SchedulerData& data, uint quantum_count) {
+      using namespace std;
+      using namespace csopesy;
+
+      const auto& mem = data.get_memory();
+      const auto& blocks = mem.get_blocks();
+
+      // Get current timestamp
+      auto now = chrono::system_clock::now();
+      auto time = chrono::system_clock::to_time_t(now);
+      stringstream timestamp;
+      timestamp << put_time(localtime(&time), "%m/%d/%Y %I:%M:%S %p");
+
+      // Start file output
+      string filename = format("memory_stamp_{}.txt", quantum_count);
+      ofstream out(filename);
+      if (!out) {
+        cerr << "[error] Could not write to " << filename << "\n";
+        return;
+      }
+
+      out << "Timestamp: " << timestamp.str() << "\n";
+      out << "Number of processes in memory: " << mem.count_active() << "\n";
+      out << "Total external fragmentation in KB: " << mem.external_fragmentation() / 1024 << "\n";
+
+      out << "---end--- = " << 16384 << "\n";
+
+      // Print process blocks top-down
+      for (auto it = blocks.rbegin(); it != blocks.rend(); ++it) {
+        const auto& b = *it;
+        if (b.pid != -1) {
+          out << b.start + b.size << "\n";
+          out << "P" << b.pid << "\n";
+          out << b.start << "\n";
+        }
+      }
+
+      out << "---start--- = 0\n";
+    }
+
+    // void dump_memory_snapshot(const SchedulerData& data, uint snapshot_index) {
+    //   const auto& memory = data.get_memory();                // MemoryManager instance
+    //   const auto& blocks = memory.get_blocks();              // vector<Block>
+
+    //   // Create the file
+    //   std::ofstream out(format("memory_stamp_{}.txt", snapshot_index));
+
+    //   // Add timestamp
+    //   auto now = std::chrono::system_clock::now();
+    //   std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    //   out << "Timestamp: " << std::put_time(std::localtime(&now_time), "%m/%d/%Y %I:%M:%S %p") << "\n";
+
+    //   // Count active processes
+    //   out << "Number of processes in memory: " << memory.count_active() << "\n";
+
+    //   // Fragmentation in KB
+    //   out << "Total external fragmentation in KB: " << (memory.external_fragmentation() / 1024) << "\n";
+
+    //   // Start layout
+    //   out << "---end--- = 16384\n";
+
+    //   // Walk blocks from high address to low (sort by start descending)
+    //   std::vector<csopesy::Block> reversed = blocks;
+    //   std::sort(reversed.begin(), reversed.end(), [](const auto& a, const auto& b) {
+    //     return a.start > b.start;
+    //   });
+
+    //   for (const auto& block : reversed) {
+    //     uint32_t upper = block.start + block.size;
+    //     uint32_t lower = block.start;
+
+    //     out << upper << "\n";
+    //     if (block.pid != -1)
+    //       out << "P" << block.pid << "\n";
+    //     out << lower << "\n";
+    //   }
+
+    //   out << "---start--- = 0\n";
+    // }
+
+
   };
 }

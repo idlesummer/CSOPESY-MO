@@ -6,6 +6,8 @@
 #include "core/execution/CoreManager.hpp"
 #include "types.hpp"
 
+#include "core/memory/FirstFit.hpp"
+
 namespace csopesy {
 
   /**
@@ -103,6 +105,15 @@ namespace csopesy {
     list& get_finished() { return finished; }
     const list& get_finished() const { return finished; }
     
+
+    // ==============================================
+    // Memory Manager Stuff
+    // ==============================================
+    MemoryManager memory;
+    MemoryManager& get_memory() { return memory; }
+    const MemoryManager& get_memory() const { return memory; } 
+
+
     private:
 
     // === Helpers ===
