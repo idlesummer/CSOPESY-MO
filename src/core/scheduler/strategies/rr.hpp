@@ -19,7 +19,6 @@ namespace csopesy::scheduler {
 
       // Tick: assign ready jobs to idle cores
       .on_tick([](SchedulerData& data) {
-
         // cout << "[Tick] Rqueue front-to-back: ";
         // auto& running = data.get_running();
         // auto rqueue_copy = data.get_rqueue();
@@ -40,16 +39,15 @@ namespace csopesy::scheduler {
 
           uint pid = rqueue.front(); 
           rqueue.pop();
-
+          
           // // [Memory Allocator stuff]
           // // first-fit malloc check (checks if not enough memory)
           // if (!memory.allocate(pid)) {
-          //   rqueue.push(pid); // move at the back of the queue
+          //   // rqueue.push(pid); // move at the back of the queue
           //   continue; // skip the core.assign
           // }
 
           core.assign(data.get_process(pid));
-
         }
       })
       

@@ -91,10 +91,10 @@ namespace csopesy {
       strategy.tick(data);
       ++ticks;
 
-      // uint quantum = data.get_config().quantum_cycles;
-      // if (quantum > 0 && ticks % quantum == 0) {
-      //   dump_memory_snapshot(data, quantum_counter++);
-      // }
+      uint quantum = data.get_config().quantum_cycles;
+      if (quantum > 0 && ticks % quantum == 0) {
+        dump_memory_snapshot(data, quantum_counter++);
+      }
 
     }
 
@@ -143,6 +143,11 @@ namespace csopesy {
     uint generate_process(Str name=nullopt) { 
       // Instantiate the process, reserve 0 for main, so start PIDs from 1
       uint pid = data.generate_pid();
+
+      if (!data.get_memory().allocate(pid)) {
+        return -1;
+      }
+
       str new_name = name.value_or(format("p{:02}", pid));
       auto proc = Process(move(new_name), pid);
       
