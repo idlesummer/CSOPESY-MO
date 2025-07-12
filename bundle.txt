@@ -746,23 +746,27 @@ namespace csopesy::command {
         // === -ls: List screen info
         if (command.flags.contains("-ls")) {
           access([&] {
-            const auto& data = scheduler.get_data();
+            auto& data = scheduler.get_data();
             const auto& config = scheduler.get_config();
 
-            const auto& running = data.get_running();
-            const auto& finished = data.get_finished();
+            const auto& busy_cores = data.get_cores().get_busy();
+            unordered_set<uint> running;
 
+            // Collect running PIDs and core usage
             set used_cores;
-            for (uint pid : running) {
-              const auto& proc = data.get_process(pid).get();
-              if (proc.get_core() != -1)
-                used_cores.insert(proc.get_core());
+            for (const auto& ref : busy_cores) {
+              auto& core = ref.get();
+
+              if (!core.is_idle()) {
+                uint pid = core.get_job().get_id();
+                running.insert(pid);
+                used_cores.insert(core.get_id());
+              }
             }
 
             int total_cores = config.num_cpu;
             int used = used_cores.size();
-            int free = total_cores - used;
-            float cpu_util = total_cores ? (float)used / total_cores * 100 : 0.0f;
+            float cpu_util = total_cores ? (float)used / total_cores * 100.0f : 0.0f;
 
             cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
             cout << format("Cores used: {} / {}\n\n", used, total_cores);
@@ -771,9 +775,6 @@ namespace csopesy::command {
 
             for (uint pid : running) {
               const auto& proc = data.get_process(pid).get();
-
-              // ðŸ› Debugging core state
-              cout << format("[DEBUG] Running PID {} is on core {}\n", pid, proc.get_core());
 
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
@@ -785,9 +786,8 @@ namespace csopesy::command {
               );
             }
 
-
             cout << "\nFinished processes:\n";
-            for (uint pid : finished) {
+            for (uint pid : data.get_finished()) {
               const auto& proc = data.get_process(pid).get();
               cout << format(
                 "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
@@ -801,6 +801,7 @@ namespace csopesy::command {
             cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
           });
         }
+
 
         // === -s: Spawn and switch to new process screen
         else if (command.flags.contains("-s")) {
@@ -879,7 +880,7 @@ namespace csopesy::command {
             cout << format("Lines of code: {}\n", proc.get_program().size());
           });
         }
-      },
+      }
     };
   }
 }
