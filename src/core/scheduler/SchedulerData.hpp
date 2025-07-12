@@ -31,11 +31,9 @@ namespace csopesy {
     // === Methods ===
 
     /** @brief Constructs a SchedulerData context with the given number of cores. */
-    SchedulerData(uint size=1): 
-      cores(size), 
-      next_pid(1) {
-        cout << "[SchedulerData::constructor()] Called.";
-      }
+    SchedulerData(uint size=1): next_pid(1) {
+      cout << "[SchedulerData::constructor()] Called.";
+    }
 
     /** @brief Sets configuration and resizes cores. */
     void set_config(SchedulerConfig new_config) {
