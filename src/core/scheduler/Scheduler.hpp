@@ -107,15 +107,18 @@ namespace csopesy {
 
     /** @brief Internal helper that generates a process with optional name. */
     uint generate_process(str name="") { 
-      uint pid = data.new_pid();              // Generate a new unique process id
+      // Generate a new unique process id
+      uint pid = data.new_pid();
       
-      data.add_process(move(Process::create(  // Create process in table so it's safe to reference
+      // Create process in table so it's safe to reference
+      data.add_process(move(Process::create(  
         pid,
         name.empty() ? format("p{:02}", pid) : name, 
         Random::num(data.config.min_ins, data.config.max_ins)
       )));
 
-      data.rqueue.push(pid);                   // Enqueue the proces by its PID
+      // Enqueue the proces by its PID
+      data.rqueue.push(pid);                   
       return pid;   
     }
   };
