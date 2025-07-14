@@ -2,7 +2,6 @@
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
 #include "core/execution/CoreManager.hpp"
-
 #include "strategies/_all.hpp"
 #include "SchedulerStrategy.hpp"
 #include "SchedulerData.hpp"
@@ -91,7 +90,7 @@ namespace csopesy {
       data.config = move(config);         // Move config last so it's not invalid above
     }
 
-    // // === Generation Control ===
+    // // === Process Generation Control ===
     // void enqueue_process(str name) { names.push_back(move(name)); }
     // void generate(bool flag) { generating = flag; }
 
@@ -100,7 +99,7 @@ namespace csopesy {
     // ========================
     private:
 
-    /** @brief Helper that returns true if the current tick matches the process generation interval. */
+    /** @brief Helper that checks if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
       uint freq = data.config.batch_process_freq;
       return freq > 0 && (ticks % freq == 0);
@@ -108,20 +107,16 @@ namespace csopesy {
 
     /** @brief Internal helper that generates a process with optional name. */
     uint generate_process(str name="") { 
-      // Generate a new unique process id
-      uint pid = data.new_pid();
-      name = name.empty() ? format("p{:02}", pid) : name; 
-
-      // Create and process to table first so it's owned and safe to reference
-      data.add_process(move(Process::create(
+      uint pid = data.new_pid();              // Generate a new unique process id
+      
+      data.add_process(move(Process::create(  // Create process in table so it's safe to reference
         pid,
-        name, 
+        name.empty() ? format("p{:02}", pid) : name, 
         Random::num(data.config.min_ins, data.config.max_ins)
       )));
 
-      // Enqueue by PID
-      data.rqueue.push(pid);
-      return pid;
+      data.rqueue.push(pid);                   // Enqueue the proces by its PID
+      return pid;   
     }
   };
 }
