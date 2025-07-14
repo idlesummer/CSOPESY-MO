@@ -50,10 +50,10 @@ namespace csopesy {
         generate_process(move(name));
       names.clear();
       
-      // // 2. Possibly auto-generate proc_table this tick
-      // cout << "[tick] Stage 2: dummy\n";
-      // if (generating && interval_has_elapsed())
-      //   generate_process();
+      // 2. Possibly auto-generate proc_table this tick
+      cout << "[tick] Stage 2: dummy\n";
+      if (generating && interval_has_elapsed())
+        generate_process();
 
       // // 3. Update running/finished state and handle preemption
       // cout << "[tick] Stage 3: core release\n";
@@ -110,13 +110,13 @@ namespace csopesy {
 
     // private:
 
-    // // === Helper methods ===
+    // === Helper methods ===
 
-    // /** @brief Helper that returns true if the current tick matches the process generation interval. */
-    // bool interval_has_elapsed() const {
-    //   uint freq = data.config.batch_process_freq;
-    //   return freq > 0 && (ticks % freq == 0);
-    // }
+    /** @brief Helper that returns true if the current tick matches the process generation interval. */
+    bool interval_has_elapsed() const {
+      uint freq = data.config.batch_process_freq;
+      return freq > 0 && (ticks % freq == 0);
+    }
 
     /** @brief Internal helper that generates a process with optional name. */
     uint generate_process(Str name=nullopt) { 
@@ -127,7 +127,7 @@ namespace csopesy {
         name.value_or(format("p{:02}", pid)), 
         Random::num(data.config.min_ins, data.config.max_ins)
       );
-      
+
       // Add to table first so it's owned and safe to reference
       data.add_process(move(process));
 
