@@ -1,7 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-// #include "core/instruction/InstructionInterpreter.hpp"
-// #include "core/process/Process.hpp"
+#include "core/process/Process.hpp"
 #include "core/execution/CoreManager.hpp"
 
 #include "strategies/_all.hpp"
@@ -18,7 +17,6 @@ namespace csopesy {
    * orchestration of ticks and process generation.
    */
   class Scheduler {
-    using Interpreter = InstructionInterpreter;
     using queue = vector<str>;
     using list = vector<uint>;
 
@@ -37,11 +35,6 @@ namespace csopesy {
 
     // === Methods ===
 
-    /** @brief Registers all available scheduling strategies. */
-    // Scheduler()
-    //   interpreter(Interpreter::instance()),
-    //   strategy(scheduler::make_strategy("fcfs", SchedulerConfig())) {}
-
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
       // 1. Generate any explicitly enqueued proc_table
@@ -55,37 +48,32 @@ namespace csopesy {
       if (generating && interval_has_elapsed())
         generate_process();
 
-      // // 3. Update running/finished state and handle preemption
-      // cout << "[tick] Stage 3: core release\n";
-      // for (auto& ref: data.cores.get_busy()) {
-      // auto& core = ref.get();
+      // 3. Update running/finished state and handle preemption
+      cout << "[tick] Stage 3: core release\n";
+      for (auto& ref: data.cores.get_busy()) {
+        auto& core = ref.get();
+        
+        // Skip core if it's not releasable yet
+        if (!core.can_release) continue;
 
-      //   // 🔒 Avoid access violation
-      //   if (core.is_idle()) {
-      //     cout << "[tick]   skipped: core idle\n";
-      //     continue;
-      //   }
+        cout << "[tick]   core " << core.id << " releasing process\n";
+        auto& process = core.get_job();
+        core.release();
 
-      //   if (core.can_release) {
-      //     cout << "[tick]   core " << core.id << " releasing process\n";
-      //     auto& process = core.get_job();
-      //     core.release();
+        if (process.data.state.finished()) {
+          data.finished_pids.push_back(process.data.id);
+          cout << "[tick]   process " << process.data.id << " finished\n";
+        } else {
+          data.rqueue.push(process.data.id);
+          cout << "[tick]   process " << process.data.id << " re-queued\n";
+        }
+      }
 
-      //     if (process.data.state.finished()) {
-      //       data.finished_pids.push_back(process.data.id);
-      //       cout << "[tick]   process " << process.data.id << " finished\n";
-      //     } else {
-      //       data.rqueue.push(process.data.id);
-      //       cout << "[tick]   process " << process.data.id << " re-queued\n";
-      //     }
-      //   }
-      // }
-
-      // // 4. Schedule ready proc_table to idle cores
-      // cout << "[tick] Stage 4: strategy\n";
-      // // strategy.tick(data);
-      // ++ticks;
-      // cout << "[tick] End (tick " << ticks << ")\n";
+      // 4. Schedule ready proc_table to idle cores
+      cout << "[tick] Stage 4: strategy\n";
+      // strategy.tick(data);
+      ++ticks;
+      cout << "[tick] End (tick " << ticks << ")\n";
     }
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
