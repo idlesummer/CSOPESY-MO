@@ -37,7 +37,7 @@ namespace csopesy {
 
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
-      // 1. Generate any explicitly enqueued proc_table
+      // 1. Generate any user-enqueued proc_table
       cout << "[tick] Stage 1: enqueue\n";
       for (auto& name: names)
         generate_process(move(name));
