@@ -95,9 +95,10 @@ namespace csopesy {
     // void enqueue_process(str name) { names.push_back(move(name)); }
     // void generate(bool flag) { generating = flag; }
 
-    // private:
-
-    // === Helper methods ===
+    // ========================
+    // === Private Helpers ====
+    // ========================
+    private:
 
     /** @brief Helper that returns true if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
@@ -106,14 +107,15 @@ namespace csopesy {
     }
 
     /** @brief Internal helper that generates a process with optional name. */
-    uint generate_process(Str name=nullopt) { 
+    uint generate_process(str name="") { 
       // Generate a new unique process id
       uint pid = data.new_pid();
+      name = name.empty() ? format("p{:02}", pid) : name; 
 
       // Create and process to table first so it's owned and safe to reference
       data.add_process(move(Process::create(
         pid,
-        name.value_or(format("p{:02}", pid)), 
+        name, 
         Random::num(data.config.min_ins, data.config.max_ins)
       )));
 
