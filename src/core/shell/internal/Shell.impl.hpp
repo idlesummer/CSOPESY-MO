@@ -47,7 +47,7 @@ namespace csopesy {
       global.on("tick", [&] { 
         // Ensures scheduler.tick() does not conflict with shell command access
         // Uses global access(...) wrapper to synchronize with shared SchedulerData
-        // access([&] { scheduler.tick(); });
+        access([&] { scheduler.tick(); });
       });
     
       // Start CLI in a separate thread

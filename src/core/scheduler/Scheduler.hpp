@@ -44,11 +44,11 @@ namespace csopesy {
 
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
-      // // 1. Generate any explicitly enqueued proc_table
-      // cout << "[tick] Stage 1: enqueue\n";
-      // for (auto& name: names)
-      //   generate_process(move(name));
-      // names.clear();
+      // 1. Generate any explicitly enqueued proc_table
+      cout << "[tick] Stage 1: enqueue\n";
+      for (auto& name: names)
+        generate_process(move(name));
+      names.clear();
       
       // // 2. Possibly auto-generate proc_table this tick
       // cout << "[tick] Stage 2: dummy\n";
@@ -118,25 +118,22 @@ namespace csopesy {
     //   return freq > 0 && (ticks % freq == 0);
     // }
 
-    // /** @brief Internal helper that generates a process with optional name. */
-    // uint generate_process(Str name=nullopt) { 
+    /** @brief Internal helper that generates a process with optional name. */
+    uint generate_process(Str name=nullopt) { 
+      // Instantiate the process
+      uint pid = data.new_pid();
+      auto process = Process::create(
+        pid,
+        name.value_or(format("p{:02}", pid)), 
+        Random::num(data.config.min_ins, data.config.max_ins)
+      );
+      
+      // Add to table first so it's owned and safe to reference
+      data.add_process(move(process));
 
-    //   cout << "[debug] should never see this if names is empty\n";
-
-    //   // Instantiate the process
-    //   uint pid = data.new_pid();
-    //   auto process = Process::create(
-    //     pid,
-    //     name.value_or(format("p{:02}", pid)), 
-    //     Random::num(data.config.min_ins, data.config.max_ins)
-    //   );
-
-    //   // Add to table first so it's owned and safe to reference
-    //   data.add_process(move(process));
-
-    //   // Enqueue by PID
-    //   data.rqueue.push(pid);
-    //   return pid;
-    // }
+      // Enqueue by PID
+      data.rqueue.push(pid);
+      return pid;
+    }
   };
 }
