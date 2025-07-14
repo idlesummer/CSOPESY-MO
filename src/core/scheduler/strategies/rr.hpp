@@ -16,7 +16,7 @@ namespace csopesy::scheduler {
   inline SchedulerStrategy make_rr_strategy(const SchedulerConfig& config) {
     return SchedulerStrategy()
       .set_name("rr")
-      .with_config(config)
+      .set_config(config)
       
       .on_tick([](SchedulerData& data) {
         for (auto& ref: data.cores.get_idle()) {

@@ -19,19 +19,16 @@ namespace csopesy {
     using map = unordered_map<uint, ProcessPtr>;
     using list = vector<uint>;
 
-    auint next_pid = 1;       ///< Monotonic PID counter for generating unique process IDs
+    auint next_pid = 1;       // Monotonic PID counter for generating unique process IDs
     
     public:
-    list finished_pids = {};  ///< PIDs of finished proc_table 
-    queue rqueue = {};        ///< Ready queue of proc_table waiting to be scheduled
-    map proc_table = {};      ///< Container for all proc_table
-    Cores cores;              ///< Reference to the list of scheduler cores
-    SchedulerConfig config;   ///< Runtime configuration settings
+    list finished_pids = {};  // PIDs of finished proc_table 
+    queue rqueue = {};        // Ready queue of proc_table waiting to be scheduled
+    map proc_table = {};      // Container for all proc_table
+    Cores cores;              // Reference to the list of scheduler cores
+    SchedulerConfig config;   // Runtime configuration settings
 
     // === Methods ===
-
-    /** @brief Sets configuration and resizes cores. */
-    void set_config(SchedulerConfig new_config) { config = move(new_config); }
 
     /** @brief Returns a unique, incrementing process ID. */
     uint new_pid() { return next_pid++; }
@@ -43,10 +40,10 @@ namespace csopesy {
       proc_table.emplace(id, move(ptr)); 
     }
 
-    /** @brief Check if a process with the given ID exists in the process table. */
+    /** @brief Check if a process with the given ID exists. */
     bool has_process(uint id) const { return proc_table.contains(id); }
       
-    /** @brief Check if a process with the given name exists in the process table. */
+    /** @brief Check if a process with the given name exists. */
     bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
 
     // === Accessors ===
@@ -67,7 +64,7 @@ namespace csopesy {
   
     /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
     Process* find_process_by_name(const str& name, bool throw_if_missing=true) const {
-      for (const auto& [_, proc]: proc_table)
+      for (auto& [_, proc]: proc_table)
         if (proc->data.name == name)
           return proc.get();
     

@@ -17,7 +17,7 @@ namespace csopesy::scheduler {
     // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
     return SchedulerStrategy()
       .set_name("fcfs")
-      .with_config(config)
+      .set_config(config)
 
       .on_tick([](SchedulerData& data) {;
         for (auto& ref: data.cores.get_idle()) {

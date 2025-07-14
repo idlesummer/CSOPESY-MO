@@ -26,24 +26,16 @@ namespace csopesy {
     // === Methods Methods ===
 
     /** @brief Sets the strategy name. */
-    SchedulerStrategy& set_name(str new_name) { 
-      return name = new_name, *this; 
-    }
+    SchedulerStrategy& set_name(str n) { return name = n, *this; }
 
     /** @brief Sets the configuration for this strategy. */
-    SchedulerStrategy& with_config(SchedulerConfig new_config) {
-      return config = move(new_config), *this;
-    }
+    SchedulerStrategy& set_config(SchedulerConfig c) { return config = move(c), *this; }
 
     /** @brief Sets the main logic to run on each tick. */
-    SchedulerStrategy& on_tick(TickHandler handler) {
-      return tick_handler = move(handler), *this;
-    }
+    SchedulerStrategy& on_tick(TickHandler t) { return tick_handler = move(t), *this; }
 
     /** @brief Sets the per-core preemption policy. */
-    SchedulerStrategy& on_preempt(PreemptHandler preempt) {
-      return preempt_handler = move(preempt), *this;
-    }
+    SchedulerStrategy& on_preempt(PreemptHandler p) { return preempt_handler = move(p), *this; }
 
     // === Execution ===
 

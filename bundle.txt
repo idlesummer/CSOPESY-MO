@@ -3358,7 +3358,7 @@ namespace csopesy {
     // === Configuration ===
 
     /** @brief Sets the configuration for this strategy. */
-    SchedulerStrategy& with_config(SchedulerConfig cfg) {
+    SchedulerStrategy& set_config(SchedulerConfig cfg) {
       config = move(cfg);
       return *this;
     }
@@ -3447,7 +3447,7 @@ namespace csopesy::scheduler {
 
     // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
     return SchedulerStrategy("fcfs")
-      .with_config(config)
+      .set_config(config)
 
       // Each tick: assign next process to any idle core.
       .on_tick([](SchedulerData& data) {;
@@ -3490,7 +3490,7 @@ namespace csopesy::scheduler {
    */
   inline SchedulerStrategy make_rr_strategy(const SchedulerConfig& config) {
     return SchedulerStrategy("rr")
-      .with_config(config)
+      .set_config(config)
 
       // Tick: assign ready jobs to idle cores
       .on_tick([](SchedulerData& data) {

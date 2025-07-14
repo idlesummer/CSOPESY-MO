@@ -43,66 +43,65 @@ namespace csopesy {
     //   strategy(scheduler::make_strategy("fcfs", SchedulerConfig())) {}
 
     /** @brief Executes the active strategy logic and increments the tick count. */
-    // void tick() {
-
-    //   // 1. Generate any explicitly enqueued proc_table
-    //   cout << "[tick] Stage 1: enqueue\n";
-    //   for (auto& name: names)
-    //     generate_process(move(name));
-    //   names.clear();
+    void tick() {
+      // // 1. Generate any explicitly enqueued proc_table
+      // cout << "[tick] Stage 1: enqueue\n";
+      // for (auto& name: names)
+      //   generate_process(move(name));
+      // names.clear();
       
-    //   // 2. Possibly auto-generate proc_table this tick
-    //   cout << "[tick] Stage 2: dummy\n";
-    //   if (generating && interval_has_elapsed())
-    //     generate_process();
+      // // 2. Possibly auto-generate proc_table this tick
+      // cout << "[tick] Stage 2: dummy\n";
+      // if (generating && interval_has_elapsed())
+      //   generate_process();
 
-    //   // 3. Update running/finished state and handle preemption
-    //   cout << "[tick] Stage 3: core release\n";
-    //   for (auto& ref: data.cores.get_busy()) {
-    //   auto& core = ref.get();
+      // // 3. Update running/finished state and handle preemption
+      // cout << "[tick] Stage 3: core release\n";
+      // for (auto& ref: data.cores.get_busy()) {
+      // auto& core = ref.get();
 
-    //     // 🔒 Avoid access violation
-    //     if (core.is_idle()) {
-    //       cout << "[tick]   skipped: core idle\n";
-    //       continue;
-    //     }
+      //   // 🔒 Avoid access violation
+      //   if (core.is_idle()) {
+      //     cout << "[tick]   skipped: core idle\n";
+      //     continue;
+      //   }
 
-    //     if (core.can_release) {
-    //       cout << "[tick]   core " << core.id << " releasing process\n";
-    //       auto& process = core.get_job();
-    //       core.release();
+      //   if (core.can_release) {
+      //     cout << "[tick]   core " << core.id << " releasing process\n";
+      //     auto& process = core.get_job();
+      //     core.release();
 
-    //       if (process.data.state.finished()) {
-    //         data.finished_pids.push_back(process.data.id);
-    //         cout << "[tick]   process " << process.data.id << " finished\n";
-    //       } else {
-    //         data.rqueue.push(process.data.id);
-    //         cout << "[tick]   process " << process.data.id << " re-queued\n";
-    //       }
-    //     }
-    //   }
+      //     if (process.data.state.finished()) {
+      //       data.finished_pids.push_back(process.data.id);
+      //       cout << "[tick]   process " << process.data.id << " finished\n";
+      //     } else {
+      //       data.rqueue.push(process.data.id);
+      //       cout << "[tick]   process " << process.data.id << " re-queued\n";
+      //     }
+      //   }
+      // }
 
-    //   // 4. Schedule ready proc_table to idle cores
-    //   cout << "[tick] Stage 4: strategy\n";
-    //   // strategy.tick(data);
-    //   ++ticks;
-    //   cout << "[tick] End (tick " << ticks << ")\n";
-    // }
+      // // 4. Schedule ready proc_table to idle cores
+      // cout << "[tick] Stage 4: strategy\n";
+      // // strategy.tick(data);
+      // ++ticks;
+      // cout << "[tick] End (tick " << ticks << ")\n";
+    }
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      // 1. Store config inside SchedulerData and initialize cores
-      data.set_config(config);
-      data.cores.resize(config.num_cpu);
-
-      // 2. Build and install the selected strategy
+      // 1. Build and install the selected strategy
       strategy = scheduler::make_strategy(config.scheduler, config);
-
-      // 3. Inject per-core preemption policy from strategy
+      
+      // 2. Inject per-core preemption policy from strategy
       if (strategy.preempt_handler) {
         for (auto& ref: data.cores.get_all())
           ref.get().set_preempt(strategy.preempt_handler);
       }
+      
+      // 3. Store config inside SchedulerData and initialize cores
+      data.cores.resize(config.num_cpu);
+      data.config = move(config);         // Move config last so it's not invalid above
     }
 
     // // === Generation Control ===
