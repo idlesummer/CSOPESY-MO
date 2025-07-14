@@ -9,62 +9,49 @@ namespace csopesy {
    * @brief Represents a pluggable scheduling strategy (e.g., FCFS, RR).
    * 
    * Allows dynamic assignment of tick behavior and preemption policy.
-   * Each strategy defines how processes are selected for execution,
+   * Each strategy defines how proc_table are selected for execution,
    * and whether/when a running process should be preempted.
    */
   class SchedulerStrategy {
     public:
-    using Job = Core::Job;
-    using PreemptHandler = Core::Handler;
+    using PreemptHandler = Core::func;
     using TickHandler = function<void(SchedulerData&)>;
 
-    private:
-    str name;                       // Strategy identifier (e.g., "fcfs", "rr")
-    TickHandler handle_tick;        // Main strategy logic executed each tick
-    PreemptHandler handle_preempt;  // Core-level preemption policy (optional)
+    // === Members ===
+    str name = "";                  // Strategy identifier (e.g., "fcfs", "rr")
     SchedulerConfig config;         // Strategy-specific configuration
+    TickHandler tick_handler;       // Main strategy logic executed each tick
+    PreemptHandler preempt_handler; // Core-level preemption policy (optional)
 
-    public:
+    // === Methods Methods ===
 
-    /** @brief Constructs a strategy with the given name. */
-    SchedulerStrategy(str name): name(move(name)) {}
-
-    /** @brief Returns the name of the strategy. */
-    const str& get_name() const { return name; }
-
-    // === Configuration ===
+    /** @brief Sets the strategy name. */
+    SchedulerStrategy& set_name(str new_name) { 
+      return name = new_name, *this; 
+    }
 
     /** @brief Sets the configuration for this strategy. */
-    SchedulerStrategy& with_config(SchedulerConfig cfg) {
-      config = move(cfg);
-      return *this;
+    SchedulerStrategy& with_config(SchedulerConfig new_config) {
+      return config = move(new_config), *this;
     }
 
     /** @brief Sets the main logic to run on each tick. */
     SchedulerStrategy& on_tick(TickHandler handler) {
-      return handle_tick = move(handler), *this;
+      return tick_handler = move(handler), *this;
     }
 
     /** @brief Sets the per-core preemption policy. */
-    SchedulerStrategy& on_preempt(PreemptHandler policy) {
-      return handle_preempt = move(policy), *this;
+    SchedulerStrategy& on_preempt(PreemptHandler preempt) {
+      return preempt_handler = move(preempt), *this;
     }
-
-    // === Accessors ===
-
-    /** @brief Returns the scheduler configuration. */
-    const SchedulerConfig& get_config() const { return config; }
-
-    /** @brief Returns the core preemption policy handler. */
-    const PreemptHandler& get_prempt() const { return handle_preempt; }
 
     // === Execution ===
 
     /** @brief Invokes the tick handler logic on the current scheduler data. */
     void tick(SchedulerData& data) {
-      if (!handle_tick)
+      if (!tick_handler)
         throw runtime_error("SchedulerStrategy::tick called without on_tick handler.");
-      handle_tick(data);
+      tick_handler(data);
     }
   };
 }

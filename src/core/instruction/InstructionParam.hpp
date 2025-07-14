@@ -43,14 +43,7 @@ namespace csopesy {
 
     inline static const list vars = {"x", "y", "z"};
     inline static const list messages = {
-      "We use the observer pattern with an event emitter.",
-      "All components have start, stop, and tick methods.",
-      "We prefer composition over inheritance to build flexible and reusable components.",
-      "We use data-driven design instead of deep inheritance.",
-      "Each part has a single responsibility, keeping code modular.",
-      "We avoid deep nesting by using guard clauses.",
-      "The code is clean and easy to read.",
-      "No 'vibecoding' here — everything is intentional.",
+      "Lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
     };
   };
 }

@@ -48,11 +48,11 @@ namespace csopesy::command {
 
         // === Debug: Show context stack ===
         cout << "[loop-test] Context Stack:\n";
-        cout << program.view_context() << '\n';
+        cout << program.render_context() << '\n';
 
         // === Debug: Show instruction list with pointer ===
         cout << "[loop-test] Instruction List:\n";
-        cout << program.view_script() << '\n';
+        cout << program.render_script() << '\n';
         
         // 3. Step the process
         const bool done = process.step();

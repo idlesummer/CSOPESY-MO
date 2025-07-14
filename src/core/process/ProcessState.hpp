@@ -13,7 +13,7 @@ namespace csopesy {
   class ProcessState {
     uint sleep_ticks = 0;
     
-    public:
+  public:
     State value = State::Ready;
 
     // === State Queries ===

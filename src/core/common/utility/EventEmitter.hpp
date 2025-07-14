@@ -115,7 +115,7 @@ namespace csopesy {
      * @brief Dispatches all queued events to their registered handlers.
      * 
      * Safely callable from any thread. This method swaps out the event queue
-     * under a lock and processes a copy of it outside the lock to avoid
+     * under a lock and proc_table a copy of it outside the lock to avoid
      * blocking other operations. For each event, the list of handlers is
      * also copied under a lock to prevent concurrent modification during
      * dispatch. This ensures thread-safe and non-blocking execution of

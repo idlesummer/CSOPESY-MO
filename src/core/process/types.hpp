@@ -24,10 +24,9 @@ namespace csopesy {
     */
   class ContextStack {
     using Stack = vector<ContextFrame>;
-    
     Stack stack;
 
-    public:
+  public:
     
     /** Checks if top frame matches the opcode. */
     bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }

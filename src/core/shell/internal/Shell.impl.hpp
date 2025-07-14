@@ -41,6 +41,7 @@ namespace csopesy {
     void start() override {
       // system("cls");
       Ansi::enable();
+      enable_unicode();
 
       // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 

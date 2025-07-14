@@ -928,11 +928,11 @@ namespace csopesy::command {
 
         // === Debug: Show context stack ===
         cout << "[loop-test] Context Stack:\n";
-        cout << program.view_context() << '\n';
+        cout << program.render_context() << '\n';
 
         // === Debug: Show instruction list with pointer ===
         cout << "[loop-test] Instruction List:\n";
-        cout << program.view_script() << '\n';
+        cout << program.render_script() << '\n';
         
         // 3. Step the process
         const bool done = process.step();
@@ -2929,7 +2929,7 @@ namespace csopesy {
     bool finished() const { return ip >= script.size(); }
 
     /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
-    str view_script() const {
+    str render_script() const {
       auto stream = osstream();
 
       // Compute padding width based on the number of instructions
@@ -2956,7 +2956,7 @@ namespace csopesy {
     }
 
     /** @brief Returns a formatted view of the current context stack. */
-    str view_context() const {
+    str render_context() const {
       auto stream = osstream();
 
       if (context.empty())
@@ -3188,9 +3188,9 @@ namespace csopesy {
       strategy = scheduler::make_strategy(config.scheduler, config);
 
       // 3. Inject per-core preemption policy from strategy
-      if (strategy.get_prempt()) {
+      if (strategy.get_preempt()) {
         for (auto& ref: data.cores.get_all())
-          ref.get().set_preempt(strategy.get_prempt());
+          ref.get().set_preempt(strategy.get_preempt());
       }
     }
 
@@ -3343,8 +3343,8 @@ namespace csopesy {
 
     private:
     str name;                       // Strategy identifier (e.g., "fcfs", "rr")
-    TickHandler handle_tick;        // Main strategy logic executed each tick
-    PreemptHandler handle_preempt;  // Core-level preemption policy (optional)
+    TickHandler tick_handler;        // Main strategy logic executed each tick
+    PreemptHandler preempt_handler;  // Core-level preemption policy (optional)
     SchedulerConfig config;         // Strategy-specific configuration
 
     public:
@@ -3365,12 +3365,12 @@ namespace csopesy {
 
     /** @brief Sets the main logic to run on each tick. */
     SchedulerStrategy& on_tick(TickHandler handler) {
-      return handle_tick = move(handler), *this;
+      return tick_handler = move(handler), *this;
     }
 
     /** @brief Sets the per-core preemption policy. */
     SchedulerStrategy& on_preempt(PreemptHandler policy) {
-      return handle_preempt = move(policy), *this;
+      return preempt_handler = move(policy), *this;
     }
 
     // === Accessors ===
@@ -3379,15 +3379,15 @@ namespace csopesy {
     const SchedulerConfig& get_config() const { return config; }
 
     /** @brief Returns the core preemption policy handler. */
-    const PreemptHandler& get_prempt() const { return handle_preempt; }
+    const PreemptHandler& get_preempt() const { return preempt_handler; }
 
     // === Execution ===
 
     /** @brief Invokes the tick handler logic on the current scheduler data. */
     void tick(SchedulerData& data) {
-      if (!handle_tick)
+      if (!tick_handler)
         throw runtime_error("SchedulerStrategy::tick called without on_tick handler.");
-      handle_tick(data);
+      tick_handler(data);
     }
   };
 }

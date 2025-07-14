@@ -2,9 +2,10 @@
 #include "core/common/imports/_all.hpp"
 // #include "core/instruction/InstructionInterpreter.hpp"
 // #include "core/process/Process.hpp"
+#include "core/execution/CoreManager.hpp"
 
-// #include "strategies/_all.hpp"
-// #include "SchedulerStrategy.hpp"
+#include "strategies/_all.hpp"
+#include "SchedulerStrategy.hpp"
 #include "SchedulerData.hpp"
 #include "types.hpp"
 
@@ -21,7 +22,7 @@ namespace csopesy {
     using queue = vector<str>;
     using list = vector<uint>;
 
-    queue names;                // Deferred generation queue for user-inserted processes
+    queue names;                // Deferred generation queue for user-inserted proc_table
     
     public:
 
@@ -30,9 +31,9 @@ namespace csopesy {
     bool generating = false;    // Flag indicating auto-generation mode
     
     // === Components ===
-    // Interpreter& interpreter;   // Shared instruction generator instance
-    SchedulerData data;         // Internal state (cores, processes, queue)
-    // SchedulerStrategy strategy; // Contains the scheduler strategy
+    // Interpreter& interpreter;    // Shared instruction generator instance
+    SchedulerData data;          // Internal state (cores, proc_table, queue)
+    SchedulerStrategy strategy;  // Contains the scheduler strategy
 
     // === Methods ===
 
@@ -44,13 +45,13 @@ namespace csopesy {
     /** @brief Executes the active strategy logic and increments the tick count. */
     // void tick() {
 
-    //   // 1. Generate any explicitly enqueued processes
+    //   // 1. Generate any explicitly enqueued proc_table
     //   cout << "[tick] Stage 1: enqueue\n";
     //   for (auto& name: names)
     //     generate_process(move(name));
     //   names.clear();
       
-    //   // 2. Possibly auto-generate processes this tick
+    //   // 2. Possibly auto-generate proc_table this tick
     //   cout << "[tick] Stage 2: dummy\n";
     //   if (generating && interval_has_elapsed())
     //     generate_process();
@@ -81,7 +82,7 @@ namespace csopesy {
     //     }
     //   }
 
-    //   // 4. Schedule ready processes to idle cores
+    //   // 4. Schedule ready proc_table to idle cores
     //   cout << "[tick] Stage 4: strategy\n";
     //   // strategy.tick(data);
     //   ++ticks;
@@ -90,17 +91,18 @@ namespace csopesy {
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      // // 1. Store config inside SchedulerData
-      // data.set_config(config);
+      // 1. Store config inside SchedulerData and initialize cores
+      data.set_config(config);
+      data.cores.resize(config.num_cpu);
 
-      // // 2. Build and install the selected strategy
-      // strategy = scheduler::make_strategy(config.scheduler, config);
+      // 2. Build and install the selected strategy
+      strategy = scheduler::make_strategy(config.scheduler, config);
 
-      // // 3. Inject per-core preemption policy from strategy
-      // if (strategy.get_prempt()) {
-      //   for (auto& ref: data.cores.get_all())
-      //     ref.get().set_preempt(strategy.get_prempt());
-      // }
+      // 3. Inject per-core preemption policy from strategy
+      if (strategy.preempt_handler) {
+        for (auto& ref: data.cores.get_all())
+          ref.get().set_preempt(strategy.preempt_handler);
+      }
     }
 
     // // === Generation Control ===

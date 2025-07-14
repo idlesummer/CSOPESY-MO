@@ -14,7 +14,7 @@ namespace csopesy {
    * - Sets `can_release = true` to signal readiness for job release.
    * 
    * Key Behaviors:
-   * - Does **not** assign or release processes — only the **Scheduler** can do that.
+   * - Does **not** assign or release proc_table — only the **Scheduler** can do that.
    * - Ignores ticking if no process is assigned (`job == nullptr`) or if marked `can_release`.
    * - Calls a user-provided preemption handler, if any, to check for early release.
    * - Tracks how long a job has been running via `job_ticks`.
