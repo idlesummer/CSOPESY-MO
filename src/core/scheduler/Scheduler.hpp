@@ -29,7 +29,6 @@ namespace csopesy {
     bool generating = false;    // Flag indicating auto-generation mode
     
     // === Components ===
-    // Interpreter& interpreter;    // Shared instruction generator instance
     SchedulerData data;          // Internal state (cores, proc_table, queue)
     SchedulerStrategy strategy;  // Contains the scheduler strategy
 
@@ -108,16 +107,15 @@ namespace csopesy {
 
     /** @brief Internal helper that generates a process with optional name. */
     uint generate_process(Str name=nullopt) { 
-      // Instantiate the process
+      // Generate a new unique process id
       uint pid = data.new_pid();
-      auto process = Process::create(
+
+      // Create and process to table first so it's owned and safe to reference
+      data.add_process(move(Process::create(
         pid,
         name.value_or(format("p{:02}", pid)), 
         Random::num(data.config.min_ins, data.config.max_ins)
-      );
-
-      // Add to table first so it's owned and safe to reference
-      data.add_process(move(process));
+      )));
 
       // Enqueue by PID
       data.rqueue.push(pid);
