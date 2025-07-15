@@ -18,7 +18,6 @@ namespace csopesy {
     using set = unordered_set<str>;
     
     public:
-
     map handlers; // Registry of available command handlers
     
     // === Methods ===
@@ -43,7 +42,7 @@ namespace csopesy {
         return;
 
       // Find command in the registry
-      const auto it = handlers.find(command.name);       
+      auto it = handlers.find(command.name);       
       if (it == handlers.end())
         return void(cout << format("[Shell] Unknown command: {}\n", command.name));
 
@@ -66,7 +65,12 @@ namespace csopesy {
       handler.execute(command, shell);
     }
 
+
+    // ========================
+    // === Private Helpers ====
+    // ========================
     private:
+
 
     /** @brief Private constructor to enforce singleton access via instance(). */
     CommandInterpreter() = default;
