@@ -6,7 +6,7 @@
 
 namespace csopesy::scheduler {
 
-  inline SchedulerStrategy make_strategy(const str& name, const SchedulerConfig& config) {
+  inline SchedulerStrategy get_strategy(str& name, SchedulerConfig& config) {
     if (name == "fcfs") return make_fcfs_strategy(config);
     if (name == "rr")   return make_rr_strategy(config);
     throw runtime_error(format("Unknown strategy name: {}", name));

@@ -22,7 +22,7 @@ namespace csopesy {
     auint next_pid = 1;       // Monotonic PID counter for generating unique process IDs
     
     public:
-    list finished_pids = {};  // PIDs of finished proc_table 
+    list finished_pids = {};  // PIDs of Finished processes 
     queue rqueue = {};        // Ready queue of proc_table waiting to be scheduled
     map proc_table = {};      // Container for all proc_table
     Cores cores;              // Reference to the list of scheduler cores

@@ -35,8 +35,8 @@ namespace csopesy::command {
           cout << "\033[38;5;33m" << separator << "\033[0m";
           log << separator;
 
-          cout << "Running proc_table:\n";
-          log << "Running proc_table:\n";
+          cout << "Running processes:\n";
+          log << "Running processes:\n";
 
           for (uint pid: running) {
             auto& proc = data.get_process(pid);
@@ -52,8 +52,8 @@ namespace csopesy::command {
             log << line;
           }
 
-          cout << "\nFinished proc_table:\n";
-          log << "\nFinished proc_table:\n";
+          cout << "\nFinished processes:\n";
+          log << "\nFinished processes:\n";
 
           for (uint pid: finished) {
             const auto& proc = data.get_process(pid);

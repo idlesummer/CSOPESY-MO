@@ -4,9 +4,9 @@
 #include "core/command/CommandHandler.hpp"
 
 namespace csopesy::command {
-  inline const CommandHandler make_clear() {
+  inline const CommandHandler make_cls() {
     return {
-      .name = "clear",
+      .name = "cls",
       .desc = "Clear screen contents.",
       .min_args = 0,
       .max_args = 0,

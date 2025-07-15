@@ -11,13 +11,15 @@ namespace csopesy {
     using Script = Instruction::Script;
     inline static Interpreter& interpreter = Interpreter::instance();
     
-  public:
+    public:
     // === Components ===
     ProcessData data;         // Data container of process
 
     // === Methods ===
-    Process(uint pid, str name, Script script): 
-      data(pid, move(name), move(script)) {}
+
+    /** @brief Creates a process with a random instruction script. */
+    Process(uint pid, str name, uint size): 
+      data(pid, move(name), move(interpreter.generate_script(size))) {}
     
     /** @brief Appends a log message (e.g. from PRINT instruction). */
     void log(str line) { data.log(move(line)); }
@@ -35,14 +37,7 @@ namespace csopesy {
 
       // Advance to next instruction if IP unchanged
       data.program.ip += (ip == data.program.ip);
-
       return false;
-    }
-
-    /** @brief Creates a process with a random instruction script (to be implemented). */
-    static Process create(uint pid, str name, uint size) {
-      auto script = interpreter.generate_script(size);
-      return Process(pid, move(name), move(script));
     }
   };
 }

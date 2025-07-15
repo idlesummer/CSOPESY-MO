@@ -7,7 +7,7 @@ namespace csopesy::command {
   inline const CommandHandler make_scheduler_stop() {
     return {
       .name = "scheduler-stop",
-      .desc = "Stops generating dummy proc_table.",
+      .desc = "Stops generating dummy processes.",
       .min_args = 0,
       .max_args = 0,
       .flags = {},

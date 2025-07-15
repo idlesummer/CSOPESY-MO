@@ -31,7 +31,7 @@ namespace csopesy::scheduler {
         }
       })
 
-      .on_preempt([quantum=config.quantum_cycles](const Core& core) {
+      .on_preempt([quantum=config.quantum_cycles](Core& core) {
         return core.job_ticks >= quantum;  
       });
   }

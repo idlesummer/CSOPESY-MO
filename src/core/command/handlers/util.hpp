@@ -8,7 +8,7 @@ namespace csopesy::command {
   inline const CommandHandler make_util() {
     return {
       .name = "report-util",
-      .desc = "Generates a report of running and finished proc_table to csopesylog.txt",
+      .desc = "Generates a report of running and Finished processes to csopesylog.txt",
       .min_args = 0,
       .max_args = 0,
       .flags = {},
@@ -27,8 +27,8 @@ namespace csopesy::command {
         cout << "\033[38;5;33m" << separator << "\033[0m";
         log << separator;
 
-        cout << "Running proc_table:\n";
-        log << "Running proc_table:\n";
+        cout << "Running processes:\n";
+        log << "Running processes:\n";
 
         for (const auto& pid: running) {
           auto& process = data.get_process(pid);
@@ -44,8 +44,8 @@ namespace csopesy::command {
           log << line;
         }
 
-        cout << "\nFinished proc_table:\n";
-        log << "\nFinished proc_table:\n";
+        cout << "\nFinished processes:\n";
+        log << "\nFinished processes:\n";
 
         for (const auto& pid: finished) {
           auto& process = data.get_process(pid);

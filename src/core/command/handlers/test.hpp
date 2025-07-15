@@ -31,7 +31,7 @@ namespace csopesy::command {
 
         // 1. Spawn process if not already present
         if (!storage.has("test.process")) {
-          auto process = Process::create(999, "test.process", 10);
+          auto process = Process(999, "test.process", 10);
           storage.set("test.process", move(process));
           cout << "[loop-test] Process created.\n";
           return;

@@ -48,7 +48,7 @@ namespace csopesy::command {
             cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
             cout << format("Cores used: {} / {}\n\n", busy, size);
             cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
-            cout << "Running proc_table:\n";
+            cout << "Running processes:\n";
 
             for (uint pid: cores.get_running_pids()) {
               auto& process = data.get_process(pid);
@@ -63,7 +63,7 @@ namespace csopesy::command {
               );
             }
 
-            cout << "\nFinished proc_table:\n";
+            cout << "\nFinished processes:\n";
 
             for (uint pid: data.finished_pids) {
               auto& process = data.get_process(pid);

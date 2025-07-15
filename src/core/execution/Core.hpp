@@ -28,7 +28,7 @@ namespace csopesy {
    */
   class Core {
     public:
-    using func = function<bool(const Core&)>;
+    using func = function<bool(Core&)>;
 
     // == Identity ===
     uint id;                    // Core ID

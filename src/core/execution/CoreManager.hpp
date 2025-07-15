@@ -59,19 +59,22 @@ namespace csopesy {
     /** @brief @brief Access a specific core by index. */
     Core& get(uint i) { return *cores.at(i); }
 
-    /** @brief Returns references to all cores */
+    /** @brief Returns references to all cores. */
     CoreRefs get_all() { return filter_cores([](auto& ptr) { return true; }); }
 
-    /** @brief Returns a list of references to all idle cores */
+    /** @brief Returns a list of references to all idle cores. */
     CoreRefs get_idle() { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
 
-    /** @brief Returns a list of references to all busy (non-idle) cores */
+    /** @brief Returns a list of references to all busy (non-idle) cores. */
     CoreRefs get_busy() { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
+    
+    /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
+    CoreRefs get_releasable() { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
     /** @brief @brief Returns a list of IDs for all busy (non-idle) cores. */
     list get_busy_core_ids() { return extract_ids([](Core& core) { return core.id; }); }
 
-    /** @brief Returns a list of pids to all busy (non-idle) cores */
+    /** @brief Returns a list of pids to all busy (non-idle) cores. */
     list get_running_pids() { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
 
     // ========================

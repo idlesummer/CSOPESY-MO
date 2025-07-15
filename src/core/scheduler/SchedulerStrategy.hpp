@@ -18,7 +18,7 @@ namespace csopesy {
     using TickHandler = function<void(SchedulerData&)>;
 
     // === Members ===
-    str name = "";                  // Strategy identifier (e.g., "fcfs", "rr")
+    str name;              // Strategy identifier (e.g., "fcfs", "rr")
     SchedulerConfig config;         // Strategy-specific configuration
     TickHandler tick_handler;       // Main strategy logic executed each tick
     PreemptHandler preempt_handler; // Core-level preemption policy (optional)

@@ -310,6 +310,43 @@ namespace csopesy::command {
 }
 
 ------------------------------
+ FILE:  config.hpp
+ PATH:  core\command\handlers\config.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+namespace csopesy::command {
+  inline const CommandHandler make_config() {
+    return {
+      .name = "config",
+      .desc = "Displays the current scheduler configuration.",
+      .min_args = 0,
+      .max_args = 0,
+
+      .execute = [](const Command&, Shell& shell) {
+        auto& config = shell.scheduler.data.config;
+        cout << "\n";
+        cout << "â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Scheduler Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®\n";
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Scheduler", config.scheduler);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "CPU Cores", config.num_cpu);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Quantum Cycles", config.quantum_cycles);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Batch Process Freq", config.batch_process_freq);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Min Instructions", config.min_ins);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Max Instructions", config.max_ins);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Delays Per Exec", config.delays_per_exec);
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Initialized", config.initialized ? "Yes" : "No");
+        cout << "â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯\n";
+      },
+    };
+  }
+}
+
+------------------------------
  FILE:  demo.hpp
  PATH:  core\command\handlers\demo.hpp
 ------------------------------
@@ -639,7 +676,7 @@ namespace csopesy::command {
   inline const CommandHandler make_scheduler_start() {
     return {
       .name = "scheduler-start",
-      .desc = "Starts periodic dummy process generation every batch_process_freq ticks.",
+      .desc = "Starts periodic dummy process generation every 'batch_process_freq' ticks.",
       .min_args = 0,
       .max_args = 0,
       .flags = {},
@@ -911,7 +948,7 @@ namespace csopesy::command {
 
         // 1. Spawn process if not already present
         if (!storage.has("test.process")) {
-          auto process = Process::create(999, "test.process", 10);
+          auto process = Process(999, "test.process", 10);
           storage.set("test.process", move(process));
           cout << "[loop-test] Process created.\n";
           return;
@@ -959,7 +996,7 @@ namespace csopesy::command {
   inline const CommandHandler make_util() {
     return {
       .name = "report-util",
-      .desc = "Generates a report of running and finished processes to csopesylog.txt",
+      .desc = "Generates a report of running and Finished processes to csopesylog.txt",
       .min_args = 0,
       .max_args = 0,
       .flags = {},
@@ -1030,12 +1067,13 @@ namespace csopesy::command {
 #include "core/common/imports/_all.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "clear.hpp"
+#include "config.hpp"
 #include "demo.hpp"
 #include "echo.hpp"
 #include "exit.hpp"
 #include "initialize.hpp"
-#include "process-smi.hpp"
-#include "report-util.hpp"
+// #include "process-smi.hpp"
+// #include "report-util.hpp"
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
@@ -1047,12 +1085,13 @@ namespace csopesy::command {
   list get_all() {
     return {
       make_clear(),
+      make_config(),
       make_demo(),
       make_echo(),
       make_exit(),
       make_initialize(),
-      make_process_smi(),
-      make_report_util(),
+      // make_process_smi(),
+      // make_report_util(),
       make_scheduler_start(),
       make_scheduler_stop(),
       make_screen(),
@@ -1217,24 +1256,48 @@ namespace csopesy {
 
 #pragma once
 #include <array>
-#include <list>
-#include <vector>
+#include <map>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace csopesy {
   using std::array;
-  using std::vector;
+  using std::make_pair;
+  using std::out_of_range;
+  using std::pair;
   using std::queue;
   using std::unordered_map;
   using std::unordered_set;
-  using std::pair;
-  template<typename Type> using List = std::list<Type>;
-  using std::make_pair;
+  using std::vector;
+  
+  template <typename Key, typename Val>
+  using ordered_map = std::map<Key, Val>;
+}
 
-  using std::out_of_range;
+------------------------------
+ FILE:  helpers.hpp
+ PATH:  core\common\imports\helpers.hpp
+------------------------------
+
+#pragma once
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <sstream>
+
+namespace csopesy {
+  
+  // === Utility functions ===
+  constexpr inline uint32_t count_digits(uint32_t n) {
+    return (n == 0) ? 1 : static_cast<int>(std::log10(n)) + 1;
+  }
+
+  constexpr inline std::string pad_left(const std::string& s, uint32_t width, char fill = ' ') {
+    return std::string(width > s.length() ? width - s.length() : 0, fill) + s;
+  }
 }
 
 ------------------------------
@@ -1348,7 +1411,7 @@ namespace csopesy {
 
 #pragma once
 #ifndef NOMINMAX
-#define NOMINMAX
+  #define NOMINMAX
 #endif
 #include <windows.h> // Doesn't define min/max since NOMINMAX is set
 #include <algorithm> // Redefines std::min/std::max
@@ -1356,6 +1419,10 @@ namespace csopesy {
 namespace csopesy {
   using std::min;
   using std::max;
+
+  inline void enable_unicode() {
+    SetConsoleOutputCP(CP_UTF8);
+  }
 }
 
 ------------------------------
@@ -1562,6 +1629,7 @@ namespace csopesy {
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"
+#include "helpers.hpp"
 #include "io.hpp"
 #include "misc.hpp"
 #include "platform.hpp"
@@ -1774,7 +1842,7 @@ namespace csopesy {
      * @brief Dispatches all queued events to their registered handlers.
      * 
      * Safely callable from any thread. This method swaps out the event queue
-     * under a lock and processes a copy of it outside the lock to avoid
+     * under a lock and proc_table a copy of it outside the lock to avoid
      * blocking other operations. For each event, the list of handlers is
      * also copied under a lock to prevent concurrent modification during
      * dispatch. This ensures thread-safe and non-blocking execution of
@@ -1839,42 +1907,59 @@ namespace csopesy {
 namespace csopesy {
 
   /**
-   * Represents a single CPU core in the scheduler system.
-   * Each core may run one process job at a time and job_ticks independently in a thread.
+   * @brief Represents a passive simulated CPU core that ticks independently in a thread.
+   * 
+   * Responsibilities:
+   * - Continuously ticks in its own thread every 1ms to simulate real-time execution.
+   * - Executes (`step()`) the currently assigned process one instruction per tick.
+   * - Monitors its assigned process for completion or preemption conditions.
+   * - Sets `can_release = true` to signal readiness for job release.
+   * 
+   * Key Behaviors:
+   * - Does **not** assign or release proc_table â€” only the **Scheduler** can do that.
+   * - Ignores ticking if no process is assigned (`job == nullptr`) or if marked `can_release`.
+   * - Calls a user-provided preemption handler, if any, to check for early release.
+   * - Tracks how long a job has been running via `job_ticks`.
+   * 
+   * Design Notes:
+   * - Core runs **faster** than the scheduler (1ms tick vs. ~100ms scheduler tick).
+   * - Implements `assign()` and `release()` methods, but only for use by the scheduler.
+   * - Internally manages its own thread and guarantees safe shutdown in destructor.
+   * - Tick behavior is guarded to avoid dereferencing null process pointers.
+   * - Cannot crash from invalid job access â€” fully guarded and thread-safe by design.
    */
   class Core {
     public:
-    using Job = Process*;
-    using PreemptHandler = function<bool(const Core&)>;
+    using func = function<bool(const Core&)>;
 
-    public:  
-    uint id;                  ///< Core ID
+    // == Identity ===
+    uint id;                    // Core ID
     
-    // === Job State ===
-    Job job;                  ///< A 'slot' for the currently assigned process (if any)
-    uint job_ticks = 0;       ///< Ticks since the current job was assigned
-    bool can_release = false; ///< Flag to indicate pending release
-    PreemptHandler preempt_handler; ///< Optional strategy-injected logic
+    // === Process Job State ===
+    Process* job     = nullptr; // Pointer to the currently assigned process (if any)
+    uint job_ticks   = 0;       // Number of ticks the current process has been running
+    bool can_release = false;   // Whether the process is eligible for release by the Scheduler
+    func preempt  = nullptr;    // Optional strategy-injected logic
     
     // === Execution Control ===
-    abool running = false;    ///< Atomic flag for tick loop
-    Thread thread;            ///< Background ticking thread
+    abool running    = false;   // Atomic flag for tick loop
+    Thread thread;              // Background ticking thread
 
     // === Methods ===
 
     /** @brief Constructs a scheduler core with the given ID and starts the thread. */
-    Core(uint id=0) : id(id) { start(); }
+    Core(uint id=0): id(id) { start(); }
 
     /** @brief Destructor stops the tick thread cleanly. */
     ~Core() { stop(); }
 
     /** @brief Called by scheduller to assign a process to this core. */
-    void assign(Process& process) { set_job(&process, id, true, false); }
+    void assign(Process& process) { set_job(&process, id); }
 
-    /** @brief Called by scheduller to release the current job. */
-    void release() { if (job) set_job(nullptr, -1, true, false); }
+    /** @brief Called only by the scheduler to release the current job. */
+    void release() { if (job) set_job(nullptr); }
 
-    /** @brief True if idle. */
+    /** @brief Returns true no process is assigned to the core. */
     bool is_idle() const { return job == nullptr; }
 
     /** @brief Returns the currently assigned job. */
@@ -1884,37 +1969,37 @@ namespace csopesy {
     }
 
     /** @brief Injects a preemption handler (optional). */
-    void set_preempt(PreemptHandler handler) { preempt_handler = handler; }
+    void set_preempt(func handler) { preempt = handler; }
 
-
+    // ========================
+    // === Private Members ====
+    // ========================
     private:
 
-
-    /** @brief Simulates one CPU tick. */
+    /** @brief Performs one CPU tick: steps the assigned process if valid. */
     void tick() {
-      // Skip tick if no job is currently assigned
-      if (!job) return;
+      if (job == nullptr) return; // If no process is assigned to this core, skip the tick
+      if (can_release) return;    // Prevent ticking the process if it's already marked for release
 
-      // Execute one instruction step for the assigned process
-      auto& process = *job;
-      process.step();
+      auto& process = *job;       // Get the process from the process pointer
+      process.step();             // Execute one instruction from the process script
+      ++job_ticks;                // Track how long this process is running on this core
 
-      // Increment the tick counter for time tracking
-      ++job_ticks;
-
-      // Mark the process as releasable if it has finished execution
+      // If the process has finished all its instructions, mark for release
       if (process.data.state.finished())
         can_release = true;
 
-      // Check if preemption conditions are met (e.g., quantum exceeded)
-      if (preempt_handler && preempt_handler(*this))
+      // If preemption is defined and it says to preempt, mark for release
+      if (preempt != nullptr && preempt(*this))
         can_release = true;
     }
 
-    /** @brief Starts background thread. */
+    /** @brief Only called by constructor to launch the core's background thread and start ticking. */
     void start() {
-      running = true;
-      thread = Thread([this] {
+      if (running) return;        // If already running, do nothing (prevent duplicate threads)
+
+      running = true;             // Mark the core as active/busy
+      thread = Thread([this] {    // Launch the background thread that ticks continuously
         while (running) {
           tick();
           sleep_for(1ms);
@@ -1922,23 +2007,23 @@ namespace csopesy {
       });
     }
 
-    /** @brief Stops thread cleanly. */
+    /** @brief Signals the core to stop and joins the thread cleanly. */
     void stop() {
-      running = false;
-      if (thread.joinable()) 
-        thread.join();
+      running = false;            // Signals the thread to stop
+      if (thread.joinable())      // Only joins if the thread is valid
+        thread.join();            // Waits for the thread to finish
     }
 
     // === Helper methods ===
 
-    void set_job(Job new_job, int core_id, bool reset_ticks, bool release_flag) {
-      job = new_job;
-
-      if (auto& process = *job; new_job) 
-        process.data.core_id = core_id;
-
-      job_ticks = reset_ticks ? 0 : job_ticks;
-      can_release = release_flag;
+    /** @brief Assigns or clears the process currently running on this core. */
+    void set_job(Process* process, int core_id=-1) {
+      if (process != nullptr)     // Assigning a new process? Mark it with this core's ID
+        process->data.core_id = core_id;
+      
+      job = process;              // Update process pointer slot (null if releasing)
+      job_ticks = 0;              // Reset job tick counter â€” either a new job or clearing old one
+      can_release = false;        // Always reset release flag; only tick() will set it to true when appropriate
     }
   };
 }
@@ -1955,95 +2040,107 @@ namespace csopesy {
 namespace csopesy {
 
   /**
-   * @brief Manages a pool of CPU cores in the scheduler.
+   * @brief Manages the pool of Core components for the scheduler system.
    * 
-   * This class provides access, iteration, and lifecycle
-   * control (start/stop) for all managed `Core`s.
+   * Responsibilities:
+   * - Owns and maintains all simulated CPU cores as `Core` objects.
+   * - Provides safe and filtered access to all, busy, or idle cores.
+   * - Handles core lifecycle: creation, reset, and safe iteration.
+   * 
+   * Key Behaviors:
+   * - `resize(size)`: Replaces all cores with a new set of N fresh cores.
+   * - `get_busy()` / `get_idle()`: Filters out cores by status for use in scheduling logic.
+   * - `get_usage()`: Returns a float utilization ratio (busy / total cores).
+   * - `get_running_pids()` and `get_busy_core_ids()`: Extract diagnostic metadata from active cores.
+   * 
+   * Design Notes:
+   * - Cores are stored as `unique_ptr<Core>` to ensure clean ownership and destruction.
+   * - Always use reference-returning accessors (`CoreRefs`) instead of raw pointer access.
+   * - Guards against null pointers even though `resize()` always populates all slots.
+   * - Scheduler is the only component expected to use this class directly.
    */
   class CoreManager {
-    using CorePtr = unique_ptr<Core>;    // Internal ownership via unique_ptr
-    using CoreRefs = vector<ref<Core>>;  // For exposing multiple cores
-    using Cores = vector<CorePtr>;       // Internal list of cores
-    using list = vector<uint>;           // For returning PID lists
+    using CoreRefs = vector<ref<Core>>; // For exposing multiple cores as return values
+    using CorePtr = unique_ptr<Core>;   // Internal ownership via unique_ptr
+    using Cores = vector<CorePtr>;      // Internal list of cores
+    using list = vector<uint>;          // For returning PID lists
+    using bool_func = function<bool(CorePtr&)>; // For private helper
+    using uint_func = function<uint(Core&)>;    // For private helper
     
-    Cores cores;
+    Cores cores = {};
 
     public:
 
-    /** Constructs and initializes a given number of cores */
-    CoreManager(uint size=0) { resize(size); }
-
-    /** Clears and reinitializes the core list with the specified number of cores */
+    /** @brief Clears and reinitializes the core list with the specified number of cores */
     void resize(uint size) {
-      cores.clear();
-      cores.reserve(size);
-      for (uint i=0; i < size; ++i)
+      cores.clear();                    // Destroys all existing cores
+      cores.reserve(size);              // Optional: preallocate to avoid reallocations
+      for (uint i=0; i < size; ++i) {
         cores.emplace_back(make_unique<Core>(i));
+      }
     }
 
     // === Accessors ===
 
     /** @brief Returns number of cores. */
     uint size() const { return cores.size(); }
-
-    /** @brief Access a specific core by index. */
-    Core& get(uint i) { return *cores[i]; }
-
-    /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
+    
+    /** @brief @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
     float get_usage() const {
       if (cores.empty()) return 0.0f;
-      uint busy = count_if(cores, [](auto& ptr) { return !ptr->is_idle(); });
-      return cast<float>(busy) / cast<float>(cores.size());
+      return cast<float>(get_busy_size()) / cast<float>(cores.size());
     }
 
-    /** Returns references to all cores */
-    CoreRefs get_all() {
-      auto all = CoreRefs();
-      all.reserve(cores.size());
+    /** @brief @brief Access a specific core by index. */
+    Core& get(uint i) { return *cores.at(i); }
+
+    /** @brief Returns references to all cores */
+    CoreRefs get_all() { return filter_cores([](auto& ptr) { return true; }); }
+
+    /** @brief Returns a list of references to all idle cores */
+    CoreRefs get_idle() { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
+
+    /** @brief Returns a list of references to all busy (non-idle) cores */
+    CoreRefs get_busy() { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
+
+    /** @brief @brief Returns a list of IDs for all busy (non-idle) cores. */
+    list get_busy_core_ids() { return extract_ids([](Core& core) { return core.id; }); }
+
+    /** @brief Returns a list of pids to all busy (non-idle) cores */
+    list get_running_pids() { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
+
+    // ========================
+    // === Private Members ====
+    // ========================
+    private:
+
+    // === Helper Methods === 
+
+    /** @brief Returns the number of currently busy (non-idle) cores. */
+    uint get_busy_size() const {
+      return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
+    }
+
+    /** @brief Returns references to cores that satisfy the given filter condition. */
+    CoreRefs filter_cores(bool_func predicate) {
+      auto result = CoreRefs();       // Create a list of core reference wrappers
+      result.reserve(cores.size());   // Optional: preallocate to avoid reallocations
 
       for (auto& ptr: cores)
-        all.push_back(ref(*ptr));
-      return all;
+        if (ptr != nullptr && predicate(ptr)) // Only include non-null cores that pass the filter
+          result.push_back(ref(*ptr));        // Store a reference wrapper of the matching core
+      return result;
     }
 
-    /** Returns a list of references to all idle cores */
-    CoreRefs get_idle() {
-      auto idle = CoreRefs();
-      idle.reserve(cores.size());
+    /** @brief Extracts a list of uint values from all busy cores using the given accessor. */
+    list extract_ids(uint_func getter) {
+      auto busy = get_busy();         // Store once to reuse
+      list result;
+      result.reserve(busy.size());    // Reserve exactly what we need
 
-      for (auto& ptr: cores) {
-        if (ptr->is_idle())
-          idle.push_back(ref(*ptr));
-      }
-      return idle;
-    }
-
-    /** Returns a list of references to all busy (non-idle) cores */
-    CoreRefs get_busy() {
-      auto busy = CoreRefs();
-      busy.reserve(cores.size());
-
-      for (auto& ptr: cores) {
-        if (!ptr->is_idle())
-          busy.push_back(ref(*ptr));
-      }
-      return busy;
-    }
-
-    /** @brief Returns a list of IDs for all busy (non-idle) cores. */
-    list get_busy_core_ids() {
-      list ids;
-      for (auto& ref: get_busy())
-        ids.push_back(ref.get().id);
-      return ids;
-    }
-
-    /** Returns a list of pids to all busy (non-idle) cores */
-    list get_running_pids() {
-      list pids;
-      for (auto& ref: get_busy())
-        pids.push_back(ref.get().get_job().data.id);
-      return pids;
+      for (auto& ref: busy)
+        result.push_back(getter(ref.get()));
+      return result;
     }
   };
 }
@@ -2311,14 +2408,7 @@ namespace csopesy {
 
     inline static const list vars = {"x", "y", "z"};
     inline static const list messages = {
-      "We use the observer pattern with an event emitter.",
-      "All components have start, stop, and tick methods.",
-      "We prefer composition over inheritance to build flexible and reusable components.",
-      "We use data-driven design instead of deep inheritance.",
-      "Each part has a single responsibility, keeping code modular.",
-      "We avoid deep nesting by using guard clauses.",
-      "The code is clean and easy to read.",
-      "No 'vibecoding' here â€” everything is intentional.",
+      "Lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
     };
   };
 }
@@ -2751,6 +2841,7 @@ namespace csopesy::Position {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "ProcessData.hpp"
 
@@ -2758,39 +2849,41 @@ namespace csopesy {
 
   class Process {
     using Interpreter = InstructionInterpreter;
-    inline static Interpreter interpreter = Interpreter::instance();
+    using Script = Instruction::Script;
+    inline static Interpreter& interpreter = Interpreter::instance();
     
-    public:
-    ProcessData data; ///< Data container of process
+  public:
+    // === Components ===
+    ProcessData data;         // Data container of process
 
     // === Methods ===
-    Process(uint pid, str name): data(move(name), pid) {}
+    Process(uint pid, str name, Script script): 
+      data(pid, move(name), move(script)) {}
     
     /** @brief Appends a log message (e.g. from PRINT instruction). */
     void log(str line) { data.log(move(line)); }
 
     /** @brief Executes a single instruction step for the given process. */
     bool step() {
-      if (data.state.finished() || data.program.finished())
-        return data.state.finish(), true;
+      if (data.state.finished() || data.program.finished()) {
+        data.state.finish();  // Mark as finished
+        return true;          // Process is done
+      }
 
-      const auto ip = data.program.ip;
-      const auto& inst = data.program.script.at(ip);
-
+      auto ip = data.program.ip;
+      auto& inst = data.program.script.at(ip);
       interpreter.execute(inst, data);
 
-      if (ip == data.program.ip)
-        data.program.ip = ip + 1;
+      // Advance to next instruction if IP unchanged
+      data.program.ip += (ip == data.program.ip);
 
       return false;
     }
 
     /** @brief Creates a process with a random instruction script (to be implemented). */
     static Process create(uint pid, str name, uint size) {
-      auto proc = Process(pid, move(name));
       auto script = interpreter.generate_script(size);
-      proc.data.program.load_script(script);
-      return move(proc);
+      return Process(pid, move(name), move(script));
     }
   };
 }
@@ -2802,6 +2895,7 @@ namespace csopesy {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/instruction/Instruction.hpp"
 #include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessState.hpp"
@@ -2817,31 +2911,31 @@ namespace csopesy {
    * Process class, which owns and manipulates this data.
    */
   class ProcessData {
-    public:
-
+    using Script = Instruction::Script;
     using list = vector<str>;
 
+  public:
     // === Identity ===
-    str name;               ///< Human-readable process name (e.g. p01, p02)
-    uint id;                ///< Unique process ID
+    uint id = 0;            // Unique process ID
+    str name = "";          // Human-readable process name (e.g. p01, p02)
     
     // === Properties ===
-    list logs;              ///< Output logs collected from PRINT instructions
+    list logs = {};         // Output logs collected from PRINT instructions
     
     // === Scheduling/Execution Metadata ===
-    int core_id = -1;       ///< ID of the core this process is assigned to (-1 if unassigned)
-    Time stime;             ///< Timestamp of when the process was created
+    int core_id = -1;       // ID of the core this process is assigned to (-1 if unassigned)
+    Time stime = {};        // Timestamp of when the process was created
     
     // === Components ===
-    ProcessState state;     ///< Current state of the process (Ready, Running, Sleeping, Finished)
-    ProcessMemory memory;   ///< Key-value variable store (e.g. for DECLARE, ADD, etc.)
-    ProcessProgram program; ///< List of instructions and execution context
+    ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
+    ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
+    ProcessProgram program; // List of instructions and execution context
 
     // === Methods ===
 
     /** @brief Constructs a process given name and process ID. */
-    ProcessData(str name, uint id): 
-      name(move(name)), id(id), stime(Clock::now()) {}
+    ProcessData(uint id, str name, Script script): 
+      id(id), name(move(name)), program(script), stime(Clock::now()) {}
 
     /** @brief Append a log message (used for PRINT instructions) */
     void log(str line) { logs.push_back(move(line)); }
@@ -2861,7 +2955,7 @@ namespace csopesy {
   class ProcessMemory {
     using map = unordered_map<str, uint>;
     
-    public:
+  public:
     map symbol_table;
 
     /** Memory mutators */
@@ -2908,20 +3002,16 @@ namespace csopesy {
     using Script = Instruction::Script;
     using Stack = ContextStack;
 
-    public:
-    Script script;  ///< Flat list of all program instructions
-    Stack context;  ///< Stack of active loop contexts
-    uint ip = 0;    ///< Current instruction pointer
+  public:
+    Script script = {}; // Flat list of all program instructions
+    Stack context = {}; // Stack of active loop contexts
+    uint ip = 0;        // Current instruction pointer
 
     // === Methods ===
-
-    /** @brief Loads a new instruction script and resets execution state. */
-    void load_script(Script new_script) { 
-      script = move(new_script);
-      context.clear();
-      ip = 0;  
-    }
     
+    /** @brief Loads an instruction script. */
+    ProcessProgram(Script script): script(move(script)) {}
+
     /** @brief Returns the size of the script. */
     uint size() const { return script.size(); }
     
@@ -2930,50 +3020,66 @@ namespace csopesy {
 
     /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
     str render_script() const {
-      auto stream = osstream();
-
-      // Compute padding width based on the number of instructions
-      uint addr_width = to_string(script.size()-1).length();
+      // Compute the width needed to align inst indices
+      uint width = count_digits(script.size()-1);
+      auto out = osstream();
       
-      for (uint i=0; i < script.size(); ++i) {
-        const auto& inst = script[i];
-        const auto marker = (i == ip) ? '>' : ' ';
-        const uint opcode_width = 10;
-        auto opcode = inst.opcode;
+      // Render each instruction line, marking the current IP with a '>'
+      for (uint i=0; i < script.size(); ++i)
+        out << render_line(i, width);
 
-        if (opcode.size() > opcode_width)
-          opcode = opcode.substr(0, opcode_width);
-
-        stream << format("{} [{:0{}}] {:<{}}", 
-          marker, i, addr_width, opcode, opcode_width);
-
-        for (const auto& arg: inst.args)
-          stream << ' ' << arg;
-        stream << '\n';
-      }
-
-      return move(stream).str();
+      return out.str();
     }
 
     /** @brief Returns a formatted view of the current context stack. */
     str render_context() const {
-      auto stream = osstream();
+      // If there are no loop frames, return empty
+      if (context.empty()) 
+        return "  <empty>\n";  
+      
+      // Compute width for formatting inst indices
+      uint width = count_digits(script.size()-1); 
+      auto out = osstream();
 
-      if (context.empty())
-        return stream << "  <empty>\n",  stream.str();
+      // Render each loop frame (used by nested FOR instructions)
+      for (uint i=0; i < context.size(); ++i)
+        out << render_frame(i, width);
 
-      // Compute padding width based on the number of instructions
-      uint width = to_string(script.size()-1).length();
+      return out.str();
+    }
 
-      for (uint i=0; i < context.size(); ++i) {
-        const auto& frame = context.at(i);
-        const auto& inst  = script[frame.start];
+    // ========================
+    // === Private Members ====
+    // ========================
+  private:
 
-        stream << format("  [{}] {:<6} @{:0{}}  exit: {:0{}}  count: {}\n",
-          i, frame.opcode, frame.start, width, inst.exit, width, frame.count);
-      }
+    /** @brief Helper to renders a single instruction line from the script with formatting. */
+    str render_line(uint idx, uint width) const {
+      char marker = (idx == ip) ? '>' : ' ';
+      auto opcode = script[idx].opcode.substr(0, 10);
+      auto line = osstream();
+      line << format("{} [{:0{}}] {:<{}}", marker, idx, width, opcode, 10);
 
-      return move(stream).str();
+      for (auto& arg: script[idx].args)
+        line << ' ' << arg;
+      line << '\n';
+
+      return line.str();
+    }
+
+    /** @brief Helper to renders a single loop frame from the context stack with formatting. */
+    str render_frame(uint idx, uint width) const {
+      auto& frame = context.at(idx);
+      auto& inst = script[frame.start];
+      auto out = osstream();
+
+      out << format("  [{}] {:<6}", idx, frame.opcode);
+      out << format(" @{:0{}}", frame.start, width);
+      out << format("  exit: {:0{}}", inst.exit, width);
+      out << format("  count: {}", frame.count);
+      out << '\n';
+
+      return out.str();
     }
   };
 }
@@ -2998,7 +3104,7 @@ namespace csopesy {
   class ProcessState {
     uint sleep_ticks = 0;
     
-    public:
+  public:
     State value = State::Ready;
 
     // === State Queries ===
@@ -3056,10 +3162,9 @@ namespace csopesy {
     */
   class ContextStack {
     using Stack = vector<ContextFrame>;
-    
     Stack stack;
 
-    public:
+  public:
     
     /** Checks if top frame matches the opcode. */
     bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }
@@ -3106,9 +3211,8 @@ namespace csopesy {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
 #include "core/process/Process.hpp"
-
+#include "core/execution/CoreManager.hpp"
 #include "strategies/_all.hpp"
 #include "SchedulerStrategy.hpp"
 #include "SchedulerData.hpp"
@@ -3123,11 +3227,9 @@ namespace csopesy {
    * orchestration of ticks and process generation.
    */
   class Scheduler {
-    using Interpreter = InstructionInterpreter;
     using queue = vector<str>;
     using list = vector<uint>;
-
-    queue names;                // Deferred generation queue for user-inserted processes
+    queue names;                // Deferred generation queue for user-inserted proc_table
     
     public:
 
@@ -3136,41 +3238,38 @@ namespace csopesy {
     bool generating = false;    // Flag indicating auto-generation mode
     
     // === Components ===
-    Interpreter& interpreter;   // Shared instruction generator instance
-    SchedulerData data;         // Internal state (cores, processes, queue)
-    SchedulerStrategy strategy; // Contains the scheduler strategy
+    SchedulerData data;          // Internal state (cores, proc_table, queue)
+    SchedulerStrategy strategy;  // Contains the scheduler strategy
 
     // === Methods ===
 
-    /** @brief Registers all available scheduling strategies. */
-    Scheduler(): 
-      interpreter(Interpreter::instance()),
-      strategy(scheduler::make_strategy("fcfs", SchedulerConfig())) {}
-
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
-
-      // 1. Generate any explicitly enqueued processes
+      // 1. Generate any user-enqueued proc_table
       for (auto& name: names)
         generate_process(move(name));
       names.clear();
       
-      // 2. Possibly auto-generate processes this tick
+      // 2. Possibly auto-generate proc_table this tick
       if (generating && interval_has_elapsed())
         generate_process();
 
       // 3. Update running/finished state and handle preemption
       for (auto& ref: data.cores.get_busy()) {
         auto& core = ref.get();
+        
+        // Skip core if it's not releasable yet
+        if (!core.can_release) continue;
 
-        if (core.can_release) {
-          auto& process = core.get_job();
-          core.release();
+        auto& process = core.get_job();
+        core.release();
 
-          if (process.data.state.finished())
-            data.finished_pids.push_back(process.data.id);
-          else
-            data.rqueue.push(process.data.id);
+        if (process.data.state.finished()) {
+          data.finished_pids.push_back(process.data.id);
+          cout << "[tick]   process " << process.data.id << " finished\n";
+        } else {
+          data.rqueue.push(process.data.id);
+          cout << "[tick]   process " << process.data.id << " re-queued\n";
         }
       }
 
@@ -3181,50 +3280,111 @@ namespace csopesy {
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      // 1. Store config inside SchedulerData
-      data.set_config(config);
-
-      // 2. Build and install the selected strategy
+      // 1. Build and install the selected strategy
       strategy = scheduler::make_strategy(config.scheduler, config);
-
-      // 3. Inject per-core preemption policy from strategy
-      if (strategy.get_preempt()) {
+      
+      // 2. Inject per-core preemption policy from strategy
+      if (strategy.preempt_handler) {
         for (auto& ref: data.cores.get_all())
-          ref.get().set_preempt(strategy.get_preempt());
+          ref.get().set_preempt(strategy.preempt_handler);
       }
+      
+      // 3. Store config inside SchedulerData and initialize cores
+      data.cores.resize(config.num_cpu);
+      data.config = move(config);         // Move config last so it's not invalid above
     }
 
-    // === Generation Control ===
+    // // === Process Generation Control ===
     void enqueue_process(str name) { names.push_back(move(name)); }
     void generate(bool flag) { generating = flag; }
 
+    // ========================
+    // === Private Helpers ====
+    // ========================
     private:
 
-    // === Helper methods ===
-
-    /** @brief Helper that returns true if the current tick matches the process generation interval. */
+    /** @brief Helper that checks if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
       uint freq = data.config.batch_process_freq;
       return freq > 0 && (ticks % freq == 0);
     }
 
     /** @brief Internal helper that generates a process with optional name. */
-    uint generate_process(Str name=nullopt) { 
-
-      // Instantiate the process
+    uint generate_process(str name="") { 
+      // Generate a new unique process id
       uint pid = data.new_pid();
-      auto process = Process::create(
+      
+      // Create process in table so it's safe to reference
+      data.add_process(move(Process(  
         pid,
-        name.value_or(format("p{:02}", pid)), 
+        name.empty() ? format("p{:02}", pid) : name, 
         Random::num(data.config.min_ins, data.config.max_ins)
-      );
+      )));
 
-      // Add to table first so it's owned and safe to reference
-      data.add_process(move(process));
+      // Enqueue the proces by its PID
+      data.rqueue.push(pid);                   
+      return pid;   
+    }
+  };
+}
 
-      // Enqueue by PID
-      data.rqueue.push(pid);
-      return pid;
+------------------------------
+ FILE:  SchedulerConfig.hpp
+ PATH:  core\scheduler\SchedulerConfig.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+namespace csopesy {
+
+  /**
+   * @brief Dynamic scheduler configuration using key-value string pairs.
+   * 
+   * Allows easy iteration, modification, and serialization of scheduler settings.
+   */
+  class SchedulerConfig {
+    using map = ordered_map<str, str>;
+    
+    public:
+    map entries;
+
+    // === Methods ===
+
+    /** @brief Initializes the default scheduler configuration. */
+    SchedulerConfig() {
+      entries["scheduler"] = "fcfs";
+      entries["num-cpu"] = "1";
+      entries["quantum-cycles"] = "1";
+      entries["batch-process-freq"] = "1";
+      entries["min-ins"] = "1";
+      entries["max-ins"] = "1";
+      entries["delays-per-exec"] = "0";
+      entries["initialized"] = "false";
+    }
+
+    /** @brief Sets the value of a configuration key. */
+    bool set(const str& key, const str& value) {
+      if (!entries.contains(key)) return false;
+      entries[key] = value;
+      return true;
+    }
+ 
+    /** @brief Retrieves the string value for a given key. */
+    str get(const str& key) const {
+      auto it = entries.find(key);
+      return it != entries.end() ? it->second : "";
+    }
+
+    /** @brief Retrieves the string value for a given key as a uint. */
+    uint get_uint(const str& key) const {
+      return stoul(get(key));
+    }
+
+    /** @brief Retrieves the string value for a given key as bool. */
+    bool get_bool(const str& key) const {
+      auto v = get(key);
+      return v == "1" || v == "true";
     }
   };
 }
@@ -3255,44 +3415,37 @@ namespace csopesy {
     using map = unordered_map<uint, ProcessPtr>;
     using list = vector<uint>;
 
-    auint next_pid;         ///< Monotonic PID counter for generating unique process IDs
+    auint next_pid = 1;       // Monotonic PID counter for generating unique process IDs
     
     public:
-    SchedulerConfig config; ///< Runtime configuration settings
-    Cores cores;            ///< Reference to the list of scheduler cores
-    map processes;          ///< Container for all processes
-    queue rqueue;           ///< Ready queue of processes waiting to be scheduled
-    list finished_pids;     ///< PIDs of finished processes 
+    list finished_pids = {};  // PIDs of Finished processes 
+    queue rqueue = {};        // Ready queue of proc_table waiting to be scheduled
+    map proc_table = {};      // Container for all proc_table
+    Cores cores;              // Reference to the list of scheduler cores
+    SchedulerConfig config;   // Runtime configuration settings
 
     // === Methods ===
-
-    /** @brief Constructs a SchedulerData context with the given number of cores. */
-    SchedulerData(uint size=1): cores(size), next_pid(1) {}
-
-    /** @brief Sets configuration and resizes cores. */
-    void set_config(SchedulerConfig new_config) {
-      config = move(new_config);
-      cores.resize(config.num_cpu);
-    }
 
     /** @brief Returns a unique, incrementing process ID. */
     uint new_pid() { return next_pid++; }
 
     /** @brief Adds a process to the process table. */
     void add_process(Process proc) {
-      processes.emplace(proc.data.id, make_unique<Process>(move(proc)));
+      auto id = proc.data.id;
+      auto ptr = make_unique<Process>(move(proc));
+      proc_table.emplace(id, move(ptr)); 
     }
 
-    /** @brief Check if a process with the given ID exists in the process table. */
-    bool has_process(uint id) const { return processes.contains(id); }
+    /** @brief Check if a process with the given ID exists. */
+    bool has_process(uint id) const { return proc_table.contains(id); }
       
-    /** @brief Check if a process with the given name exists in the process table. */
+    /** @brief Check if a process with the given name exists. */
     bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
 
     // === Accessors ===
     
     /** @brief Returns a reference wrapper to the process with the given PID. */
-    Process& get_process(uint id) { return *processes.at(id); }
+    Process& get_process(uint id) { return *proc_table.at(id); }
 
     /** @brief Returns a reference wrapper to the process with the given name. */
     Process& get_process(const str& name) { return *find_process_by_name(name); }
@@ -3300,12 +3453,14 @@ namespace csopesy {
     /** @brief Returns the list of running process IDs. */
     list get_running_pids() { return cores.get_running_pids(); }
 
+    // ========================
+    // === Private Helpers ====
+    // ========================
     private:
-
-    // === Helpers ===
   
+    /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
     Process* find_process_by_name(const str& name, bool throw_if_missing=true) const {
-      for (const auto& [_, proc] : processes)
+      for (auto& [_, proc]: proc_table)
         if (proc->data.name == name)
           return proc.get();
     
@@ -3332,54 +3487,33 @@ namespace csopesy {
    * @brief Represents a pluggable scheduling strategy (e.g., FCFS, RR).
    * 
    * Allows dynamic assignment of tick behavior and preemption policy.
-   * Each strategy defines how processes are selected for execution,
+   * Each strategy defines how proc_table are selected for execution,
    * and whether/when a running process should be preempted.
    */
   class SchedulerStrategy {
     public:
-    using Job = Core::Job;
-    using PreemptHandler = Core::PreemptHandler;
+    using PreemptHandler = Core::func;
     using TickHandler = function<void(SchedulerData&)>;
 
-    private:
-    str name;                       // Strategy identifier (e.g., "fcfs", "rr")
-    TickHandler tick_handler;        // Main strategy logic executed each tick
-    PreemptHandler preempt_handler;  // Core-level preemption policy (optional)
+    // === Members ===
+    str name = "fcfs";              // Strategy identifier (e.g., "fcfs", "rr")
     SchedulerConfig config;         // Strategy-specific configuration
+    TickHandler tick_handler;       // Main strategy logic executed each tick
+    PreemptHandler preempt_handler; // Core-level preemption policy (optional)
 
-    public:
+    // === Methods Methods ===
 
-    /** @brief Constructs a strategy with the given name. */
-    SchedulerStrategy(str name): name(move(name)) {}
-
-    /** @brief Returns the name of the strategy. */
-    const str& get_name() const { return name; }
-
-    // === Configuration ===
+    /** @brief Sets the strategy name. */
+    SchedulerStrategy& set_name(str n) { return name = n, *this; }
 
     /** @brief Sets the configuration for this strategy. */
-    SchedulerStrategy& set_config(SchedulerConfig cfg) {
-      config = move(cfg);
-      return *this;
-    }
+    SchedulerStrategy& set_config(SchedulerConfig c) { return config = move(c), *this; }
 
     /** @brief Sets the main logic to run on each tick. */
-    SchedulerStrategy& on_tick(TickHandler handler) {
-      return tick_handler = move(handler), *this;
-    }
+    SchedulerStrategy& on_tick(TickHandler t) { return tick_handler = move(t), *this; }
 
     /** @brief Sets the per-core preemption policy. */
-    SchedulerStrategy& on_preempt(PreemptHandler policy) {
-      return preempt_handler = move(policy), *this;
-    }
-
-    // === Accessors ===
-
-    /** @brief Returns the scheduler configuration. */
-    const SchedulerConfig& get_config() const { return config; }
-
-    /** @brief Returns the core preemption policy handler. */
-    const PreemptHandler& get_preempt() const { return preempt_handler; }
+    SchedulerStrategy& on_preempt(PreemptHandler p) { return preempt_handler = move(p), *this; }
 
     // === Execution ===
 
@@ -3441,25 +3575,23 @@ namespace csopesy::scheduler {
  * Characteristics:
  * - Non-preemptive: process runs to completion once assigned
  * - Lazy: cores pull from the queue only when idle
- * - Immediate-arrival: processes are enqueued as soon as they arrive
+ * - Immediate-arrival: proc_table are enqueued as soon as they arrive
  */
   inline SchedulerStrategy make_fcfs_strategy(const SchedulerConfig& config) {
 
     // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
-    return SchedulerStrategy("fcfs")
+    return SchedulerStrategy()
+      .set_name("fcfs")
       .set_config(config)
 
-      // Each tick: assign next process to any idle core.
       .on_tick([](SchedulerData& data) {;
-
-        // For every idle cores
         for (auto& ref: data.cores.get_idle()) {
-          auto& core = ref.get();
 
           // If no process is ready, stop assigning
           if (data.rqueue.empty()) break;     
-
+          
           // Assign the selected process to the current idle core
+          auto& core = ref.get();
           uint pid = data.rqueue.front(); 
           data.rqueue.pop();
           core.assign(data.get_process(pid));
@@ -3485,28 +3617,28 @@ namespace csopesy::scheduler {
    * Round-Robin Strategy (preemptive).
    * 
    * Characteristics:
-   * - Preemptive: processes are interrupted after a time quantum.
-   * - Immediate arrival: processes are placed into the ready queue directly.
+   * - Preemptive: proc_table are interrupted after a time quantum.
+   * - Immediate arrival: proc_table are placed into the ready queue directly.
    */
   inline SchedulerStrategy make_rr_strategy(const SchedulerConfig& config) {
-    return SchedulerStrategy("rr")
+    return SchedulerStrategy()
+      .set_name("rr")
       .set_config(config)
-
-      // Tick: assign ready jobs to idle cores
+      
       .on_tick([](SchedulerData& data) {
         for (auto& ref: data.cores.get_idle()) {
-          auto& core = ref.get();
-
+      
+          // If no process is ready, stop assigning
           if (data.rqueue.empty()) break;
-
+          
+          auto& core = ref.get();
           uint pid = data.rqueue.front(); 
           data.rqueue.pop();
-
           core.assign(data.get_process(pid));
         }
       })
 
-      .on_preempt([quantum = config.quantum_cycles](const Core& core) {
+      .on_preempt([quantum=config.quantum_cycles](const Core& core) {
         return core.job_ticks >= quantum;  
       });
   }
@@ -3525,7 +3657,7 @@ namespace csopesy::scheduler {
 
 namespace csopesy::scheduler {
 
-  inline SchedulerStrategy make_strategy(const str& name, const SchedulerConfig& config) {
+  inline SchedulerStrategy make_strategy(str& name, SchedulerConfig& config) {
     if (name == "fcfs") return make_fcfs_strategy(config);
     if (name == "rr")   return make_rr_strategy(config);
     throw runtime_error(format("Unknown strategy name: {}", name));
@@ -3671,8 +3803,8 @@ namespace csopesy {
 #include "core/common/constants/banner.hpp"
 #include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
-#include "core/scheduler/Scheduler.hpp"
 #include "core/command/CommandInterpreter.hpp"
+#include "core/scheduler/Scheduler.hpp"
 
 // Shell-specific includes
 #include "core/shell/ShellStorage.hpp"
@@ -3689,9 +3821,9 @@ namespace csopesy {
 
     // === Core system components ===
     Interpreter& interpreter;
-    Scheduler scheduler; 
     
     // === Shell subcomponents ===
+    Scheduler scheduler; 
     Storage storage;  ///< Dynamic storage for shell data
     Screen screen;
 
@@ -3706,8 +3838,9 @@ namespace csopesy {
 
     /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
     void start() override {
-      system("cls");
+      // system("cls");
       Ansi::enable();
+      enable_unicode();
 
       // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 

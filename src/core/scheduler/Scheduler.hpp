@@ -18,86 +18,62 @@ namespace csopesy {
   class Scheduler {
     using queue = vector<str>;
     using list = vector<uint>;
-
     queue names;                // Deferred generation queue for user-inserted proc_table
     
     public:
-
     // === Internal State ===
     uint ticks = 0;             // Global tick counter
     bool generating = false;    // Flag indicating auto-generation mode
     
     // === Components ===
-    SchedulerData data;          // Internal state (cores, proc_table, queue)
-    SchedulerStrategy strategy;  // Contains the scheduler strategy
+    SchedulerData data;         // Internal state (cores, proc_table, queue)
+    SchedulerStrategy strategy; // Contains the scheduler strategy
 
     // === Methods ===
 
+    /** Adds a user-named process to the pending generation queue. */
+    void enqueue_process(str name) { names.push_back(move(name)); }
+
+    /** Enables or disables automatic process generation each tick. */
+    void generate(bool flag) { generating = flag; }
+
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
-      // 1. Generate any user-enqueued proc_table
-      cout << "[tick] Stage 1: enqueue\n";
-      for (auto& name: names)
-        generate_process(move(name));
-      names.clear();
-      
-      // 2. Possibly auto-generate proc_table this tick
-      cout << "[tick] Stage 2: dummy\n";
-      if (generating && interval_has_elapsed())
-        generate_process();
+      if (!data.config.initialized) return;
 
-      // 3. Update running/finished state and handle preemption
-      cout << "[tick] Stage 3: core release\n";
-      for (auto& ref: data.cores.get_busy()) {
-        auto& core = ref.get();
-        
-        // Skip core if it's not releasable yet
-        if (!core.can_release) continue;
+      // Generate batch processes
+      generate_processes();
 
-        cout << "[tick]   core " << core.id << " releasing process\n";
-        auto& process = core.get_job();
-        core.release();
+      // Release finished or preempted cores
+      release_processes();
 
-        if (process.data.state.finished()) {
-          data.finished_pids.push_back(process.data.id);
-          cout << "[tick]   process " << process.data.id << " finished\n";
-        } else {
-          data.rqueue.push(process.data.id);
-          cout << "[tick]   process " << process.data.id << " re-queued\n";
-        }
-      }
+      // TODO: Clean/update paging info  
+      // memory.tick(data);
 
-      // 4. Schedule ready proc_table to idle cores
-      cout << "[tick] Stage 4: strategy\n";
-      // strategy.tick(data);
+      // Assign new processes to idle cores
+      strategy.tick(data);
       ++ticks;
-      cout << "[tick] End (tick " << ticks << ")\n";
     }
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      // 1. Build and install the selected strategy
-      strategy = scheduler::make_strategy(config.scheduler, config);
+      strategy = scheduler::get_strategy(config.scheduler, config); 
+      data.cores.resize(config.num_cpu);                            
       
-      // 2. Inject per-core preemption policy from strategy
-      if (strategy.preempt_handler) {
-        for (auto& ref: data.cores.get_all())
+      // Inject in each core the preemption handler from strategy
+      if (strategy.preempt_handler)         
+        for (auto& ref: data.cores.get_all())                       
           ref.get().set_preempt(strategy.preempt_handler);
-      }
-      
-      // 3. Store config inside SchedulerData and initialize cores
-      data.cores.resize(config.num_cpu);
-      data.config = move(config);         // Move config last so it's not invalid above
+
+      data.config = move(config);                                   
     }
 
-    // // === Process Generation Control ===
-    // void enqueue_process(str name) { names.push_back(move(name)); }
-    // void generate(bool flag) { generating = flag; }
 
     // ========================
     // === Private Helpers ====
     // ========================
     private:
+
 
     /** @brief Helper that checks if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
@@ -105,21 +81,36 @@ namespace csopesy {
       return freq > 0 && (ticks % freq == 0);
     }
 
-    /** @brief Internal helper that generates a process with optional name. */
-    uint generate_process(str name="") { 
-      // Generate a new unique process id
-      uint pid = data.new_pid();
-      
-      // Create process in table so it's safe to reference
-      data.add_process(move(Process::create(  
-        pid,
-        name.empty() ? format("p{:02}", pid) : name, 
-        Random::num(data.config.min_ins, data.config.max_ins)
-      )));
+    /** @brief Helper that generates user and scheduler-enqueued processes. */
+    void generate_processes() {
+      auto make_process = [&](uint pid, str name="") {
+        auto pname = name.empty() ? format("p{:02}", pid) : move(name);
+        auto size  = Random::num(data.config.min_ins, data.config.max_ins);
+        data.add_process(Process(pid, move(pname), size));
+        data.rqueue.push(pid);
+      };
 
-      // Enqueue the proces by its PID
-      data.rqueue.push(pid);                   
-      return pid;   
+      for (auto& name: names)
+        make_process(data.new_pid(), move(name));
+      names.clear();
+
+      if (generating && interval_has_elapsed())
+        make_process(data.new_pid());
+    }
+  
+    /** @brief Helper that releases finished or preempted processes in cores. */
+    void release_processes() {
+      for (auto& ref: data.cores.get_releasable()) {
+        auto& core = ref.get();
+        auto& process = core.get_job();
+        core.release();
+
+        if (process.data.state.finished())
+          data.finished_pids.push_back(process.data.id);
+        else
+          data.rqueue.push(process.data.id);
+      }
+
     }
   };
 }
