@@ -11,7 +11,7 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
       .flags = {},
-      .execute = [](const Command&, Shell&) {
+      .execute = [](Command&, Shell&) {
         system("cls");
       },
     };

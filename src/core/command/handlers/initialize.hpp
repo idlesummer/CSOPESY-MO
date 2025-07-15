@@ -16,7 +16,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {},
 
-      .validate = [](const Command& command, Shell& shell) -> Str {
+      .validate = [](Command& command, Shell& shell) -> Str {
         return access([&]() -> Str {
           // Check if the scheduler has already been initialized
           if (shell.scheduler.data.config.initialized)
@@ -33,7 +33,7 @@ namespace csopesy::command {
         });
       },
 
-      .execute = [](const Command& command, Shell& shell) {
+      .execute = [](Command& command, Shell& shell) {
         access([&] {
           auto& storage = shell.storage;
           const auto& lines = storage.get<list>("initialize.cache");

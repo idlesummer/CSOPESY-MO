@@ -12,7 +12,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {},
       
-      .execute = [](const Command&, Shell& shell) {
+      .execute = [](Command&, Shell& shell) {
         auto& screen = shell.screen;
 
         if (screen.is_main()) {

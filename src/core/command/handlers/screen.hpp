@@ -14,7 +14,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {{"-s", true}, {"-r", true}, {"-ls", false}},
 
-      .validate = [](const Command& command, Shell& shell) -> Str {
+      .validate = [](Command& command, Shell& shell) -> Str {
         const bool has_ls = command.flags.contains("-ls");
         const bool has_s  = command.flags.contains("-s");
         const bool has_r  = command.flags.contains("-r");
@@ -28,7 +28,7 @@ namespace csopesy::command {
         return nullopt;
       },
 
-      .execute = [&](const Command& command, Shell& shell) {
+      .execute = [&](Command& command, Shell& shell) {
         using set = unordered_set<uint>;
 
         auto& screen = shell.screen;

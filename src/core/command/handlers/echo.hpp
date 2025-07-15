@@ -12,7 +12,7 @@ namespace csopesy::command {
       .max_args = MAX,
       .flags = {},
       
-      .execute = [](const Command& command, Shell&) {
+      .execute = [](Command& command, Shell&) {
         for (const auto& arg: command.args)
           cout << arg << ' ';
         cout << '\n';

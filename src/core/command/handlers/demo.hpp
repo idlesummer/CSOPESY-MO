@@ -13,7 +13,7 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
 
-      .execute = [](const Command&, Shell& shell) {
+      .execute = [](Command&, Shell& shell) {
         auto& storage = shell.storage;
         
         if (!shell.storage.has("demo.counter")) {

@@ -16,7 +16,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {{ "-r", false }},
 
-      .execute = [](const Command& command, Shell& shell) {
+      .execute = [](Command& command, Shell& shell) {
         using Interpreter = InstructionInterpreter;
         
         auto& interpreter = Interpreter::instance();

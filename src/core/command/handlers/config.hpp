@@ -12,7 +12,7 @@ namespace csopesy::command {
       .min_args = 0,
       .max_args = 0,
 
-      .execute = [](const Command&, Shell& shell) {
+      .execute = [](Command&, Shell& shell) {
         auto& config = shell.scheduler.data.config;
         cout << "\n";
         cout << "╭──────────────────────── Scheduler Configuration ───────────────────────╮\n";

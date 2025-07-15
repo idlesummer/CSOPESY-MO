@@ -38,7 +38,7 @@ namespace csopesy {
     void execute(const str& line, Shell& shell) {
 
       // Parse the command line into a Command (name, args, flags)
-      const auto& command = CommandParser::parse(line);  
+      auto command = CommandParser::parse(line);  
       if (command.name.empty()) 
         return;
 
@@ -47,7 +47,7 @@ namespace csopesy {
       if (it == handlers.end())
         return void(cout << format("[Shell] Unknown command: {}\n", command.name));
 
-      const auto& handler = it->second;
+      auto& handler = it->second;
 
       // Check for unknown/misused flags
       if (invalid_flags(command, handler))
@@ -72,26 +72,26 @@ namespace csopesy {
     CommandInterpreter() = default;
     
     /** @brief Returns true if any flag is invalid or misused. */
-    static bool invalid_flags(const Command& command, const Handler& handler) {
+    static bool invalid_flags(Command& command, Handler& handler) {
       // If any user flag has no valid match (in name and usage), 
       // then the set of flags is invalid.
-      return any_of(command.flags, [&](const auto& flag) {
-        return none_of(handler.flags, [&](const Flag& f) {
+      return any_of(command.flags, [&](auto& flag) {
+        return none_of(handler.flags, [&](Flag& f) {
           return f.name == flag.first && f.has_arg == !flag.second.empty();
         });
       });
     }
 
     /** @brief Checks if argument count is within bounds. */
-    static bool invalid_args(const Command& command, const Handler& handler) {
-      const auto argc = command.args.size();
+    static bool invalid_args(Command& command, Handler& handler) {
+      auto argc = command.args.size();
       return argc < handler.min_args || argc > handler.max_args;
     }
 
     /** Runs the handler's custom validator and returns an optional error message. */
-    static Str custom_validation(const Command& command, const Handler& handler, Shell& shell) {
+    static Str custom_validation(Command& command, Handler& handler, Shell& shell) {
       if (!handler.validate) return nullopt;
-      if (const auto& err = handler.validate(command, shell))
+      if (auto err = handler.validate(command, shell))
         return err->empty() ? "Handler disabled or invalid." : *err;
       return nullopt;
     }

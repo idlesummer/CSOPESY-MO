@@ -14,7 +14,7 @@ namespace csopesy::command {
       .max_args = 0,
       .flags = {},
 
-      .validate = [](const Command&, Shell& shell) -> Str {
+      .validate = [](Command&, Shell& shell) -> Str {
         return access([&]() -> Str {
           if (!shell.scheduler.data.config.initialized)
             return "[Shell] Please run 'initialize' first.";
@@ -26,7 +26,7 @@ namespace csopesy::command {
         });
       },
 
-      .execute = [](const Command&, Shell& shell) {
+      .execute = [](Command&, Shell& shell) {
         access([&] {
           shell.scheduler.generate(true);
           cout << "[Shell] Dummy process generation started.\n";

@@ -9,8 +9,8 @@ namespace csopesy {
   class Shell;
   struct CommandHandler {
     using list = vector<CommandFlag>;
-    using execute_func  = function<void(const Command&, Shell&)>;
-    using validate_func = function<Str(const Command&, Shell&)>;
+    using execute_func  = function<void(Command&, Shell&)>;
+    using validate_func = function<Str(Command&, Shell&)>;
   
     str  name;                        ///< Command name (e.g., "screen", "exit")
     str  desc;                        ///< Description for help or documentation
