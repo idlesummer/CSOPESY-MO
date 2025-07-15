@@ -285,8 +285,8 @@ namespace csopesy {
 }
 
 ------------------------------
- FILE:  clear.hpp
- PATH:  core\command\handlers\clear.hpp
+ FILE:  cls.hpp
+ PATH:  core\command\handlers\cls.hpp
 ------------------------------
 
 #pragma once
@@ -295,9 +295,9 @@ namespace csopesy {
 #include "core/command/CommandHandler.hpp"
 
 namespace csopesy::command {
-  inline const CommandHandler make_clear() {
+  inline const CommandHandler make_cls() {
     return {
-      .name = "clear",
+      .name = "cls",
       .desc = "Clear screen contents.",
       .min_args = 0,
       .max_args = 0,
@@ -1066,7 +1066,7 @@ namespace csopesy::command {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/command/CommandHandler.hpp"
-#include "clear.hpp"
+#include "cls.hpp"
 #include "config.hpp"
 #include "demo.hpp"
 #include "echo.hpp"
@@ -1084,7 +1084,7 @@ namespace csopesy::command {
   
   list get_all() {
     return {
-      make_clear(),
+      make_cls(),
       make_config(),
       make_demo(),
       make_echo(),
@@ -1930,7 +1930,7 @@ namespace csopesy {
    */
   class Core {
     public:
-    using func = function<bool(const Core&)>;
+    using func = function<bool(Core&)>;
 
     // == Identity ===
     uint id;                    // Core ID
@@ -1971,11 +1971,13 @@ namespace csopesy {
     /** @brief Injects a preemption handler (optional). */
     void set_preempt(func handler) { preempt = handler; }
 
+
     // ========================
     // === Private Members ====
     // ========================
     private:
 
+    
     /** @brief Performs one CPU tick: steps the assigned process if valid. */
     void tick() {
       if (job == nullptr) return; // If no process is assigned to this core, skip the tick
@@ -2094,19 +2096,22 @@ namespace csopesy {
     /** @brief @brief Access a specific core by index. */
     Core& get(uint i) { return *cores.at(i); }
 
-    /** @brief Returns references to all cores */
+    /** @brief Returns references to all cores. */
     CoreRefs get_all() { return filter_cores([](auto& ptr) { return true; }); }
 
-    /** @brief Returns a list of references to all idle cores */
+    /** @brief Returns a list of references to all idle cores. */
     CoreRefs get_idle() { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
 
-    /** @brief Returns a list of references to all busy (non-idle) cores */
+    /** @brief Returns a list of references to all busy (non-idle) cores. */
     CoreRefs get_busy() { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
+    
+    /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
+    CoreRefs get_releasable() { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
     /** @brief @brief Returns a list of IDs for all busy (non-idle) cores. */
     list get_busy_core_ids() { return extract_ids([](Core& core) { return core.id; }); }
 
-    /** @brief Returns a list of pids to all busy (non-idle) cores */
+    /** @brief Returns a list of pids to all busy (non-idle) cores. */
     list get_running_pids() { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
 
     // ========================
@@ -2852,13 +2857,15 @@ namespace csopesy {
     using Script = Instruction::Script;
     inline static Interpreter& interpreter = Interpreter::instance();
     
-  public:
+    public:
     // === Components ===
     ProcessData data;         // Data container of process
 
     // === Methods ===
-    Process(uint pid, str name, Script script): 
-      data(pid, move(name), move(script)) {}
+
+    /** @brief Creates a process with a random instruction script. */
+    Process(uint pid, str name, uint size): 
+      data(pid, move(name), move(interpreter.generate_script(size))) {}
     
     /** @brief Appends a log message (e.g. from PRINT instruction). */
     void log(str line) { data.log(move(line)); }
@@ -2876,14 +2883,7 @@ namespace csopesy {
 
       // Advance to next instruction if IP unchanged
       data.program.ip += (ip == data.program.ip);
-
       return false;
-    }
-
-    /** @brief Creates a process with a random instruction script (to be implemented). */
-    static Process create(uint pid, str name, uint size) {
-      auto script = interpreter.generate_script(size);
-      return Process(pid, move(name), move(script));
     }
   };
 }
@@ -3232,76 +3232,59 @@ namespace csopesy {
     queue names;                // Deferred generation queue for user-inserted proc_table
     
     public:
-
     // === Internal State ===
     uint ticks = 0;             // Global tick counter
     bool generating = false;    // Flag indicating auto-generation mode
     
     // === Components ===
-    SchedulerData data;          // Internal state (cores, proc_table, queue)
-    SchedulerStrategy strategy;  // Contains the scheduler strategy
+    SchedulerData data;         // Internal state (cores, proc_table, queue)
+    SchedulerStrategy strategy; // Contains the scheduler strategy
 
     // === Methods ===
 
+    /** Adds a user-named process to the pending generation queue. */
+    void enqueue_process(str name) { names.push_back(move(name)); }
+
+    /** Enables or disables automatic process generation each tick. */
+    void generate(bool flag) { generating = flag; }
+
     /** @brief Executes the active strategy logic and increments the tick count. */
     void tick() {
-      // 1. Generate any user-enqueued proc_table
-      for (auto& name: names)
-        generate_process(move(name));
-      names.clear();
-      
-      // 2. Possibly auto-generate proc_table this tick
-      if (generating && interval_has_elapsed())
-        generate_process();
+      if (!data.config.initialized) return;
 
-      // 3. Update running/finished state and handle preemption
-      for (auto& ref: data.cores.get_busy()) {
-        auto& core = ref.get();
-        
-        // Skip core if it's not releasable yet
-        if (!core.can_release) continue;
+      // Generate batch processes
+      generate_processes();
 
-        auto& process = core.get_job();
-        core.release();
+      // Release finished or preempted cores
+      release_processes();
 
-        if (process.data.state.finished()) {
-          data.finished_pids.push_back(process.data.id);
-          cout << "[tick]   process " << process.data.id << " finished\n";
-        } else {
-          data.rqueue.push(process.data.id);
-          cout << "[tick]   process " << process.data.id << " re-queued\n";
-        }
-      }
+      // TODO: Clean/update paging info  
+      // memory.tick(data);
 
-      // 4. Schedule ready processes to idle cores
+      // Assign new processes to idle cores
       strategy.tick(data);
       ++ticks;
     }
 
     /** @brief Applies a new configuration and resizes core state accordingly. */
     void set_config(SchedulerConfig config) {
-      // 1. Build and install the selected strategy
-      strategy = scheduler::make_strategy(config.scheduler, config);
+      strategy = scheduler::get_strategy(config.scheduler, config); 
+      data.cores.resize(config.num_cpu);                            
       
-      // 2. Inject per-core preemption policy from strategy
-      if (strategy.preempt_handler) {
-        for (auto& ref: data.cores.get_all())
+      // Inject in each core the preemption handler from strategy
+      if (strategy.preempt_handler)         
+        for (auto& ref: data.cores.get_all())                       
           ref.get().set_preempt(strategy.preempt_handler);
-      }
-      
-      // 3. Store config inside SchedulerData and initialize cores
-      data.cores.resize(config.num_cpu);
-      data.config = move(config);         // Move config last so it's not invalid above
+
+      data.config = move(config);                                   
     }
 
-    // // === Process Generation Control ===
-    void enqueue_process(str name) { names.push_back(move(name)); }
-    void generate(bool flag) { generating = flag; }
 
     // ========================
     // === Private Helpers ====
     // ========================
     private:
+
 
     /** @brief Helper that checks if the current tick matches the process generation interval. */
     bool interval_has_elapsed() const {
@@ -3309,21 +3292,36 @@ namespace csopesy {
       return freq > 0 && (ticks % freq == 0);
     }
 
-    /** @brief Internal helper that generates a process with optional name. */
-    uint generate_process(str name="") { 
-      // Generate a new unique process id
-      uint pid = data.new_pid();
-      
-      // Create process in table so it's safe to reference
-      data.add_process(move(Process(  
-        pid,
-        name.empty() ? format("p{:02}", pid) : name, 
-        Random::num(data.config.min_ins, data.config.max_ins)
-      )));
+    /** @brief Helper that generates user and scheduler-enqueued processes. */
+    void generate_processes() {
+      auto make_process = [&](uint pid, str name="") {
+        auto pname = name.empty() ? format("p{:02}", pid) : move(name);
+        auto size  = Random::num(data.config.min_ins, data.config.max_ins);
+        data.add_process(Process(pid, move(pname), size));
+        data.rqueue.push(pid);
+      };
 
-      // Enqueue the proces by its PID
-      data.rqueue.push(pid);                   
-      return pid;   
+      for (auto& name: names)
+        make_process(data.new_pid(), move(name));
+      names.clear();
+
+      if (generating && interval_has_elapsed())
+        make_process(data.new_pid());
+    }
+  
+    /** @brief Helper that releases finished or preempted processes in cores. */
+    void release_processes() {
+      for (auto& ref: data.cores.get_releasable()) {
+        auto& core = ref.get();
+        auto& process = core.get_job();
+        core.release();
+
+        if (process.data.state.finished())
+          data.finished_pids.push_back(process.data.id);
+        else
+          data.rqueue.push(process.data.id);
+      }
+
     }
   };
 }
@@ -3496,7 +3494,7 @@ namespace csopesy {
     using TickHandler = function<void(SchedulerData&)>;
 
     // === Members ===
-    str name = "fcfs";              // Strategy identifier (e.g., "fcfs", "rr")
+    str name;              // Strategy identifier (e.g., "fcfs", "rr")
     SchedulerConfig config;         // Strategy-specific configuration
     TickHandler tick_handler;       // Main strategy logic executed each tick
     PreemptHandler preempt_handler; // Core-level preemption policy (optional)
@@ -3638,7 +3636,7 @@ namespace csopesy::scheduler {
         }
       })
 
-      .on_preempt([quantum=config.quantum_cycles](const Core& core) {
+      .on_preempt([quantum=config.quantum_cycles](Core& core) {
         return core.job_ticks >= quantum;  
       });
   }
@@ -3657,7 +3655,7 @@ namespace csopesy::scheduler {
 
 namespace csopesy::scheduler {
 
-  inline SchedulerStrategy make_strategy(str& name, SchedulerConfig& config) {
+  inline SchedulerStrategy get_strategy(str& name, SchedulerConfig& config) {
     if (name == "fcfs") return make_fcfs_strategy(config);
     if (name == "rr")   return make_rr_strategy(config);
     throw runtime_error(format("Unknown strategy name: {}", name));
@@ -3860,7 +3858,6 @@ namespace csopesy {
     /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
     void stop() override {
       active = false;
-
       if (thread.joinable()) 
         thread.join();
 

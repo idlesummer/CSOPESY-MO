@@ -61,7 +61,6 @@ namespace csopesy {
     /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
     void stop() override {
       active = false;
-
       if (thread.joinable()) 
         thread.join();
 

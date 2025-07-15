@@ -69,4 +69,4 @@ foreach ($file in $files) {
   Get-Content $file.FullName | Add-Content -Path $outputFile
 }
 
-Write-Host "✅ Generated $outputFile with GPT prompt and $($files.Count) files."
+Write-Host "Generated $outputFile with GPT prompt and $($files.Count) files."
