@@ -46,8 +46,8 @@ namespace csopesy {
       // Starts the tick handler that runs the scheduler.
       global.on("tick", [&] { 
         // Ensures scheduler.tick() does not conflict with shell command access
-        // Uses global access(...) wrapper to synchronize with shared SchedulerData
-        access([&] { scheduler.tick(); });
+        // Uses global with_locked(...) wrapper to synchronize with shared SchedulerData
+        with_locked([&] { scheduler.tick(); });
       });
     
       // Start CLI in a separate thread
@@ -72,8 +72,10 @@ namespace csopesy {
       cout << ">>> " << flush;
 
       if (str input; getline(cin, input)) {
-        interpreter.execute(move(input), *this);
-        cout << '\n';
+        with_locked([&]{
+          interpreter.execute(move(input), *this);
+          cout << '\n';
+        });
 
       } else {
         cout << "[Shell] Input stream closed.\n";

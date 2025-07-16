@@ -17,7 +17,6 @@ namespace csopesy::command {
       .flags = {},
 
       .validate = [](Command& command, Shell& shell) -> Str {
-        return access([&]() -> Str {
           // Check if the scheduler has already been initialized
           if (shell.scheduler.data.config.initialized)
             return "Already initialized.";
@@ -30,11 +29,9 @@ namespace csopesy::command {
           auto& storage = shell.storage;
           storage.set("initialize.cache", move(lines));
           return nullopt;
-        });
       },
 
       .execute = [](Command& command, Shell& shell) {
-        access([&] {
           auto& storage = shell.storage;
           const auto& lines = storage.get<list>("initialize.cache");
           auto config = SchedulerConfig();
@@ -53,7 +50,6 @@ namespace csopesy::command {
           cout << BANNER << '\n';
           cout << "[Shell] Scheduler config loaded.\n";
           storage.remove("initialize.cache");
-        });
       },
     };
   }

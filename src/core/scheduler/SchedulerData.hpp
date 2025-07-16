@@ -42,7 +42,7 @@ namespace csopesy {
 
     /** @brief Check if a process with the given ID exists. */
     bool has_process(uint id) const { return proc_table.contains(id); }
-      
+
     /** @brief Check if a process with the given name exists. */
     bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
 

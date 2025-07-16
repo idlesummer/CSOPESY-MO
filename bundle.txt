@@ -1125,8 +1125,8 @@ namespace csopesy {
 }
 
 ------------------------------
- FILE:  access.hpp
- PATH:  core\common\imports\access.hpp
+ FILE:  locks.hpp
+ PATH:  core\common\imports\locks.hpp
 ------------------------------
 
 #pragma once
@@ -1625,7 +1625,7 @@ namespace csopesy {
 ------------------------------
 
 #pragma once
-#include "access.hpp"
+#include "locks.hpp"
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"

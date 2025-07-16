@@ -12,7 +12,7 @@ namespace csopesy::scheduler {
  * - Lazy: cores pull from the queue only when idle
  * - Immediate-arrival: proc_table are enqueued as soon as they arrive
  */
-  inline SchedulerStrategy make_fcfs_strategy(const SchedulerConfig& config) {
+  inline SchedulerStrategy make_fcfs_strategy(SchedulerConfig& config) {
 
     // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
     return SchedulerStrategy()
