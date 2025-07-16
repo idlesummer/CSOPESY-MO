@@ -43,7 +43,7 @@ namespace csopesy::command {
 
             uint size = cores.size();
             uint busy = cores.get_busy().size();
-            float cpu_util = cores.get_usage();
+            float cpu_util = cores.get_usage() * 100;
 
             cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
             cout << format("Cores used: {} / {}\n\n", busy, size);
