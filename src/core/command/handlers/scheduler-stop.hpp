@@ -3,29 +3,28 @@
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 
-namespace csopesy::command {
-  inline const CommandHandler make_scheduler_stop() {
-    return {
-      .name = "scheduler-stop",
-      .desc = "Stops generating dummy processes.",
-      .min_args = 0,
-      .max_args = 0,
-      .flags = {},
 
-      .validate = [](Command&, Shell& shell) -> Str {
-        if (!shell.scheduler.data.config.initialized)
-          return "[Shell] Please run 'initialize' first.";
+inline const CommandHandler make_scheduler_stop() {
+  return {
+    .name = "scheduler-stop",
+    .desc = "Stops generating dummy processes.",
+    .min_args = 0,
+    .max_args = 0,
+    .flags = {},
 
-        if (!shell.scheduler.generating)
-          return "[Shell] Dummy process generation is not running.";
-        
-        return nullopt;
-      },
+    .validate = [](Command&, Shell& shell) -> Str {
+      if (!shell.scheduler.data.config.initialized)
+        return "[Shell] Please run 'initialize' first.";
 
-      .execute = [](Command&, Shell& shell) {
-        shell.scheduler.generate(false);
-        cout << "[Shell] Dummy process generation stopped.\n";
-      },
-    };
-  }
+      if (!shell.scheduler.generating)
+        return "[Shell] Dummy process generation is not running.";
+      
+      return nullopt;
+    },
+
+    .execute = [](Command&, Shell& shell) {
+      shell.scheduler.generate(false);
+      cout << "[Shell] Dummy process generation stopped.\n";
+    },
+  };
 }

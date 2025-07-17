@@ -5,11 +5,11 @@
 #include <windows.h> // Doesn't define min/max since NOMINMAX is set
 #include <algorithm> // Redefines std::min/std::max
 
-namespace csopesy {
-  using std::min;
-  using std::max;
+using std::min;
+using std::max;
 
-  inline void enable_unicode() {
-    SetConsoleOutputCP(CP_UTF8);
-  }
+
+inline void enable_unicode() {
+  SetConsoleOutputCP(CP_UTF8);
 }
+

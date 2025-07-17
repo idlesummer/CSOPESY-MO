@@ -4,18 +4,17 @@
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
-namespace csopesy::instruction {
-  inline InstructionHandler make_print() {
-    using Param = InstructionParam;
-    return {
-      .opcode = "PRINT",
-      .signatures = {
-        { Param::Str() },
-        { Param::Str(), Param::Var()},
-      },
-      .execute = [](const Instruction& inst, ProcessData& process) {
-        process.log(inst.args[0]);
-      },
-    };
-  }
+
+inline InstructionHandler make_print() {
+  using Param = InstructionParam;
+  return {
+    .opcode = "PRINT",
+    .signatures = {
+      { Param::Str() },
+      { Param::Str(), Param::Var()},
+    },
+    .execute = [](const Instruction& inst, ProcessData& process) {
+      process.log(inst.args[0]);
+    },
+  };
 }

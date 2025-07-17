@@ -10,42 +10,40 @@
 #include <string>
 #include <utility>
 
-namespace csopesy {
-  using std::runtime_error;
+using std::runtime_error;
 
-  // === Type Aliases ===
-  using std::any;
-  using std::function;
-  using std::optional;
-  using byte = uint8_t;
-  using uint = uint32_t;
-  using uchar = unsigned char;
-  using Uint = std::optional<uint>;
+// === Type Aliases ===
+using std::any;
+using std::function;
+using std::optional;
+using byte = uint8_t;
+using uint = uint32_t;
+using uchar = unsigned char;
+using Uint = std::optional<uint>;
 
-  // === Reference Aliases ===
-  using std::cref;
-  template <typename Type> using ref = std::reference_wrapper<Type>;
-  template <typename Type> using Ref = optional<ref<Type>>;
+// === Reference Aliases ===
+using std::cref;
+template <typename Type> using ref = std::reference_wrapper<Type>;
+template <typename Type> using Ref = optional<ref<Type>>;
 
-  // === Constants ===
-  using std::nullopt;
-  inline constexpr uint MAX = std::numeric_limits<uint>::max();
+// === Constants ===
+using std::nullopt;
+inline constexpr uint MAX = std::numeric_limits<uint>::max();
 
-  // === STL Utility Aliases ===
-  using std::ranges::all_of;
-  using std::ranges::any_of;
-  using std::ranges::find_if;
-  using std::ranges::none_of;
-  using std::ranges::count_if;
-  using std::any_cast;
-  using std::erase_if;
-  using std::move;
-  using std::forward;
-  using std::swap;
+// === STL Utility Aliases ===
+using std::ranges::all_of;
+using std::ranges::any_of;
+using std::ranges::find_if;
+using std::ranges::none_of;
+using std::ranges::count_if;
+using std::any_cast;
+using std::erase_if;
+using std::move;
+using std::forward;
+using std::swap;
 
-  // Iterators
-  template <typename Type>
-  inline auto move_iter(Type it) { 
-    return std::make_move_iterator(it); 
-  }
+// Iterators
+template <typename Type>
+inline auto move_iter(Type it) { 
+  return std::make_move_iterator(it); 
 }

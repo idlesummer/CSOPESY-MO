@@ -3,8 +3,6 @@
 #include "core/shell/Shell.hpp"
 
 int main() {
-  using namespace csopesy;
-
   auto running = abool(true); // Global run flag for main loop
   auto global  = EventEmitter();    // Central event system
   auto shell   = Shell(global);     // Main shell interface

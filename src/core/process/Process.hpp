@@ -4,40 +4,38 @@
 #include "core/instruction/InstructionInterpreter.hpp"
 #include "ProcessData.hpp"
 
-namespace csopesy {
 
-  class Process {
-    using Interpreter = InstructionInterpreter;
-    using Script = Instruction::Script;
-    inline static Interpreter& interpreter = Interpreter::instance();
-    
-    public:
-    // === Components ===
-    ProcessData data;         // Data container of process
+class Process {
+  using Interpreter = InstructionInterpreter;
+  using Script = Instruction::Script;
+  inline static Interpreter& interpreter = Interpreter::instance();
+  
+  public:
+  // === Components ===
+  ProcessData data;         // Data container of process
 
-    // === Methods ===
+  // === Methods ===
 
-    /** @brief Creates a process with a random instruction script. */
-    Process(uint pid, str name, uint size): 
-      data(pid, move(name), move(interpreter.generate_script(size))) {}
-    
-    /** @brief Appends a log message (e.g. from PRINT instruction). */
-    void log(str line) { data.log(move(line)); }
+  /** @brief Creates a process with a random instruction script. */
+  Process(uint pid, str name, uint size): 
+    data(pid, move(name), move(interpreter.generate_script(size))) {}
+  
+  /** @brief Appends a log message (e.g. from PRINT instruction). */
+  void log(str line) { data.log(move(line)); }
 
-    /** @brief Executes a single instruction step for the given process. */
-    bool step() {
-      if (data.state.finished() || data.program.finished()) {
-        data.state.finish();  // Mark as finished
-        return true;          // Process is done
-      }
-
-      auto ip = data.program.ip;
-      auto& inst = data.program.script.at(ip);
-      interpreter.execute(inst, data);
-
-      // Advance to next instruction if IP unchanged
-      data.program.ip += (ip == data.program.ip);
-      return false;
+  /** @brief Executes a single instruction step for the given process. */
+  bool step() {
+    if (data.state.finished() || data.program.finished()) {
+      data.state.finish();  // Mark as finished
+      return true;          // Process is done
     }
-  };
-}
+
+    auto ip = data.program.ip;
+    auto& inst = data.program.script.at(ip);
+    interpreter.execute(inst, data);
+
+    // Advance to next instruction if IP unchanged
+    data.program.ip += (ip == data.program.ip);
+    return false;
+  }
+};

@@ -14,23 +14,20 @@
 #include "screen.hpp"
 #include "test.hpp"
 
-namespace csopesy::command {
-  using list = vector<CommandHandler>;
   
-  list get_all() {
-    return {
-      make_cls(),
-      make_config(),
-      make_demo(),
-      make_echo(),
-      make_exit(),
-      make_initialize(),
-      make_process_smi(),
-      make_report_util(),
-      make_scheduler_start(),
-      make_scheduler_stop(),
-      make_screen(),
-      make_test(),
-    };
-  }
+auto get_command_handlers() -> vector<CommandHandler> {
+  return {
+    make_cls(),
+    make_config(),
+    make_demo(),
+    make_echo(),
+    make_exit(),
+    make_initialize(),
+    make_process_smi(),
+    make_report_util(),
+    make_scheduler_start(),
+    make_scheduler_stop(),
+    make_screen(),
+    make_test(),
+  };
 }

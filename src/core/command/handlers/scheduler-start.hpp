@@ -5,29 +5,28 @@
 #include "core/process/Process.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 
-namespace csopesy::command {
-  inline const CommandHandler make_scheduler_start() {
-    return {
-      .name = "scheduler-start",
-      .desc = "Starts periodic dummy process generation every 'batch_process_freq' ticks.",
-      .min_args = 0,
-      .max_args = 0,
-      .flags = {},
 
-      .validate = [](Command&, Shell& shell) -> Str {
-        if (!shell.scheduler.data.config.initialized)
-          return "[Shell] Please run 'initialize' first.";
+inline const CommandHandler make_scheduler_start() {
+  return {
+    .name = "scheduler-start",
+    .desc = "Starts periodic dummy process generation every 'batch_process_freq' ticks.",
+    .min_args = 0,
+    .max_args = 0,
+    .flags = {},
 
-        if (shell.scheduler.generating)
-          return "[Shell] Dummy process generation already active.";
+    .validate = [](Command&, Shell& shell) -> Str {
+      if (!shell.scheduler.data.config.initialized)
+        return "[Shell] Please run 'initialize' first.";
 
-        return nullopt;
-      },
+      if (shell.scheduler.generating)
+        return "[Shell] Dummy process generation already active.";
 
-      .execute = [](Command&, Shell& shell) {
-        shell.scheduler.generate(true);
-        cout << "[Shell] Dummy process generation started.\n";
-      },
-    };
-  }
+      return nullopt;
+    },
+
+    .execute = [](Command&, Shell& shell) {
+      shell.scheduler.generate(true);
+      cout << "[Shell] Dummy process generation started.\n";
+    },
+  };
 }

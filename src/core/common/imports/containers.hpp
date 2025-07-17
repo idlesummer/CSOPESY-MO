@@ -7,16 +7,15 @@
 #include <utility>
 #include <vector>
 
-namespace csopesy {
-  using std::array;
-  using std::make_pair;
-  using std::out_of_range;
-  using std::pair;
-  using std::queue;
-  using std::unordered_map;
-  using std::unordered_set;
-  using std::vector;
-  
-  template <typename Key, typename Val>
-  using ordered_map = std::map<Key, Val>;
-}
+
+using std::array;
+using std::make_pair;
+using std::out_of_range;
+using std::pair;
+using std::queue;
+using std::unordered_map;
+using std::unordered_set;
+using std::vector;
+
+template <typename Key, typename Val>
+using ordered_map = std::map<Key, Val>;

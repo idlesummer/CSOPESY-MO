@@ -5,39 +5,38 @@
 #include <type_traits>  // for std::decay_t
 #include <utility>      // for std::forward
 
-namespace csopesy {
-  using std::bad_any_cast;
-  
-  // Import standard string conversion functions
-  using std::stoi;
-  using std::stof;
-  using std::stoul;
-  using std::to_string;
 
-  // === Generic any cast function ===
-  template <typename Type, typename From>
-  Type cast(From&& x) {
-    using Raw = std::decay_t<From>;
+using std::bad_any_cast;
 
-    if constexpr (std::is_same_v<Raw, std::any>)
-      return std::any_cast<Type>(x);
-    else
-      return static_cast<Type>(std::forward<From>(x));
-  }
+// Import standard string conversion functions
+using std::stoi;
+using std::stof;
+using std::stoul;
+using std::to_string;
 
-  // === Aliases for clarity ===
-  template <typename From> 
-  inline int cast_int (From&& x) { 
-    return cast<int>(std::forward<From>(x)); 
-  }
+// === Generic any cast function ===
+template <typename Type, typename From>
+Type cast(From&& x) {
+  using Raw = std::decay_t<From>;
 
-  template <typename From> 
-  inline std::uint32_t cast_uint (From&& x) { 
-    return cast<uint32_t>(std::forward<From>(x)); 
-  }
-  
-  template <typename From> 
-  inline std::string cast_str (From&& x) {
-    return cast<std::string>(std::forward<From>(x)); 
-  }
+  if constexpr (std::is_same_v<Raw, std::any>)
+    return std::any_cast<Type>(x);
+  else
+    return static_cast<Type>(std::forward<From>(x));
+}
+
+// === Aliases for clarity ===
+template <typename From> 
+inline int cast_int (From&& x) { 
+  return cast<int>(std::forward<From>(x)); 
+}
+
+template <typename From> 
+inline std::uint32_t cast_uint (From&& x) { 
+  return cast<uint32_t>(std::forward<From>(x)); 
+}
+
+template <typename From> 
+inline std::string cast_str (From&& x) {
+  return cast<std::string>(std::forward<From>(x)); 
 }
