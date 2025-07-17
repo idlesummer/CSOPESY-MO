@@ -30,4 +30,7 @@ class ProcessState {
 
   /** @brief Puts the process to sleep for a number of ticks. */
   void sleep_for(uint ticks) { sleep_ticks = ticks; }
+
+  /** @brief Advances sleep state by one tick, if sleeping. */
+  void tick() { if (sleep_ticks > 0) --sleep_ticks; }
 };

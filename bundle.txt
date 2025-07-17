@@ -785,7 +785,7 @@ inline const CommandHandler make_screen() {
             "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
             process.data.name,
             timestamp(process.data.stime),
-            process.data.program.size(),
+            process.data.program.ip,
             process.data.program.size()
           );
         }
@@ -1642,31 +1642,6 @@ class Ansi {
   static void move_cursor(ostream& out, int row, int col) {
     out << "\033[" << row << ";" << col << "H";
   }
-};
-
-------------------------------
- FILE:  Component.hpp
- PATH:  core\common\utility\Component.hpp
-------------------------------
-
-#pragma once
-#include "core/common/utility/EventEmitter.hpp"
-
-class Component {
-  protected:
-  EventEmitter& global;
-  EventEmitter  local;
-
-  public:
-  Component(EventEmitter& emitter): global(emitter) {}
-  virtual ~Component() = default;
-
-  virtual void start() {}
-  virtual void stop() {}
-  virtual void tick() {}
-
-  EventEmitter& get_global() { return global; }
-  EventEmitter& get_local() { return local; }
 };
 
 ------------------------------
@@ -3022,30 +2997,24 @@ class ProcessProgram {
 class ProcessState {
   uint sleep_ticks = 0;
   
-public:
+  public:
   State value = State::Ready;
 
   // === State Queries ===
 
   /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return value == State::Sleeping; }
+  bool sleeping() const { return sleep_ticks > 0; }
   
   /** @brief Returns true if the process has finished execution. */
   bool finished() const { return value == State::Finished; }
   
   // === State Transitions ===
 
-  /** @brief Sets the process state to Ready. */
-  void ready() { value = State::Ready; }
-
   /** @brief Sets the process state to Finished. */
   void finish() { value = State::Finished; }
 
   /** @brief Puts the process to sleep for a number of ticks. */
-  void sleep_for(uint ticks) {
-    value = State::Sleeping;
-    sleep_ticks = ticks;
-  }
+  void sleep_for(uint ticks) { sleep_ticks = ticks; }
 };
 
 ------------------------------
@@ -3578,7 +3547,7 @@ inline SchedulerStrategy get_scheduler_strategy(str& name, SchedulerConfig& conf
  * the CommandInterpreter with all available commands.
  */
 inline Shell::Shell(EventEmitter& emitter): 
-    Component(emitter), 
+    global(emitter), 
     interpreter(Interpreter::instance()),
     screen(storage) {
   
@@ -3692,7 +3661,6 @@ class ShellStorage {
 #include "core/common/imports/_all.hpp"
 #include "core/common/utility/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
-#include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
@@ -3702,7 +3670,7 @@ class ShellStorage {
 #include "core/shell/ShellScreen.hpp"
 
 
-class Shell: public Component {
+class Shell {
   using Interpreter = CommandInterpreter;
   using Storage = ShellStorage;
   using Screen = ShellScreen;
@@ -3710,6 +3678,7 @@ class Shell: public Component {
   public:
 
   // === Core system components ===
+  EventEmitter& global;
   Interpreter& interpreter;
   
   // === Shell subcomponents ===
@@ -3727,7 +3696,7 @@ class Shell: public Component {
   Shell(EventEmitter& emitter);
 
   /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
-  void start() override {
+  void start() {
     // system("cls");
     Ansi::enable();
     enable_unicode();
@@ -3748,7 +3717,7 @@ class Shell: public Component {
   }
 
   /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
-  void stop() override {
+  void stop() {
     active = false;
     if (thread.joinable()) 
       thread.join();
@@ -3757,7 +3726,7 @@ class Shell: public Component {
   }
 
   /** @brief Executes a single shell tick (input + command dispatch). */
-  void tick() override {
+  void tick() {
     cout << ">>> " << flush;
 
     if (str input; getline(cin, input)) {
