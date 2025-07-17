@@ -85,7 +85,7 @@ class Core {
     ++job_ticks;                // Track how long this process is running on this core
 
     // If the process has finished all its instructions, mark for release
-    if (process.data.state.finished())
+    if (process.data.program.finished())
       can_release = true;
 
     // If preemption is defined and it says to preempt, mark for release

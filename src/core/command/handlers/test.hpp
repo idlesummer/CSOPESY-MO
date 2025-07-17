@@ -41,9 +41,8 @@ inline const CommandHandler make_test() {
       system("cls");
       auto& process = storage.get<Process>("test.process");
       auto& program = process.data.program;
-      auto& state = process.data.state;
 
-      if (state.finished())
+      if (program.finished())
         return void(cout << "[loop-test] Process already finished.");
 
       // === Debug: Show context stack ===

@@ -104,11 +104,10 @@ class Scheduler {
       auto& process = core.get_job();
       core.release();
 
-      if (process.data.state.finished())
+      if (process.data.program.finished())
         data.finished_pids.push_back(process.data.id);
       else
         data.rqueue.push(process.data.id);
     }
-
   }
 };

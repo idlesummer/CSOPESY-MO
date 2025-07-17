@@ -2797,7 +2797,7 @@ class Process {
 #include "core/instruction/Instruction.hpp"
 #include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
-#include "ProcessState.hpp"
+#include "ProcessControl.hpp"
 #include "types.hpp"
 
 
@@ -2825,7 +2825,7 @@ public:
   Time stime = {};        // Timestamp of when the process was created
   
   // === Components ===
-  ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
+  ProcessControl state;     // Current state of the process (Ready, Running, Sleeping, Finished)
   ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
   ProcessProgram program; // List of instructions and execution context
 
@@ -2979,8 +2979,8 @@ class ProcessProgram {
 };
 
 ------------------------------
- FILE:  ProcessState.hpp
- PATH:  core\process\ProcessState.hpp
+ FILE:  ProcessControl.hpp
+ PATH:  core\process\ProcessControl.hpp
 ------------------------------
 
 #pragma once
@@ -2994,7 +2994,7 @@ class ProcessProgram {
  * Supports transitions between Ready, Sleeping, and Finished states,
  * and stores the number of ticks remaining for a sleeping process.
  */
-class ProcessState {
+class ProcessControl {
   uint sleep_ticks = 0;
   
   public:

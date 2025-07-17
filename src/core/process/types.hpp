@@ -3,11 +3,6 @@
 #include "core/instruction/Instruction.hpp"
 
 
-/** An enum representing the possible states of a process. */
-enum class State {
-  Ready, Sleeping, Finished,
-};
-
 /** A loop frame from a FOR-like instruction. */
 struct ContextFrame {
   str  opcode;  // Control frame opcode, e.g., "FOR"

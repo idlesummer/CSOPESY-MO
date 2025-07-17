@@ -25,17 +25,17 @@ class Process {
 
   /** @brief Executes a single instruction step for the given process. */
   bool step() {
-    if (data.state.finished() || data.program.finished()) {
-      data.state.finish();  // Mark as finished
+    if (data.program.finished())
       return true;          // Process is done
-    }
 
     auto ip = data.program.ip;
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);
 
     // Advance to next instruction if IP unchanged
-    data.program.ip += (ip == data.program.ip);
+    if (ip == data.program.ip)
+      data.program.ip++ ;
+
     return false;
   }
 };

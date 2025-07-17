@@ -3,7 +3,7 @@
 #include "core/instruction/Instruction.hpp"
 #include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
-#include "ProcessState.hpp"
+#include "ProcessControl.hpp"
 #include "types.hpp"
 
 
@@ -18,7 +18,7 @@ class ProcessData {
   using Script = Instruction::Script;
   using list = vector<str>;
 
-public:
+  public:
   // === Identity ===
   uint id = 0;            // Unique process ID
   str name = "";          // Human-readable process name (e.g. p01, p02)
@@ -31,9 +31,9 @@ public:
   Time stime = {};        // Timestamp of when the process was created
   
   // === Components ===
-  ProcessState state;     // Current state of the process (Ready, Running, Sleeping, Finished)
-  ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
   ProcessProgram program; // List of instructions and execution context
+  ProcessControl control; // Sleep controller of the process
+  ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
 
   // === Methods ===
 

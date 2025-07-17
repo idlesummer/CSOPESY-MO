@@ -1,6 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "types.hpp"
+#include "ProcessProgram.hpp"
 
 
 /**
@@ -9,24 +9,15 @@
  * Supports transitions between Ready, Sleeping, and Finished states,
  * and stores the number of ticks remaining for a sleeping process.
  */
-class ProcessState {
+class ProcessControl {
+  public:
+
   uint sleep_ticks = 0;
   
-  public:
-  State value = State::Ready;
-
-  // === State Queries ===
-
+  // === Methods ===
+  
   /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return sleep_ticks > 0; }
-  
-  /** @brief Returns true if the process has finished execution. */
-  bool finished() const { return value == State::Finished; }
-  
-  // === State Transitions ===
-
-  /** @brief Sets the process state to Finished. */
-  void finish() { value = State::Finished; }
+  bool sleeping() const { return sleep_ticks > 0; }    
 
   /** @brief Puts the process to sleep for a number of ticks. */
   void sleep_for(uint ticks) { sleep_ticks = ticks; }
