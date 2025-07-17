@@ -10,7 +10,7 @@
  * the CommandInterpreter with all available commands.
  */
 inline Shell::Shell(EventEmitter& emitter): 
-    Component(emitter), 
+    global(emitter), 
     interpreter(Interpreter::instance()),
     screen(storage) {
   

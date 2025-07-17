@@ -2,7 +2,6 @@
 #include "core/common/imports/_all.hpp"
 #include "core/common/utility/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
-#include "core/common/utility/Component.hpp"
 #include "core/common/utility/EventEmitter.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
@@ -12,7 +11,7 @@
 #include "core/shell/ShellScreen.hpp"
 
 
-class Shell: public Component {
+class Shell {
   using Interpreter = CommandInterpreter;
   using Storage = ShellStorage;
   using Screen = ShellScreen;
@@ -20,6 +19,7 @@ class Shell: public Component {
   public:
 
   // === Core system components ===
+  EventEmitter& global;
   Interpreter& interpreter;
   
   // === Shell subcomponents ===
@@ -37,7 +37,7 @@ class Shell: public Component {
   Shell(EventEmitter& emitter);
 
   /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
-  void start() override {
+  void start() {
     // system("cls");
     Ansi::enable();
     enable_unicode();
@@ -58,7 +58,7 @@ class Shell: public Component {
   }
 
   /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
-  void stop() override {
+  void stop() {
     active = false;
     if (thread.joinable()) 
       thread.join();
@@ -67,7 +67,7 @@ class Shell: public Component {
   }
 
   /** @brief Executes a single shell tick (input + command dispatch). */
-  void tick() override {
+  void tick() {
     cout << ">>> " << flush;
 
     if (str input; getline(cin, input)) {
