@@ -24,13 +24,10 @@
  * - Scheduler is the only component expected to use this class directly.
  */
 class CoreManager {
-  using bool_func = function<bool(uptr<Core>&)>; // For private helper
-  using uint_func = function<uint(Core&)>;    // For private helper
-  
   public:
 
   CoreManager():
-    cores (vec<uptr<Core>>()) {}
+    cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
 
   /** @brief Clears and reinitializes the core vec<uint> with the specified number of cores */
   void resize(uint size) {
@@ -45,13 +42,13 @@ class CoreManager {
   /** @brief Returns number of cores. */
   auto size() -> uint const { return cores.size(); }
   
-  /** @brief @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
+  /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
   auto get_usage() -> float const {
     if (cores.empty()) return 0.0f;
     return cast<float>(get_busy_size()) / cast<float>(cores.size());
   }
 
-  /** @brief @brief Access a specific core by index. */
+  /** @brief Access a specific core by index. */
   auto get(uint i) -> Core& { return *cores.at(i); }
 
   /** @brief Returns references to all cores. */
@@ -87,9 +84,10 @@ class CoreManager {
   }
 
   /** @brief Returns references to cores that satisfy the given filter condition. */
-  vec<ref<Core>> filter_cores(bool_func predicate) {
-    auto result = vec<ref<Core>>();       // Create a vec<uint> of core reference wrappers
-    result.reserve(cores.size());   // Optional: preallocate to avoid reallocations
+  template <typename Func>
+  auto filter_cores(Func predicate) -> vec<ref<Core>> {
+    auto result = vec<ref<Core>>();         // Create a vec<uint> of core reference wrappers
+    result.reserve(cores.size());           // Optional: preallocate to avoid reallocations
 
     for (auto& ptr: cores)
       if (ptr != nullptr && predicate(ptr)) // Only include non-null cores that pass the filter
@@ -98,10 +96,11 @@ class CoreManager {
   }
 
   /** @brief Extracts a vec<uint> of uint values from all busy cores using the given accessor. */
-  auto extract_ids(uint_func getter) -> vec<uint> {
-    auto busy = get_busy();         // Store once to reuse
+  template <typename Func>
+  auto extract_ids(Func getter) -> vec<uint> {
+    auto busy = get_busy();                 // Store once to reuse
     auto result = vec<uint>();
-    result.reserve(busy.size());    // Reserve exactly what we need
+    result.reserve(busy.size());            // Reserve exactly what we need
 
     for (auto& ref: busy)
       result.push_back(getter(ref.get()));
