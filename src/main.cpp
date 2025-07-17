@@ -3,7 +3,7 @@
 #include "core/shell/Shell.hpp"
 
 int main() {
-  auto running = abool(true); // Global run flag for main loop
+  auto running = atomic_bool(true); // Global run flag for main loop
   auto global  = EventEmitter();    // Central event system
   auto shell   = Shell(global);     // Main shell interface
 

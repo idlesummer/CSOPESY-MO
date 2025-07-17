@@ -27,25 +27,26 @@
  */
 class Core {
   public:
-  using func = function<bool(Core&)>;
+  using func = func<bool(Core&)>;
 
-  // == Identity ===
-  uint id;                    // Core ID
-  
-  // === Process Job State ===
-  Process* job     = nullptr; // Pointer to the currently assigned process (if any)
-  uint job_ticks   = 0;       // Number of ticks the current process has been running
-  bool can_release = false;   // Whether the process is eligible for release by the Scheduler
-  func preempt  = nullptr;    // Optional strategy-injected logic
-  
-  // === Execution Control ===
-  abool running    = false;   // Atomic flag for tick loop
-  Thread thread;              // Background ticking thread
-
-  // === Methods ===
-
-  /** @brief Constructs a scheduler core with the given ID and starts the thread. */
-  Core(uint id=0): id(id) { start(); }
+  /** @brief Constructs a core with the given ID and starts the thread. */
+    Core(uint id=0): 
+    id          (id),                 // Core ID
+    job         (nullptr),            // Pointer to the currently assigned process (if any)
+    job_ticks   (0),                  // Number of ticks the current process has been running
+    can_release (false),              // Whether the process is eligible for release by the Scheduler
+    preempt     (nullptr),            // Optional strategy-injected logic
+    active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
+    thread      ()                    // Background ticking thread
+  { 
+    // Launch the background thread that ticks continuously
+    thread = Thread([this] { 
+      while (active) {
+        tick();
+        sleep_for(1ms);
+      }
+    });
+  }
 
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
@@ -68,10 +69,21 @@ class Core {
   /** @brief Injects a preemption handler (optional). */
   void set_preempt(func handler) { preempt = handler; }
 
+  
+  // === Member variables ===
+  uint id;                    
+  
+  // === Process Job State ===
+  Process* job = nullptr; 
+  uint job_ticks = 0;       
+  bool can_release = false;   
+  func preempt = nullptr;    
+  
+  // === Execution Control ===
+  atomic_bool active = false;   
+  Thread thread;              
 
-  // ========================
-  // === Private Members ====
-  // ========================
+
   private:
 
   
@@ -93,22 +105,9 @@ class Core {
       can_release = true;
   }
 
-  /** @brief Only called by constructor to launch the core's background thread and start ticking. */
-  void start() {
-    if (running) return;        // If already running, do nothing (prevent duplicate threads)
-
-    running = true;             // Mark the core as active/busy
-    thread = Thread([this] {    // Launch the background thread that ticks continuously
-      while (running) {
-        tick();
-        sleep_for(1ms);
-      }
-    });
-  }
-
   /** @brief Signals the core to stop and joins the thread cleanly. */
   void stop() {
-    running = false;            // Signals the thread to stop
+    active = false;            // Signals the thread to stop
     if (thread.joinable())      // Only joins if the thread is valid
       thread.join();            // Waits for the thread to finish
   }

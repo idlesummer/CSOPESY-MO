@@ -10,10 +10,14 @@
  * the CommandInterpreter with all available commands.
  */
 inline Shell::Shell(EventEmitter& emitter): 
-    global(emitter), 
-    interpreter(CommandInterpreter::get()),
-    screen(storage) {
-  
+    global      (emitter),                    // Reference to the global EventEmitter
+    interpreter (CommandInterpreter::get()),  // Instance of the command interpreter
+    thread      (),                           // Shell thread (starts later in start())
+    active      (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    scheduler   (Scheduler()),                // Owned scheduler instance
+    storage     (ShellStorage()),             // Storage for dynamic shell/session data
+    screen      (storage)                     // Owned instance of shell screen manager
+{  
   // Register all command handlers
   for (auto handler: get_command_handlers())
     interpreter.register_command(move(handler));

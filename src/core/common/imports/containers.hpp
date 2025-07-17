@@ -29,4 +29,3 @@ using ordered_map = std::map<Key, Val>;
 
 template <typename Key, typename Val>
 using map = unordered_map<Key, Val>;
-
