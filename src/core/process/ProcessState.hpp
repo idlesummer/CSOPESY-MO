@@ -12,28 +12,22 @@
 class ProcessState {
   uint sleep_ticks = 0;
   
-public:
+  public:
   State value = State::Ready;
 
   // === State Queries ===
 
   /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return value == State::Sleeping; }
+  bool sleeping() const { return sleep_ticks > 0; }
   
   /** @brief Returns true if the process has finished execution. */
   bool finished() const { return value == State::Finished; }
   
   // === State Transitions ===
 
-  /** @brief Sets the process state to Ready. */
-  void ready() { value = State::Ready; }
-
   /** @brief Sets the process state to Finished. */
   void finish() { value = State::Finished; }
 
   /** @brief Puts the process to sleep for a number of ticks. */
-  void sleep_for(uint ticks) {
-    value = State::Sleeping;
-    sleep_ticks = ticks;
-  }
+  void sleep_for(uint ticks) { sleep_ticks = ticks; }
 };
