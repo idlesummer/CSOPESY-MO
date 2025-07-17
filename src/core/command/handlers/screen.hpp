@@ -70,7 +70,7 @@ inline const CommandHandler make_screen() {
             "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
             process.data.name,
             timestamp(process.data.stime),
-            process.data.program.size(),
+            process.data.program.ip,
             process.data.program.size()
           );
         }
