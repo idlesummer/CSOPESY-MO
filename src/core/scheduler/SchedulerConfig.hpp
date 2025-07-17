@@ -8,15 +8,11 @@
  * Allows easy iteration, modification, and serialization of scheduler settings.
  */
 class SchedulerConfig {
-  using map = ordered_map<str, str>;
-  
   public:
-  map entries;
 
-  // === Methods ===
-
-  /** @brief Initializes the default scheduler configuration. */
-  SchedulerConfig() {
+  SchedulerConfig():
+    entries (ordered_map<str,str>())
+  {
     entries["scheduler"] = "fcfs";
     entries["num-cpu"] = "1";
     entries["quantum-cycles"] = "1";
@@ -28,26 +24,29 @@ class SchedulerConfig {
   }
 
   /** @brief Sets the value of a configuration key. */
-  bool set(const str& key, const str& value) {
+  auto set(const str& key, const str& value) -> bool {
     if (!entries.contains(key)) return false;
     entries[key] = value;
     return true;
   }
 
   /** @brief Retrieves the string value for a given key. */
-  str get(const str& key) const {
+  auto get(const str& key) -> str const {
     auto it = entries.find(key);
     return it != entries.end() ? it->second : "";
   }
 
   /** @brief Retrieves the string value for a given key as a uint. */
-  uint get_uint(const str& key) const {
+  auto get_uint(const str& key) -> uint const {
     return stoul(get(key));
   }
 
   /** @brief Retrieves the string value for a given key as bool. */
-  bool get_bool(const str& key) const {
+  auto get_bool(const str& key) -> bool const {
     auto v = get(key);
     return v == "1" || v == "true";
   }
+
+  // ------ Member variables ------
+  ordered_map<str,str> entries;
 };

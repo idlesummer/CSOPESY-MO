@@ -79,7 +79,7 @@ class Core {
   atomic_bool active;   
   Thread thread; 
 
-  // ------ Internal Logic ------
+  // ------ Internal logic ------
 
   private:
 

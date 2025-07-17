@@ -69,7 +69,7 @@ class CoreManager {
   /** @brief Returns a vec<uint> of pids to all busy (non-idle) cores. */
   auto get_running_pids() -> vec<uint> { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
 
-  // ------ Internal Logic ------
+  // ------ Internal logic ------
 
   private:
 

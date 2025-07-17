@@ -13,28 +13,28 @@
  */
 class SchedulerStrategy {
   public:
+
   using PreemptHandler = Core::func;
-  using TickHandler = function<void(SchedulerData&)>;
+  using TickHandler = func<void(SchedulerData&)>;
 
-  // === Members ===
-  str name;              // Strategy identifier (e.g., "fcfs", "rr")
-  SchedulerConfig config;         // Strategy-specific configuration
-  TickHandler tick_handler;       // Main strategy logic executed each tick
-  PreemptHandler preempt_handler; // Core-level preemption policy (optional)
+  SchedulerStrategy():
+    name            (""s),                // Strategy identifier (e.g., "fcfs", "rr")
+    config          (SchedulerConfig()),  // Strategy-specific configuration
+    tick_handler    (nullptr),            // Main strategy logic executed each tick
+    preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
 
-  // === Methods Methods ===
 
   /** @brief Sets the strategy name. */
-  SchedulerStrategy& set_name(str n) { return name = n, *this; }
+  auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
 
   /** @brief Sets the configuration for this strategy. */
-  SchedulerStrategy& set_config(SchedulerConfig c) { return config = move(c), *this; }
+  auto set_config(SchedulerConfig c) -> SchedulerStrategy& { return config = move(c), *this; }
 
   /** @brief Sets the main logic to run on each tick. */
-  SchedulerStrategy& on_tick(TickHandler t) { return tick_handler = move(t), *this; }
+  auto on_tick(TickHandler t) -> SchedulerStrategy& { return tick_handler = move(t), *this; }
 
   /** @brief Sets the per-core preemption policy. */
-  SchedulerStrategy& on_preempt(PreemptHandler p) { return preempt_handler = move(p), *this; }
+  auto on_preempt(PreemptHandler p) -> SchedulerStrategy& { return preempt_handler = move(p), *this; }
 
   // === Execution ===
 
@@ -44,4 +44,11 @@ class SchedulerStrategy {
       throw runtime_error("SchedulerStrategy::tick called without on_tick handler.");
     tick_handler(data);
   }
+
+  // ------ Member variables ------
+
+  str name;              
+  SchedulerConfig config;         
+  TickHandler tick_handler;       
+  PreemptHandler preempt_handler;
 };

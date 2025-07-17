@@ -69,10 +69,9 @@ class Scheduler {
   SchedulerData data;         
   SchedulerStrategy strategy;
 
-  // ------ Internal Logic ------
+  // ------ Internal logic ------
 
   private:
-
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
   auto interval_has_elapsed() -> bool const {
