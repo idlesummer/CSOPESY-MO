@@ -15,22 +15,16 @@
  * orchestration of ticks and process generation.
  */
 class Scheduler {
-  using queue = vector<str>;
-  using list = vector<uint>;
-  queue names;                // Deferred generation queue for user-inserted proc_table
-  
   public:
-  // === Internal State ===
-  uint ticks = 0;             // Global tick counter
-  bool generating = false;    // Flag indicating auto-generation mode
-  
-  // === Components ===
-  SchedulerData data;         // Internal state (cores, proc_table, queue)
-  SchedulerStrategy strategy; // Contains the scheduler strategy
 
-  // === Methods ===
+  Scheduler():
+    names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
+    ticks      (0u),                    // Global tick counter
+    generating (false),                 // Flag indicating auto-generation mode
+    data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
+    strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
-  /** Adds a user-named process to the pending generation queue. */
+  /** Adds a user-named process to the pending generation vec<str>. */
   void enqueue_process(str name) { names.push_back(move(name)); }
 
   /** Enables or disables automatic process generation each tick. */
@@ -67,15 +61,21 @@ class Scheduler {
     data.config = move(config);                                   
   }
 
+  // ------ Member variables ------
 
-  // ========================
-  // === Private Helpers ====
-  // ========================
+  vec<str> names;                
+  uint ticks = 0;             
+  bool generating = false;    
+  SchedulerData data;         
+  SchedulerStrategy strategy;
+
+  // ------ Internal Logic ------
+
   private:
 
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
-  bool interval_has_elapsed() const {
+  auto interval_has_elapsed() -> bool const {
     uint freq = data.config.batch_process_freq;
     return freq > 0 && (ticks % freq == 0);
   }

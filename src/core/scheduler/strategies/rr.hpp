@@ -12,7 +12,7 @@
  * - Preemptive: proc_table are interrupted after a time quantum.
  * - Immediate arrival: proc_table are placed into the ready queue directly.
  */
-inline SchedulerStrategy make_rr_strategy(SchedulerConfig& config) {
+auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
   return SchedulerStrategy()
     .set_name("rr")
     .set_config(config)
