@@ -7,19 +7,16 @@
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
-  
-inline const CommandHandler make_test() {
-  return {
-    .name = "test",
-    .desc = "Spawn and manually step a dummy FOR loop process.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {{ "-r", false }},
+auto make_test() -> CommandHandler {
+  return CommandHandler()
+    .set_name("test")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({{ "-r", false }})
 
-    .execute = [](Command& command, Shell& shell) {
-      using Interpreter = InstructionInterpreter;
-      
-      auto& interpreter = Interpreter::instance();
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
       // 0. Reset process if requested
@@ -52,12 +49,10 @@ inline const CommandHandler make_test() {
       // === Debug: Show instruction list with pointer ===
       cout << "[loop-test] Instruction List:\n";
       cout << program.render_script() << '\n';
-      
+
       // 3. Step the process
       const bool done = process.step();
       cout << "[loop-test] Process stepped.\n";
-      cout << (done ? "Finished." : "Still running.");
-      cout << '\n';
-    },
-  };
+      cout << (done ? "Finished." : "Still running.") << '\n';
+    });
 }

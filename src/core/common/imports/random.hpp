@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
-#include <random>
+#include <Random>
 #include <stdexcept>
 #include "casts.hpp"
 #include "containers.hpp"
@@ -10,7 +10,7 @@
 
 
 /** Random utility class */
-class Random {
+class Rand {
   using mt19937   = std::mt19937;
   using int_dist  = std::uniform_int_distribution<>;
   using uint_dist = std::uniform_int_distribution<unsigned>;
@@ -27,32 +27,32 @@ public:
   }
 
   /** Random unsigned integer in [min, max] */
-  static uint num(uint min, uint max) {
+  static auto num(uint min, uint max) -> uint {
     auto dist = uint_dist(min, max);
     return dist(rng);
   }
 
   /** Returns true with probability 1/odds */
-  static bool chance(uint odds) {
+  static auto chance(uint odds) -> bool {
     return odds != 0 && num(1u, odds) == 1u;
   }
 
   /** Random float in [min, max) */
-  static float real(float min, float max) {
+  static auto real(float min, float max) -> float {
     auto dist = real_dist(min, max);
     return dist(rng);
   }
 
-  /** Pick a random element from a non-empty vector */
+  /** Pick a Random element from a non-empty vector */
   template <typename Type>
-  static Type pick(const std::vector<Type>& list) {
+  static auto pick(const std::vector<Type>& list) -> Type {
     if (list.empty()) throw std::runtime_error("Cannot pick from empty list.");
     return list[num(0, static_cast<int>(list.size()) - 1)];
   }
 
   /** Shuffle a vector in place */
   template <typename Type>
-  static std::vector<Type>& shuffle(std::vector<Type>& list) {
+  static auto shuffle(std::vector<Type>& list) -> std::vector<Type>& {
     std::shuffle(list.begin(), list.end(), rng);
     return list;
   }

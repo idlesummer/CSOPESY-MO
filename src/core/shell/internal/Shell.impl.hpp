@@ -12,7 +12,6 @@
 
 
 class Shell {
-  using Interpreter = CommandInterpreter;
   using Storage = ShellStorage;
   using Screen = ShellScreen;
   
@@ -20,7 +19,7 @@ class Shell {
 
   // === Core system components ===
   EventEmitter& global;
-  Interpreter& interpreter;
+  CommandInterpreter& interpreter;
   
   // === Shell subcomponents ===
   Scheduler scheduler; 
@@ -44,9 +43,7 @@ class Shell {
 
     // Starts the tick handler that runs the scheduler.
     global.on("tick", [&] { 
-      // Ensures scheduler.tick() does not conflict with shell command access
-      // Uses global with_locked(...) wrapper to synchronize with shared SchedulerData
-      with_locked([&] { scheduler.tick(); });
+      with_locked([&] { scheduler.tick(); }); // Makes scheduler.tick() does not conflict with shell commands
     });
   
     // Start CLI in a separate thread
@@ -83,7 +80,7 @@ class Shell {
   }
 
   /** @brief Signals the shell to stop from within the shell thread. */
-  void request_stop() { active = false; } 
+  void set_active(bool flag) { active = flag; }
 
   /** @brief Emits an event using the global EventEmitter. */
   void emit(str name, any data={}) { global.emit(move(name), move(data)); }

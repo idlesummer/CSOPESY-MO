@@ -17,5 +17,16 @@ using std::unordered_map;
 using std::unordered_set;
 using std::vector;
 
+// === Aliases ===
+template <typename Type>
+using vec = vector<Type>;
+
+template <typename Type>
+using set = unordered_set<Type>;
+
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
+
+template <typename Key, typename Val>
+using map = unordered_map<Key, Val>;
+

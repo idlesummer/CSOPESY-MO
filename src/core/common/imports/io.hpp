@@ -21,7 +21,7 @@ using std::ostream;
 using std::runtime_error;
 
 // === Utility functions ===
-inline std::vector<std::string> read_lines(const std::string& path) {
+auto read_lines(const std::string& path) -> std::vector<std::string> {
   auto file = std::ifstream(path);
   if (!file) return {};
 

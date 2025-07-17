@@ -23,9 +23,9 @@ struct InstructionParam {
   /** Returns a randomly generated argument string that matches this schema. */
   str generate() const {
     switch (type) {
-      case Type::UInt:  return to_string(Random::num(min, max));
-      case Type::Str:   return Random::pick(messages);
-      case Type::Var:   return Random::pick(vars);
+      case Type::UInt:  return to_string(Rand::num(min, max));
+      case Type::Str:   return Rand::pick(messages);
+      case Type::Var:   return Rand::pick(vars);
       default:          return "<?>";  // Should never be hit
     }
   }

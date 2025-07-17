@@ -1,18 +1,19 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_cls() {
-  return {
-    .name = "cls",
-    .desc = "Clear screen contents.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-    .execute = [](Command&, Shell&) {
+auto make_cls() -> CommandHandler {
+  return CommandHandler()
+    .set_name("cls")
+    .set_desc("Clear screen contents.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    .set_execute([](Command&, Shell&) {
       system("cls");
-    },
-  };
+    });
 }
+

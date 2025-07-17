@@ -1,26 +1,28 @@
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
-#include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_report_util() {
-  return {
-    .name = "report-util",
-    .desc = "Generates a CPU unitilization report.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-
-    .validate = [](Command& command, Shell& shell) -> Str {
+auto make_report_util() -> CommandHandler {
+  return CommandHandler()
+    .set_name("report-util")
+    .set_desc("Generates a CPU unitilization report.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    
+    .set_validate([](Command& command, Shell& shell) -> Str {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
-      
+
       if (!shell.scheduler.data.config.initialized)
         return "Scheduler not initialized. Please run 'initialize' first.";
-      return nullopt;
-    },
 
-    .execute = [](Command& command, Shell& shell) {
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
       auto& scheduler = shell.scheduler;
       auto& data = scheduler.data;
       auto running = data.get_running_pids();
@@ -35,7 +37,7 @@ inline const CommandHandler make_report_util() {
       cout << "Running processes:\n";
       log << "Running processes:\n";
 
-      for (uint pid: running) {
+      for (auto pid: running) {
         auto& proc = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Core: {:<2}  {} / {}\n",
@@ -52,8 +54,8 @@ inline const CommandHandler make_report_util() {
       cout << "\nFinished processes:\n";
       log << "\nFinished processes:\n";
 
-      for (uint pid: finished) {
-        const auto& proc = data.get_process(pid);
+      for (auto pid: finished) {
+        auto& proc = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Finished      {} / {}\n",
           proc.data.name,
@@ -70,6 +72,5 @@ inline const CommandHandler make_report_util() {
       log.close();
 
       cout << "[report-util] Report written to csopesylog.txt\n";
-    }
-  };
+    });
 }

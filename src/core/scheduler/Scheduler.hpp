@@ -84,7 +84,7 @@ class Scheduler {
   void generate_processes() {
     auto make_process = [&](uint pid, str name="") {
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto size  = Random::num(data.config.min_ins, data.config.max_ins);
+      auto size  = Rand::num(data.config.min_ins, data.config.max_ins);
       data.add_process(Process(pid, move(pname), size));
       data.rqueue.push(pid);
     };

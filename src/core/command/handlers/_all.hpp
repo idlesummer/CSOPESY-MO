@@ -24,7 +24,7 @@ auto get_command_handlers() -> vector<CommandHandler> {
     make_exit(),
     make_initialize(),
     make_process_smi(),
-    make_report_util(),
+    make_report_util(), 
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),

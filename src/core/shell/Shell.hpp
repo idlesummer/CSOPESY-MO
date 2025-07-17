@@ -11,7 +11,7 @@
  */
 inline Shell::Shell(EventEmitter& emitter): 
     global(emitter), 
-    interpreter(Interpreter::instance()),
+    interpreter(CommandInterpreter::get()),
     screen(storage) {
   
   // Register all command handlers

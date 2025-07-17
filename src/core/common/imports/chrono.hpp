@@ -23,7 +23,7 @@ using std::chrono_literals::operator""ns;
 using std::chrono_literals::operator""s;
 
 /** Returns a formatted timestamp string using current local time. */
-inline std::string timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") {
+auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") -> std::string {
   auto time = Clock::to_time_t(tp.value_or(Clock::now()));
   auto time_struct = TimeStruct();
   localtime_s(&time_struct, &time);

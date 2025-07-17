@@ -7,50 +7,47 @@
 #include "core/scheduler/types.hpp"
 
 
-inline const CommandHandler make_initialize() {
-  using list = vector<str>;
-  return {
-    .name = "initialize",
-    .desc = "Initializes the processor configuration of the application.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_initialize() -> CommandHandler {
+  return CommandHandler()
+    .set_name("initialize")
+    .set_desc("Initializes the processor configuration of the application.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .validate = [](Command& command, Shell& shell) -> Str {
-        // Check if the scheduler has already been initialized
-        if (shell.scheduler.data.config.initialized)
-          return "Already initialized.";
-        
-        // Check if the file could not be opened or is empty
-        auto lines = read_lines("config.txt");
-        if (lines.empty())
-          return "Failed to open config.txt";
+    .set_validate([](Command& command, Shell& shell) -> Str {
+      // Check if the scheduler has already been initialized
+      if (shell.scheduler.data.config.initialized)
+        return "Already initialized.";
 
-        auto& storage = shell.storage;
-        storage.set("initialize.cache", move(lines));
-        return nullopt;
-    },
+      // Check if the file could not be opened or is empty
+      auto lines = read_lines("config.txt");
+      if (lines.empty())
+        return "Failed to open config.txt";
 
-    .execute = [](Command& command, Shell& shell) {
-        auto& storage = shell.storage;
-        const auto& lines = storage.get<list>("initialize.cache");
-        auto config = SchedulerConfig();
+      auto& storage = shell.storage;
+      storage.set("initialize.cache", move(lines));
+      return nullopt;
+    })
 
-        for (const auto& line: lines) {
-          str key, value;
-          isstream(line) >> key >> value;
+    .set_execute([](Command& command, Shell& shell) {
+      auto& storage = shell.storage;
+      auto& lines = storage.get<vector<str>>("initialize.cache");
+      auto config = SchedulerConfig();
 
-          if (!config.set(key, move(value)))
-            cout << format("[Shell] Unknown config key: {}\n", key);
-        }
+      for (auto& line : lines) {
+        str key, value;
+        isstream(line) >> key >> value;
 
-        config.initialized = true;
-        shell.scheduler.set_config(config);
+        if (!config.set(key, move(value)))
+          cout << format("[Shell] Unknown config key: {}\n", key);
+      }
 
-        cout << BANNER << '\n';
-        cout << "[Shell] Scheduler config loaded.\n";
-        storage.remove("initialize.cache");
-    },
-  };
+      config.initialized = true;
+      shell.scheduler.set_config(config);
+
+      cout << BANNER << '\n';
+      cout << "[Shell] Scheduler config loaded.\n";
+      storage.remove("initialize.cache");
+    });
 }
-

@@ -4,18 +4,16 @@
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_echo() {
-  return {
-    .name = "echo",
-    .desc = "Print arguments.",
-    .min_args = 1,
-    .max_args = MAX,
-    .flags = {},
-    
-    .execute = [](Command& command, Shell&) {
-      for (const auto& arg: command.args)
+auto make_echo() -> CommandHandler {
+  return CommandHandler()
+    .set_name("echo")
+    .set_desc("Print arguments.")
+    .set_min_args(1)
+    .set_max_args(UINT_MAX)
+    .set_flags({})
+    .set_execute([](Command& command, Shell&) {
+      for (auto& arg : command.args)
         cout << arg << ' ';
       cout << '\n';
-    },
-  };
+    });
 }

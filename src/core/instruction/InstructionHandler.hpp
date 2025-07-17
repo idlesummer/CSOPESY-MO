@@ -36,7 +36,7 @@ struct InstructionHandler {
     if (signatures.empty())
       return inst;
 
-    const auto& signature = Random::pick(signatures);
+    const auto& signature = Rand::pick(signatures);
     inst.args.reserve(signature.size()); // Micro-optimization: Preallocate space
 
     for (const auto& rule: signature)

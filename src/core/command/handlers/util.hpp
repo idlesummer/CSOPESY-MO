@@ -5,18 +5,21 @@
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_util() {
-  return {
-    .name = "report-util",
-    .desc = "Generates a report of running and Finished processes to csopesylog.txt",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_util() -> CommandHandler {
+  return CommandHandler()
+    .set_name("report-util")
+    .set_desc("Generates a report of running and Finished processes to csopesylog.txt")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .execute = [](Command &command, Shell &shell) {   
+    .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.screen.is_main())
-        return void(cout << "Not in the Main Menu.\n");
+        return "Not in the Main Menu.";
+      return nullopt;
+    })
 
+    .set_execute([](Command&, Shell& shell) {
       auto& data = shell.scheduler.data;
       auto running = data.cores.get_running_pids();
       auto& finished = data.finished_pids;
@@ -24,13 +27,13 @@ inline const CommandHandler make_util() {
       auto log = ofstream("csopesylog.txt");
       auto separator = "---------------------------------------------\n";
 
-      cout << "\033[38;5;33m" << separator << "\033[0m";
+      cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;
 
       cout << "Running processes:\n";
       log << "Running processes:\n";
 
-      for (const auto& pid: running) {
+      for (const auto& pid : running) {
         auto& process = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Core: {:<2}  {} / {}\n",
@@ -40,14 +43,14 @@ inline const CommandHandler make_util() {
           process.data.program.ip,
           process.data.program.size()
         );
-        cout << "\033[36m" << line << "\033[0m";
+        cout << format("\033[36m{}\033[0m", line);
         log << line;
       }
 
       cout << "\nFinished processes:\n";
       log << "\nFinished processes:\n";
 
-      for (const auto& pid: finished) {
+      for (auto& pid: finished) {
         auto& process = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Finished      {} / {}\n",
@@ -56,15 +59,14 @@ inline const CommandHandler make_util() {
           process.data.program.size(),
           process.data.program.size()
         );
-        cout << "\033[36m" << line << "\033[0m";
+        cout << format("\033[36m{}\033[0m", line);
         log << line;
       }
 
-      cout << "\033[38;5;33m" << separator << "\033[0m";
+      cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;
       log.close();
 
       cout << "[report-util] Report written to csopesylog.txt\n";
-    }
-  };
+    });
 }

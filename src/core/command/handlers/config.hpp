@@ -5,14 +5,14 @@
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_config() {
-  return {
-    .name = "config",
-    .desc = "Displays the current scheduler configuration.",
-    .min_args = 0,
-    .max_args = 0,
+auto make_config() -> CommandHandler {
+  return CommandHandler()
+    .set_name("config")
+    .set_desc("Displays the current scheduler configuration.")
+    .set_min_args(0)
+    .set_max_args(0)
 
-    .execute = [](Command&, Shell& shell) {
+    .set_execute([](Command&, Shell& shell) {
       auto& config = shell.scheduler.data.config;
       cout << "\n";
       cout << "╭──────────────────────── Scheduler Configuration ───────────────────────╮\n";
@@ -25,6 +25,5 @@ inline const CommandHandler make_config() {
       cout << format("│ {:<22} │ {:<45} │\n", "Delays Per Exec", config.delays_per_exec);
       cout << format("│ {:<22} │ {:<45} │\n", "Initialized", config.initialized ? "Yes" : "No");
       cout << "╰────────────────────────────────────────────────────────────────────────╯\n";
-    },
-  };
+    });
 }

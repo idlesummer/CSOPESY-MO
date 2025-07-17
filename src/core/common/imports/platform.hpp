@@ -9,7 +9,7 @@ using std::min;
 using std::max;
 
 
-inline void enable_unicode() {
+void enable_unicode() {
   SetConsoleOutputCP(CP_UTF8);
 }
 

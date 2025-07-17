@@ -18,8 +18,8 @@ class InstructionInterpreter {
 
   public:
 
-  /** Returns the global singleton instance of the InstructionInterpreter. */
-  static InstructionInterpreter& instance() {
+  /** Returns the global singleton get of the InstructionInterpreter. */
+  static InstructionInterpreter& get() {
     static InstructionInterpreter inst;
     return inst;
   }
@@ -59,7 +59,7 @@ class InstructionInterpreter {
         close_control_block(script, stack);
 
       if (!flat_handlers.empty())                 // For adding flat instructions
-        script.push_back(Random::pick(flat_handlers).get().generate());
+        script.push_back(Rand::pick(flat_handlers).get().generate());
     }
 
     // Auto-close any unclosed control blocks
@@ -72,7 +72,7 @@ class InstructionInterpreter {
   private:
 
   /** 
-   * Private constructor to enforce singleton access via instance().
+   * Private constructor to enforce singleton access via get().
    * Initializes and registers all handlers once. 
    */
   InstructionInterpreter() {
@@ -98,17 +98,17 @@ class InstructionInterpreter {
 
   /** Returns true if a control block can be opened (depth-limited, random chance). */
   bool should_open(const list& stack, uint max_depth) const { 
-    return !control_handlers.empty() && (stack.size() < max_depth) && Random::chance(4); 
+    return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
   /** Returns true if a control block can be closed (if any open, random chance). */
   bool should_close(const list& stack) const { 
-    return !stack.empty() && Random::chance(4); 
+    return !stack.empty() && Rand::chance(4); 
   }
 
   /** Emits a random control-opener instruction and pushes it to the stack. */
   void open_control_block(Script& script, list& stack) const {
-    const auto& handler = Random::pick(control_handlers);
+    const auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }

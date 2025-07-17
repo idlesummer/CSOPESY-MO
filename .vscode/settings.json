@@ -75,7 +75,6 @@
     "stop_token": "cpp",
     "fstream": "cpp",
     "variant": "cpp",
-    "random": "cpp",
     "string_view": "cpp",
     "text_encoding": "cpp",
     "cstdarg": "cpp",
@@ -85,6 +84,8 @@
     "numbers": "cpp",
     "semaphore": "cpp",
     "unordered_set": "cpp",
-    "cinttypes": "cpp"
+    "cinttypes": "cpp",
+    "map": "cpp",
+    "random": "cpp"
   }
 }

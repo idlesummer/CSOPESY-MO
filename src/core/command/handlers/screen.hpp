@@ -6,18 +6,18 @@
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_screen() {
-  return {
-    .name = "screen",
-    .desc = "Creates and switches through existing screens.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {{"-s", true}, {"-r", true}, {"-ls", false}},
-
-    .validate = [](Command& command, Shell& shell) -> Str {
-      const bool has_ls = command.flags.contains("-ls");
-      const bool has_s  = command.flags.contains("-s");
-      const bool has_r  = command.flags.contains("-r");
+auto make_screen() -> CommandHandler {
+  return CommandHandler()
+    .set_name("screen")
+    .set_desc("Creates and switches through existing screens.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
+    
+    .set_validate([](Command& command, Shell& shell) -> Str {
+      bool has_ls = command.flags.contains("-ls");
+      bool has_s = command.flags.contains("-s");
+      bool has_r = command.flags.contains("-r");
 
       if (has_s + has_ls + has_r > 1)
         return "You must use only one of -s, -r, or -ls.";
@@ -26,11 +26,9 @@ inline const CommandHandler make_screen() {
         return "Not in the Main Menu.";
 
       return nullopt;
-    },
+    })
 
-    .execute = [&](Command& command, Shell& shell) {
-      using set = unordered_set<uint>;
-
+    .set_execute([&](Command& command, Shell& shell) {
       auto& screen = shell.screen;
       auto& scheduler = shell.scheduler;
 
@@ -49,9 +47,8 @@ inline const CommandHandler make_screen() {
         cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
         cout << "Running processes:\n";
 
-        for (uint pid: cores.get_running_pids()) {
+        for (uint pid : cores.get_running_pids()) {
           auto& process = data.get_process(pid);
-
           cout << format(
             "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
             process.data.name,
@@ -64,7 +61,7 @@ inline const CommandHandler make_screen() {
 
         cout << "\nFinished processes:\n";
 
-        for (uint pid: data.finished_pids) {
+        for (uint pid : data.finished_pids) {
           auto& process = data.get_process(pid);
           cout << format(
             "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
@@ -94,14 +91,12 @@ inline const CommandHandler make_screen() {
         cout << format("\nWaiting for process creation: {}", name);
         bool created = false;
 
-        // Temporarily release lock while waiting for scheduler to tick
         for (uint i = 0; i < 30; ++i) {
           if (scheduler.data.has_process(name)) {
             created = true;
             break;
           }
 
-          // Temporarily releases global scheduler to tick scheduler
           with_unlocked([&] {
             sleep_for(200ms);
           });
@@ -112,9 +107,9 @@ inline const CommandHandler make_screen() {
 
         auto& data = scheduler.data;
         auto& process = data.get_process(name);
-        uint pid = process.data.id; // ✅ Extract PID
+        uint pid = process.data.id;
 
-        screen.switch_to(pid);    // ✅ Use only PID
+        screen.switch_to(pid);
         cout << "\n";
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
@@ -137,9 +132,9 @@ inline const CommandHandler make_screen() {
           return void(cout << format("Process <{}> not found.\n", name));
 
         auto& process = data.get_process(name);
-        uint pid = process.data.id; // ✅ Use PID
+        uint pid = process.data.id;
 
-        screen.switch_to(pid);      // ✅ PID-based only
+        screen.switch_to(pid);
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
 
@@ -150,6 +145,5 @@ inline const CommandHandler make_screen() {
         cout << format("Current instruction line: {}\n", process.data.program.ip);
         cout << format("Lines of code: {}\n", process.data.program.size());
       }
-    }
-  };
+    });
 }

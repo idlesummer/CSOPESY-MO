@@ -4,25 +4,24 @@
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_exit() {
-  return {
-    .name = "exit",
-    .desc = "Exit shell.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-    
-    .execute = [](Command&, Shell& shell) {
+auto make_exit() -> CommandHandler {
+  return CommandHandler()
+    .set_name("exit")
+    .set_desc("Exit shell.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+
+    .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
 
       if (screen.is_main()) {
-        shell.request_stop();
+        shell.set_active(false);
         shell.emit("shutdown");
 
       } else {
         screen.switch_to_main();
         shell.emit("switched_to_main");
       }
-    },
-  };
+    });
 }

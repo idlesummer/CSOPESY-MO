@@ -6,45 +6,45 @@
 #include "core/execution/Core.hpp"
 
 
-inline const CommandHandler make_process_smi() {
-  return {
-    .name = "process-smi",
-    .desc = "Shows the current process status, logs, and info.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_process_smi() -> CommandHandler {
+  return CommandHandler()
+    .set_name("process-smi")
+    .set_desc("Shows the current process status, logs, and info.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .validate = [](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> Str {
       if (shell.screen.is_main())
         return "Not in a process screen.";
 
-        auto& scheduler = shell.scheduler;
-        uint pid = shell.screen.get_id();
+      auto& scheduler = shell.scheduler;
+      uint pid = shell.screen.get_id();
 
       if (!scheduler.data.has_process(pid))
         return format("Active process with ID \"{}\" not found.", pid);
-      return nullopt;
-    },
 
-    .execute = [](Command& command, Shell& shell) {
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
       auto& scheduler = shell.scheduler;
       auto& storage = shell.storage;
 
-      uint pid = shell.screen.get_id();                 // ✅ Retrieve PID
-      auto& process = scheduler.data.get_process(pid);  // ✅ Access by PID
+      uint pid = shell.screen.get_id();
+      auto& process = scheduler.data.get_process(pid);
       auto& program = process.data.program;
 
       cout << format("Process name: {}\n", process.data.name);
       cout << format("ID: {}\n", process.data.core_id);
 
       cout << "Logs:\n";
-      for (auto& log: process.data.logs)
+      for (auto& log : process.data.logs)
         cout << log << '\n';
 
       cout << "Current instruction line: " << program.ip << '\n';
       cout << "Lines of code: " << program.script.size() << "\n\n";
 
       shell.storage.remove("process-smi.pid");
-    },
-  };
+    });
 }

@@ -8,7 +8,7 @@
 class Process {
   using Interpreter = InstructionInterpreter;
   using Script = Instruction::Script;
-  inline static Interpreter& interpreter = Interpreter::instance();
+  inline static Interpreter& interpreter = Interpreter::get();
   
   public:
   // === Components ===

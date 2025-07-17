@@ -13,6 +13,7 @@
 using std::string;
 using str = std::string;
 using Str = std::optional<string>;
+using std::literals::string_literals::operator""s;
 
 // === Character Utilities ===
 using std::isalpha;

@@ -65,13 +65,19 @@ int main() {
 #include "core/common/imports/_all.hpp"
 
 
-/** Represents a parsed command-line input. */
-struct Command {
-  using list = vector<str>;  
-  using map = unordered_map<str, str>;
-  str  name;    ///< The command name (e.g., "screen", "exit")
-  list args;    ///< Positional arguments for the command
-  map  flags;   ///< Map of flags and their associated values (if any)
+/** @brief Represents a parsed command-line input. */
+class Command {
+  public:
+    Command():
+      name  (""s),              // The command name (e.g., "screen", "exit")
+      args  (vec<str>()),       // Positional arguments for the command
+      flags (map<str,str>()) {} // Map of flags and their associated values (if any)
+
+
+    // === Member variables ===
+    str name;    
+    vec<str> args;    
+    map<str,str> flags;   
 };
 
 ------------------------------
@@ -87,18 +93,35 @@ struct Command {
 
 /** Represents a single command entry in the interpreter. */
 class Shell;
-struct CommandHandler {
-  using list = vector<CommandFlag>;
-  using execute_func  = function<void(Command&, Shell&)>;
-  using validate_func = function<Str(Command&, Shell&)>;
+class CommandHandler {
+  public:
+    CommandHandler():
+      name     (""s),                 // Command name (e.g., "screen", "exit")
+      desc     (""s),                 // Description for help or documentation
+      min_args (0u),                  // Minimum number of required arguments
+      max_args (UINT_MAX),            // Maximum number of allowed arguments
+      flags    (vec<CommandFlag>()),  // Valid flags for this command
+      validate (nullptr),             // Optional validation hook
+      execute  (nullptr) {}           // Main handler for executing the command
 
-  str  name;                        // Command name (e.g., "screen", "exit")
-  str  desc;                        // Description for help or documentation
-  uint min_args = 0;                // Minimum number of required arguments
-  uint max_args = MAX;              // Maximum number of allowed arguments
-  list flags;                       // Valid flags for this command
-  validate_func validate = nullptr; // Optional validation hook
-  execute_func  execute;            // Main handler for executing the command
+    // === Chainable Setters ===
+    auto set_name(const str& value) -> CommandHandler& { return name = value, *this; }
+    auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
+    auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
+    auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
+    auto set_flags(const vec<CommandFlag>& value) -> CommandHandler& { return flags = value, *this; }
+    auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
+    auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
+
+      
+    // === Member variables === 
+    str name;                        
+    str desc;                        
+    uint min_args;                
+    uint max_args;              
+    vec<CommandFlag> flags;                       
+    func<optional<str>(Command&,Shell&)> validate; 
+    func<void(Command&,Shell&)> execute;
 };
 
 ------------------------------
@@ -119,93 +142,84 @@ struct CommandHandler {
  */
 class Shell;  // Forward declaration
 class CommandInterpreter {
-  using Flag = CommandFlag;
-  using Handler = CommandHandler;
-  using map = unordered_map<str, Handler>;
-  using set = unordered_set<str>;
-  
-  public:
-  map handlers; // Registry of available command handlers
-  
-  // === Methods ===
+  public: 
 
-  /** @brief Returns the global singleton instance of the CommandInterpreter. */
-  static CommandInterpreter& instance() {
-    static CommandInterpreter inst;
-    return inst;
-  }
-
-  /** @brief Registers a command with its name and handlers. */
-  void register_command(Handler handler) {
-    handlers[handler.name] = move(handler);
-  }
-
-  /** @brief Executes a command in the shell context. */ 
-  void execute(const str& line, Shell& shell) {
-
-    // Parse the command line into a Command (name, args, flags)
-    auto command = CommandParser::parse(line);  
-    if (command.name.empty()) 
-      return;
-
-    // Find command in the registry
-    auto it = handlers.find(command.name);       
-    if (it == handlers.end())
-      return void(cout << format("[Shell] Unknown command: {}\n", command.name));
-
-    auto& handler = it->second;
-
-    // Check for unknown/misused flags
-    if (invalid_flags(command, handler))
-      return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
-
-    // Check positional argument count
-    if (invalid_args(command, handler))
-      return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
-
-    // Run optional command-specific validation logic
-    if (auto msg = custom_validation(command, handler, shell))
-      return void(cout << format("[Shell] {}\n", *msg));
+    CommandInterpreter():
+      handlers (map<str,CommandHandler>()) {} // Registry of available command handlers
     
-    // Execute the command
-    cout << '\n';
-    handler.execute(command, shell);
-  }
+
+    /** @brief Returns the global singleton get of the CommandInterpreter. */
+    static CommandInterpreter& get() {
+      static auto inst = CommandInterpreter();
+      return inst;
+    }
+
+    /** @brief Registers a command with its name and handlers. */
+    void register_command(CommandHandler handler) {
+      handlers[handler.name] = move(handler);
+    }
+
+    /** @brief Executes a command in the shell context. */ 
+    void execute(const str& line, Shell& shell) {
+
+      // Parse the command line into a Command (name, args, flags)
+      auto command = CommandParser::parse(line);  
+      if (command.name.empty()) 
+        return;
+
+      // Find command in the registry
+      auto it = handlers.find(command.name);       
+      if (it == handlers.end())
+        return void(cout << format("[Shell] Unknown command: {}\n", command.name));
+
+      auto& handler = it->second;
+
+      // Check for unknown/misused flags
+      if (invalid_flags(command, handler))
+        return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
+
+      // Check positional argument count
+      if (invalid_args(command, handler))
+        return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
+
+      // Run optional command-specific validation logic
+      if (auto msg = custom_validation(command, handler, shell))
+        return void(cout << format("[Shell] {}\n", *msg));
+      
+      // Execute the command
+      cout << '\n';
+      handler.execute(command, shell);
+    }
 
 
-  // ========================
-  // === Private Helpers ====
-  // ========================
+    // === Member variables ===
+    map<str,CommandHandler> handlers; 
+
   private:
 
-
-  /** @brief Private constructor to enforce singleton access via instance(). */
-  CommandInterpreter() = default;
-  
-  /** @brief Returns true if any flag is invalid or misused. */
-  static bool invalid_flags(Command& command, Handler& handler) {
-    // If any user flag has no valid match (in name and usage), 
-    // then the set of flags is invalid.
-    return any_of(command.flags, [&](auto& flag) {
-      return none_of(handler.flags, [&](Flag& f) {
-        return f.name == flag.first && f.has_arg == !flag.second.empty();
+    /** @brief Returns true if any flag is invalid or misused. */
+    static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
+      // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
+      return any_of(command.flags, [&](auto& flag) {
+        return none_of(handler.flags, [&](CommandFlag& f) {
+          return f.name == flag.first && f.has_arg == !flag.second.empty();
+        });
       });
-    });
-  }
+    }
 
-  /** @brief Checks if argument count is within bounds. */
-  static bool invalid_args(Command& command, Handler& handler) {
-    auto argc = command.args.size();
-    return argc < handler.min_args || argc > handler.max_args;
-  }
+    /** @brief Checks if argument count is within bounds. */
+    static auto invalid_args(Command& command, CommandHandler& handler) -> bool {
+      auto argc = command.args.size();
+      return argc < handler.min_args || argc > handler.max_args;
+    }
 
-  /** Runs the handler's custom validator and returns an optional error message. */
-  static Str custom_validation(Command& command, Handler& handler, Shell& shell) {
-    if (!handler.validate) return nullopt;
-    if (auto err = handler.validate(command, shell))
-      return err->empty() ? "Handler disabled or invalid." : *err;
-    return nullopt;
-  }
+    /** Runs the handler's custom validator and returns an optional error message. */
+    static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
+      if (!handler.validate) return nullopt;
+      if (auto err = handler.validate(command, shell))
+        return err->empty() ? "CommandHandler disabled or invalid." : *err;
+      return nullopt;
+    }
 };
 
 ------------------------------
@@ -223,43 +237,43 @@ class CommandInterpreter {
  * @brief Utility class for tokenizing and parsing command lines.
  */
 class CommandParser {
-  using list = Command::list;
-
   public:
 
-  /** @brief A helper that parses a handler line string into a Handler Command object. */
-  static Command parse(const str& line) {
-    auto tokens = tokenize(line);
-    if (tokens.empty()) return {};
+    /** @brief A helper that parses a handler line string into a Handler Command object. */
+    static auto parse(const str& line) -> Command {
+      auto tokens = tokenize(line);
+      if (tokens.empty()) return {};
 
-    auto cmd = Command();
-    cmd.name = move(tokens[0]);
+      auto cmd = Command();
+      cmd.name = move(tokens[0]);
 
-    for (uint i=1; i < tokens.size(); ++i) {
-      str token = move(tokens[i]);
-      if (token[0] != '-') {
-        cmd.args.emplace_back(move(token));
-        continue;
+      for (uint i=1; i < tokens.size(); ++i) {
+        str token = move(tokens[i]);
+        if (token[0] != '-') {
+          cmd.args.emplace_back(move(token));
+          continue;
+        }
+        bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
+        cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
       }
-      bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
-      cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+      
+      return cmd;
     }
-    
-    return cmd;
-  }
+
 
   private:
-  
-  /** @brief A helper that splits a string into whitespace-separated tokens. */
-  static list tokenize(const str& line) {
-    if (line.empty()) return {};
-    auto stream = isstream(line);
-    list tokens; 
 
-    for (str token; stream >> token; )
-      tokens.emplace_back(move(token));
-    return tokens;
-  }
+  
+    /** @brief A helper that splits a string into whitespace-separated tokens. */
+    static auto tokenize(const str& line) -> vector<str> {
+      if (line.empty()) return {};
+      auto stream = isstream(line);
+      auto tokens = vector<str>(); 
+
+      for (str token; stream >> token; )
+        tokens.emplace_back(move(token));
+      return tokens;
+    }
 };
 
 ------------------------------
@@ -271,10 +285,10 @@ class CommandParser {
 #include "core/common/imports/_all.hpp"
 
 
-/** Contains the flag name and whether it requires an argument. */
+/** @brief Contains the flag name and whether it requires an argument. */
 struct CommandFlag {
-  str  name;              ///< Flag name (e.g., "-s", "-r", "-ls")
-  bool has_arg = false;   ///< Whether the flag requires an argument
+  str  name;              // Flag name (e.g., "-s", "-r", "-ls")
+  bool has_arg = false;   // Whether the flag requires an argument
 };
 
 ------------------------------
@@ -284,22 +298,23 @@ struct CommandFlag {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_cls() {
-  return {
-    .name = "cls",
-    .desc = "Clear screen contents.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-    .execute = [](Command&, Shell&) {
+auto make_cls() -> CommandHandler {
+  return CommandHandler()
+    .set_name("cls")
+    .set_desc("Clear screen contents.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    .set_execute([](Command&, Shell&) {
       system("cls");
-    },
-  };
+    });
 }
+
 
 ------------------------------
  FILE:  config.hpp
@@ -313,14 +328,14 @@ inline const CommandHandler make_cls() {
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_config() {
-  return {
-    .name = "config",
-    .desc = "Displays the current scheduler configuration.",
-    .min_args = 0,
-    .max_args = 0,
+auto make_config() -> CommandHandler {
+  return CommandHandler()
+    .set_name("config")
+    .set_desc("Displays the current scheduler configuration.")
+    .set_min_args(0)
+    .set_max_args(0)
 
-    .execute = [](Command&, Shell& shell) {
+    .set_execute([](Command&, Shell& shell) {
       auto& config = shell.scheduler.data.config;
       cout << "\n";
       cout << "â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Scheduler Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®\n";
@@ -333,8 +348,7 @@ inline const CommandHandler make_config() {
       cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Delays Per Exec", config.delays_per_exec);
       cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Initialized", config.initialized ? "Yes" : "No");
       cout << "â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯\n";
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -344,34 +358,30 @@ inline const CommandHandler make_config() {
 
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
-#include "core/process/Process.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_demo() {
-  return {
-    .name = "demo",
-    .desc = "Creates and steps a demo process with random instructions.",
-    .min_args = 0,
-    .max_args = 0,
-
-    .execute = [](Command&, Shell& shell) {
+auto make_demo() -> CommandHandler {
+  return CommandHandler()
+    .set_name("demo")
+    .set_desc("Creates and steps a demo process with random instructions.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_execute([](Command&, Shell& shell) {
       auto& storage = shell.storage;
-      
-      if (!shell.storage.has("demo.counter")) {
+
+      if (!storage.has("demo.counter")) {
         cout << "Counter created! Run demo again to increment counter.\n";
         cout << "Counter: 0\n";
-        storage.set("demo.counter", 0);
+        storage.set("demo.counter", 0u);
         return;
       }
 
-      int counter = storage.get<int>("demo.counter") + 1;
+      auto counter = storage.get<uint>("demo.counter") + 1;
       storage.set("demo.counter", counter);
-      cout << format("Counter: {}\n", counter);;
-    },
-  };
+      cout << format("Counter: {}\n", counter);
+    });
 }
 
 ------------------------------
@@ -385,20 +395,18 @@ inline const CommandHandler make_demo() {
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_echo() {
-  return {
-    .name = "echo",
-    .desc = "Print arguments.",
-    .min_args = 1,
-    .max_args = MAX,
-    .flags = {},
-    
-    .execute = [](Command& command, Shell&) {
-      for (const auto& arg: command.args)
+auto make_echo() -> CommandHandler {
+  return CommandHandler()
+    .set_name("echo")
+    .set_desc("Print arguments.")
+    .set_min_args(1)
+    .set_max_args(UINT_MAX)
+    .set_flags({})
+    .set_execute([](Command& command, Shell&) {
+      for (auto& arg : command.args)
         cout << arg << ' ';
       cout << '\n';
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -412,15 +420,15 @@ inline const CommandHandler make_echo() {
 #include "core/command/CommandHandler.hpp"
 
 
-inline const CommandHandler make_exit() {
-  return {
-    .name = "exit",
-    .desc = "Exit shell.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-    
-    .execute = [](Command&, Shell& shell) {
+auto make_exit() -> CommandHandler {
+  return CommandHandler()
+    .set_name("exit")
+    .set_desc("Exit shell.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+
+    .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
 
       if (screen.is_main()) {
@@ -431,8 +439,7 @@ inline const CommandHandler make_exit() {
         screen.switch_to_main();
         shell.emit("switched_to_main");
       }
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -449,53 +456,50 @@ inline const CommandHandler make_exit() {
 #include "core/scheduler/types.hpp"
 
 
-inline const CommandHandler make_initialize() {
-  using list = vector<str>;
-  return {
-    .name = "initialize",
-    .desc = "Initializes the processor configuration of the application.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_initialize() -> CommandHandler {
+  return CommandHandler()
+    .set_name("initialize")
+    .set_desc("Initializes the processor configuration of the application.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .validate = [](Command& command, Shell& shell) -> Str {
-        // Check if the scheduler has already been initialized
-        if (shell.scheduler.data.config.initialized)
-          return "Already initialized.";
-        
-        // Check if the file could not be opened or is empty
-        auto lines = read_lines("config.txt");
-        if (lines.empty())
-          return "Failed to open config.txt";
+    .set_validate([](Command& command, Shell& shell) -> Str {
+      // Check if the scheduler has already been initialized
+      if (shell.scheduler.data.config.initialized)
+        return "Already initialized.";
 
-        auto& storage = shell.storage;
-        storage.set("initialize.cache", move(lines));
-        return nullopt;
-    },
+      // Check if the file could not be opened or is empty
+      auto lines = read_lines("config.txt");
+      if (lines.empty())
+        return "Failed to open config.txt";
 
-    .execute = [](Command& command, Shell& shell) {
-        auto& storage = shell.storage;
-        const auto& lines = storage.get<list>("initialize.cache");
-        auto config = SchedulerConfig();
+      auto& storage = shell.storage;
+      storage.set("initialize.cache", move(lines));
+      return nullopt;
+    })
 
-        for (const auto& line: lines) {
-          str key, value;
-          isstream(line) >> key >> value;
+    .set_execute([](Command& command, Shell& shell) {
+      auto& storage = shell.storage;
+      auto& lines = storage.get<vector<str>>("initialize.cache");
+      auto config = SchedulerConfig();
 
-          if (!config.set(key, move(value)))
-            cout << format("[Shell] Unknown config key: {}\n", key);
-        }
+      for (auto& line : lines) {
+        str key, value;
+        isstream(line) >> key >> value;
 
-        config.initialized = true;
-        shell.scheduler.set_config(config);
+        if (!config.set(key, move(value)))
+          cout << format("[Shell] Unknown config key: {}\n", key);
+      }
 
-        cout << BANNER << '\n';
-        cout << "[Shell] Scheduler config loaded.\n";
-        storage.remove("initialize.cache");
-    },
-  };
+      config.initialized = true;
+      shell.scheduler.set_config(config);
+
+      cout << BANNER << '\n';
+      cout << "[Shell] Scheduler config loaded.\n";
+      storage.remove("initialize.cache");
+    });
 }
-
 
 ------------------------------
  FILE:  process-smi.hpp
@@ -510,47 +514,47 @@ inline const CommandHandler make_initialize() {
 #include "core/execution/Core.hpp"
 
 
-inline const CommandHandler make_process_smi() {
-  return {
-    .name = "process-smi",
-    .desc = "Shows the current process status, logs, and info.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_process_smi() -> CommandHandler {
+  return CommandHandler()
+    .set_name("process-smi")
+    .set_desc("Shows the current process status, logs, and info.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .validate = [](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> Str {
       if (shell.screen.is_main())
         return "Not in a process screen.";
 
-        auto& scheduler = shell.scheduler;
-        uint pid = shell.screen.get_id();
+      auto& scheduler = shell.scheduler;
+      uint pid = shell.screen.get_id();
 
       if (!scheduler.data.has_process(pid))
         return format("Active process with ID \"{}\" not found.", pid);
-      return nullopt;
-    },
 
-    .execute = [](Command& command, Shell& shell) {
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
       auto& scheduler = shell.scheduler;
       auto& storage = shell.storage;
 
-      uint pid = shell.screen.get_id();                 // âœ… Retrieve PID
-      auto& process = scheduler.data.get_process(pid);  // âœ… Access by PID
+      uint pid = shell.screen.get_id();
+      auto& process = scheduler.data.get_process(pid);
       auto& program = process.data.program;
 
       cout << format("Process name: {}\n", process.data.name);
       cout << format("ID: {}\n", process.data.core_id);
 
       cout << "Logs:\n";
-      for (auto& log: process.data.logs)
+      for (auto& log : process.data.logs)
         cout << log << '\n';
 
       cout << "Current instruction line: " << program.ip << '\n';
       cout << "Lines of code: " << program.script.size() << "\n\n";
 
       shell.storage.remove("process-smi.pid");
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -558,29 +562,31 @@ inline const CommandHandler make_process_smi() {
  PATH:  core\command\handlers\report-util.hpp
 ------------------------------
 
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
-#include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_report_util() {
-  return {
-    .name = "report-util",
-    .desc = "Generates a CPU unitilization report.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-
-    .validate = [](Command& command, Shell& shell) -> Str {
+auto make_report_util() -> CommandHandler {
+  return CommandHandler()
+    .set_name("report-util")
+    .set_desc("Generates a CPU unitilization report.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    
+    .set_validate([](Command& command, Shell& shell) -> Str {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
-      
+
       if (!shell.scheduler.data.config.initialized)
         return "Scheduler not initialized. Please run 'initialize' first.";
-      return nullopt;
-    },
 
-    .execute = [](Command& command, Shell& shell) {
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
       auto& scheduler = shell.scheduler;
       auto& data = scheduler.data;
       auto running = data.get_running_pids();
@@ -595,7 +601,7 @@ inline const CommandHandler make_report_util() {
       cout << "Running processes:\n";
       log << "Running processes:\n";
 
-      for (uint pid: running) {
+      for (auto pid: running) {
         auto& proc = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Core: {:<2}  {} / {}\n",
@@ -612,8 +618,8 @@ inline const CommandHandler make_report_util() {
       cout << "\nFinished processes:\n";
       log << "\nFinished processes:\n";
 
-      for (uint pid: finished) {
-        const auto& proc = data.get_process(pid);
+      for (auto pid: finished) {
+        auto& proc = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Finished      {} / {}\n",
           proc.data.name,
@@ -630,8 +636,7 @@ inline const CommandHandler make_report_util() {
       log.close();
 
       cout << "[report-util] Report written to csopesylog.txt\n";
-    }
-  };
+    });
 }
 
 ------------------------------
@@ -647,15 +652,15 @@ inline const CommandHandler make_report_util() {
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_scheduler_start() {
-  return {
-    .name = "scheduler-start",
-    .desc = "Starts periodic dummy process generation every 'batch_process_freq' ticks.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-
-    .validate = [](Command&, Shell& shell) -> Str {
+auto make_scheduler_start() -> CommandHandler {
+  return CommandHandler()
+    .set_name("scheduler-start")
+    .set_desc("Starts periodic dummy process generation every 'batch_process_freq' ticks.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    
+    .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.scheduler.data.config.initialized)
         return "[Shell] Please run 'initialize' first.";
 
@@ -663,13 +668,12 @@ inline const CommandHandler make_scheduler_start() {
         return "[Shell] Dummy process generation already active.";
 
       return nullopt;
-    },
-
-    .execute = [](Command&, Shell& shell) {
+    })
+    
+    .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
       cout << "[Shell] Dummy process generation started.\n";
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -683,29 +687,28 @@ inline const CommandHandler make_scheduler_start() {
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_scheduler_stop() {
-  return {
-    .name = "scheduler-stop",
-    .desc = "Stops generating dummy processes.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
-
-    .validate = [](Command&, Shell& shell) -> Str {
+auto make_scheduler_stop() -> CommandHandler {
+  return CommandHandler()
+    .set_name("scheduler-stop")
+    .set_desc("Stops generating dummy processes.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
+    
+    .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.scheduler.data.config.initialized)
         return "[Shell] Please run 'initialize' first.";
 
       if (!shell.scheduler.generating)
         return "[Shell] Dummy process generation is not running.";
-      
-      return nullopt;
-    },
 
-    .execute = [](Command&, Shell& shell) {
+      return nullopt;
+    })
+    
+    .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(false);
       cout << "[Shell] Dummy process generation stopped.\n";
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -721,18 +724,18 @@ inline const CommandHandler make_scheduler_stop() {
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_screen() {
-  return {
-    .name = "screen",
-    .desc = "Creates and switches through existing screens.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {{"-s", true}, {"-r", true}, {"-ls", false}},
-
-    .validate = [](Command& command, Shell& shell) -> Str {
-      const bool has_ls = command.flags.contains("-ls");
-      const bool has_s  = command.flags.contains("-s");
-      const bool has_r  = command.flags.contains("-r");
+auto make_screen() -> CommandHandler {
+  return CommandHandler()
+    .set_name("screen")
+    .set_desc("Creates and switches through existing screens.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
+    
+    .set_validate([](Command& command, Shell& shell) -> Str {
+      bool has_ls = command.flags.contains("-ls");
+      bool has_s = command.flags.contains("-s");
+      bool has_r = command.flags.contains("-r");
 
       if (has_s + has_ls + has_r > 1)
         return "You must use only one of -s, -r, or -ls.";
@@ -741,11 +744,9 @@ inline const CommandHandler make_screen() {
         return "Not in the Main Menu.";
 
       return nullopt;
-    },
+    })
 
-    .execute = [&](Command& command, Shell& shell) {
-      using set = unordered_set<uint>;
-
+    .set_execute([&](Command& command, Shell& shell) {
       auto& screen = shell.screen;
       auto& scheduler = shell.scheduler;
 
@@ -764,9 +765,8 @@ inline const CommandHandler make_screen() {
         cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
         cout << "Running processes:\n";
 
-        for (uint pid: cores.get_running_pids()) {
+        for (uint pid : cores.get_running_pids()) {
           auto& process = data.get_process(pid);
-
           cout << format(
             "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
             process.data.name,
@@ -779,7 +779,7 @@ inline const CommandHandler make_screen() {
 
         cout << "\nFinished processes:\n";
 
-        for (uint pid: data.finished_pids) {
+        for (uint pid : data.finished_pids) {
           auto& process = data.get_process(pid);
           cout << format(
             "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
@@ -809,14 +809,12 @@ inline const CommandHandler make_screen() {
         cout << format("\nWaiting for process creation: {}", name);
         bool created = false;
 
-        // Temporarily release lock while waiting for scheduler to tick
         for (uint i = 0; i < 30; ++i) {
           if (scheduler.data.has_process(name)) {
             created = true;
             break;
           }
 
-          // Temporarily releases global scheduler to tick scheduler
           with_unlocked([&] {
             sleep_for(200ms);
           });
@@ -827,9 +825,9 @@ inline const CommandHandler make_screen() {
 
         auto& data = scheduler.data;
         auto& process = data.get_process(name);
-        uint pid = process.data.id; // âœ… Extract PID
+        uint pid = process.data.id;
 
-        screen.switch_to(pid);    // âœ… Use only PID
+        screen.switch_to(pid);
         cout << "\n";
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
@@ -852,9 +850,9 @@ inline const CommandHandler make_screen() {
           return void(cout << format("Process <{}> not found.\n", name));
 
         auto& process = data.get_process(name);
-        uint pid = process.data.id; // âœ… Use PID
+        uint pid = process.data.id;
 
-        screen.switch_to(pid);      // âœ… PID-based only
+        screen.switch_to(pid);
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
 
@@ -865,8 +863,7 @@ inline const CommandHandler make_screen() {
         cout << format("Current instruction line: {}\n", process.data.program.ip);
         cout << format("Lines of code: {}\n", process.data.program.size());
       }
-    }
-  };
+    });
 }
 
 ------------------------------
@@ -883,19 +880,16 @@ inline const CommandHandler make_screen() {
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
-  
-inline const CommandHandler make_test() {
-  return {
-    .name = "test",
-    .desc = "Spawn and manually step a dummy FOR loop process.",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {{ "-r", false }},
+auto make_test() -> CommandHandler {
+  return CommandHandler()
+    .set_name("test")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({{ "-r", false }})
 
-    .execute = [](Command& command, Shell& shell) {
-      using Interpreter = InstructionInterpreter;
-      
-      auto& interpreter = Interpreter::instance();
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
       // 0. Reset process if requested
@@ -917,9 +911,8 @@ inline const CommandHandler make_test() {
       system("cls");
       auto& process = storage.get<Process>("test.process");
       auto& program = process.data.program;
-      auto& state = process.data.state;
 
-      if (state.finished())
+      if (program.finished())
         return void(cout << "[loop-test] Process already finished.");
 
       // === Debug: Show context stack ===
@@ -929,14 +922,12 @@ inline const CommandHandler make_test() {
       // === Debug: Show instruction list with pointer ===
       cout << "[loop-test] Instruction List:\n";
       cout << program.render_script() << '\n';
-      
+
       // 3. Step the process
       const bool done = process.step();
       cout << "[loop-test] Process stepped.\n";
-      cout << (done ? "Finished." : "Still running.");
-      cout << '\n';
-    },
-  };
+      cout << (done ? "Finished." : "Still running.") << '\n';
+    });
 }
 
 ------------------------------
@@ -951,18 +942,21 @@ inline const CommandHandler make_test() {
 #include "core/shell/internal/Shell.impl.hpp"
 
 
-inline const CommandHandler make_util() {
-  return {
-    .name = "report-util",
-    .desc = "Generates a report of running and Finished processes to csopesylog.txt",
-    .min_args = 0,
-    .max_args = 0,
-    .flags = {},
+auto make_util() -> CommandHandler {
+  return CommandHandler()
+    .set_name("report-util")
+    .set_desc("Generates a report of running and Finished processes to csopesylog.txt")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_flags({})
 
-    .execute = [](Command &command, Shell &shell) {   
+    .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.screen.is_main())
-        return void(cout << "Not in the Main Menu.\n");
+        return "Not in the Main Menu.";
+      return nullopt;
+    })
 
+    .set_execute([](Command&, Shell& shell) {
       auto& data = shell.scheduler.data;
       auto running = data.cores.get_running_pids();
       auto& finished = data.finished_pids;
@@ -970,13 +964,13 @@ inline const CommandHandler make_util() {
       auto log = ofstream("csopesylog.txt");
       auto separator = "---------------------------------------------\n";
 
-      cout << "\033[38;5;33m" << separator << "\033[0m";
+      cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;
 
       cout << "Running processes:\n";
       log << "Running processes:\n";
 
-      for (const auto& pid: running) {
+      for (const auto& pid : running) {
         auto& process = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Core: {:<2}  {} / {}\n",
@@ -986,14 +980,14 @@ inline const CommandHandler make_util() {
           process.data.program.ip,
           process.data.program.size()
         );
-        cout << "\033[36m" << line << "\033[0m";
+        cout << format("\033[36m{}\033[0m", line);
         log << line;
       }
 
       cout << "\nFinished processes:\n";
       log << "\nFinished processes:\n";
 
-      for (const auto& pid: finished) {
+      for (auto& pid: finished) {
         auto& process = data.get_process(pid);
         auto line = format(
           "  {:<10} ({})  Finished      {} / {}\n",
@@ -1002,17 +996,16 @@ inline const CommandHandler make_util() {
           process.data.program.size(),
           process.data.program.size()
         );
-        cout << "\033[36m" << line << "\033[0m";
+        cout << format("\033[36m{}\033[0m", line);
         log << line;
       }
 
-      cout << "\033[38;5;33m" << separator << "\033[0m";
+      cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;
       log.close();
 
       cout << "[report-util] Report written to csopesylog.txt\n";
-    }
-  };
+    });
 }
 
 ------------------------------
@@ -1063,7 +1056,7 @@ auto get_command_handlers() -> vector<CommandHandler> {
 #include <string>
 
 inline const std::string BANNER = R"(
-          .dP                                                                        Yb    
+         .dP                                                                        Yb    
        .dP    .ooooo.   .oooo.o  .ooooo.  oo.ooooo.   .ooooo.   .oooo.o oooo    ooo  `Yb  
       dP     d88' `"Y8 d88(  "8 d88' `88b  888' `88b d88' `88b d88(  "8  `88.  .8'     `Yb
       Yb     888       `"Y88b.  888   888  888   888 888ooo888 `"Y88b.    `88..8'      .dP
@@ -1089,6 +1082,7 @@ inline const std::string BANNER = R"(
 #include <utility>      // for std::forward
 
 
+// Import error exceptions
 using std::bad_any_cast;
 
 // Import standard string conversion functions
@@ -1099,7 +1093,7 @@ using std::to_string;
 
 // === Generic any cast function ===
 template <typename Type, typename From>
-Type cast(From&& x) {
+auto cast(From&& x) -> Type {
   using Raw = std::decay_t<From>;
 
   if constexpr (std::is_same_v<Raw, std::any>)
@@ -1110,17 +1104,17 @@ Type cast(From&& x) {
 
 // === Aliases for clarity ===
 template <typename From> 
-inline int cast_int (From&& x) { 
+auto cast_int(From&& x) -> int { 
   return cast<int>(std::forward<From>(x)); 
 }
 
 template <typename From> 
-inline std::uint32_t cast_uint (From&& x) { 
+auto cast_uint(From&& x) -> std::uint32_t { 
   return cast<uint32_t>(std::forward<From>(x)); 
 }
 
 template <typename From> 
-inline std::string cast_str (From&& x) {
+auto cast_str(From&& x) -> std::string {
   return cast<std::string>(std::forward<From>(x)); 
 }
 
@@ -1154,7 +1148,7 @@ using std::chrono_literals::operator""ns;
 using std::chrono_literals::operator""s;
 
 /** Returns a formatted timestamp string using current local time. */
-inline std::string timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") {
+auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") -> std::string {
   auto time = Clock::to_time_t(tp.value_or(Clock::now()));
   auto time_struct = TimeStruct();
   localtime_s(&time_struct, &time);
@@ -1188,8 +1182,19 @@ using std::unordered_map;
 using std::unordered_set;
 using std::vector;
 
+// === Aliases ===
+template <typename Type>
+using vec = vector<Type>;
+
+template <typename Type>
+using set = unordered_set<Type>;
+
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
+
+template <typename Key, typename Val>
+using map = unordered_map<Key, Val>;
+
 
 ------------------------------
  FILE:  helpers.hpp
@@ -1204,11 +1209,11 @@ using ordered_map = std::map<Key, Val>;
 
 
 // === Utility functions ===
-constexpr inline uint32_t count_digits(uint32_t n) {
+constexpr auto count_digits(uint32_t n) -> uint32_t {
   return (n == 0) ? 1 : static_cast<int>(std::log10(n)) + 1;
 }
 
-constexpr inline std::string pad_left(const std::string& s, uint32_t width, char fill = ' ') {
+constexpr auto pad_left(const std::string& s, uint32_t width, char fill=' ') -> std::string {
   return std::string(width > s.length() ? width - s.length() : 0, fill) + s;
 }
 
@@ -1240,7 +1245,7 @@ using std::ostream;
 using std::runtime_error;
 
 // === Utility functions ===
-inline std::vector<std::string> read_lines(const std::string& path) {
+auto read_lines(const std::string& path) -> std::vector<std::string> {
   auto file = std::ifstream(path);
   if (!file) return {};
 
@@ -1336,14 +1341,18 @@ using uint = uint32_t;
 using uchar = unsigned char;
 using Uint = std::optional<uint>;
 
-// === Reference Aliases ===
-using std::cref;
-template <typename Type> using ref = std::reference_wrapper<Type>;
-template <typename Type> using Ref = optional<ref<Type>>;
+// === Aliases ===
+template <typename... Args> 
+using func = std::function<Args...>;
+
+template <typename Type> 
+using ref = std::reference_wrapper<Type>;
+
+template <typename Type> 
+using Ref = optional<ref<Type>>;
 
 // === Constants ===
 using std::nullopt;
-inline constexpr uint MAX = std::numeric_limits<uint>::max();
 
 // === STL Utility Aliases ===
 using std::ranges::all_of;
@@ -1352,6 +1361,7 @@ using std::ranges::find_if;
 using std::ranges::none_of;
 using std::ranges::count_if;
 using std::any_cast;
+using std::cref;
 using std::erase_if;
 using std::move;
 using std::forward;
@@ -1359,7 +1369,7 @@ using std::swap;
 
 // Iterators
 template <typename Type>
-inline auto move_iter(Type it) { 
+auto move_iter(Type it) { 
   return std::make_move_iterator(it); 
 }
 
@@ -1379,7 +1389,7 @@ using std::min;
 using std::max;
 
 
-inline void enable_unicode() {
+void enable_unicode() {
   SetConsoleOutputCP(CP_UTF8);
 }
 
@@ -1407,7 +1417,7 @@ using std::make_shared;
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
-#include <random>
+#include <Random>
 #include <stdexcept>
 #include "casts.hpp"
 #include "containers.hpp"
@@ -1415,7 +1425,7 @@ using std::make_shared;
 
 
 /** Random utility class */
-class Random {
+class Rand {
   using mt19937   = std::mt19937;
   using int_dist  = std::uniform_int_distribution<>;
   using uint_dist = std::uniform_int_distribution<unsigned>;
@@ -1432,32 +1442,32 @@ public:
   }
 
   /** Random unsigned integer in [min, max] */
-  static uint num(uint min, uint max) {
+  static auto num(uint min, uint max) -> uint {
     auto dist = uint_dist(min, max);
     return dist(rng);
   }
 
   /** Returns true with probability 1/odds */
-  static bool chance(uint odds) {
+  static auto chance(uint odds) -> bool {
     return odds != 0 && num(1u, odds) == 1u;
   }
 
   /** Random float in [min, max) */
-  static float real(float min, float max) {
+  static auto real(float min, float max) -> float {
     auto dist = real_dist(min, max);
     return dist(rng);
   }
 
-  /** Pick a random element from a non-empty vector */
+  /** Pick a Random element from a non-empty vector */
   template <typename Type>
-  static Type pick(const std::vector<Type>& list) {
+  static auto pick(const std::vector<Type>& list) -> Type {
     if (list.empty()) throw std::runtime_error("Cannot pick from empty list.");
     return list[num(0, static_cast<int>(list.size()) - 1)];
   }
 
   /** Shuffle a vector in place */
   template <typename Type>
-  static std::vector<Type>& shuffle(std::vector<Type>& list) {
+  static auto shuffle(std::vector<Type>& list) -> std::vector<Type>& {
     std::shuffle(list.begin(), list.end(), rng);
     return list;
   }
@@ -1483,6 +1493,7 @@ public:
 using std::string;
 using str = std::string;
 using Str = std::optional<string>;
+using std::literals::string_literals::operator""s;
 
 // === Character Utilities ===
 using std::isalpha;
@@ -1909,7 +1920,7 @@ class Core {
     ++job_ticks;                // Track how long this process is running on this core
 
     // If the process has finished all its instructions, mark for release
-    if (process.data.state.finished())
+    if (process.data.program.finished())
       can_release = true;
 
     // If preemption is defined and it says to preempt, mark for release
@@ -2135,7 +2146,7 @@ struct InstructionHandler {
     if (signatures.empty())
       return inst;
 
-    const auto& signature = Random::pick(signatures);
+    const auto& signature = Rand::pick(signatures);
     inst.args.reserve(signature.size()); // Micro-optimization: Preallocate space
 
     for (const auto& rule: signature)
@@ -2169,8 +2180,8 @@ class InstructionInterpreter {
 
   public:
 
-  /** Returns the global singleton instance of the InstructionInterpreter. */
-  static InstructionInterpreter& instance() {
+  /** Returns the global singleton get of the InstructionInterpreter. */
+  static InstructionInterpreter& get() {
     static InstructionInterpreter inst;
     return inst;
   }
@@ -2210,7 +2221,7 @@ class InstructionInterpreter {
         close_control_block(script, stack);
 
       if (!flat_handlers.empty())                 // For adding flat instructions
-        script.push_back(Random::pick(flat_handlers).get().generate());
+        script.push_back(Rand::pick(flat_handlers).get().generate());
     }
 
     // Auto-close any unclosed control blocks
@@ -2223,7 +2234,7 @@ class InstructionInterpreter {
   private:
 
   /** 
-   * Private constructor to enforce singleton access via instance().
+   * Private constructor to enforce singleton access via get().
    * Initializes and registers all handlers once. 
    */
   InstructionInterpreter() {
@@ -2249,17 +2260,17 @@ class InstructionInterpreter {
 
   /** Returns true if a control block can be opened (depth-limited, random chance). */
   bool should_open(const list& stack, uint max_depth) const { 
-    return !control_handlers.empty() && (stack.size() < max_depth) && Random::chance(4); 
+    return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
   /** Returns true if a control block can be closed (if any open, random chance). */
   bool should_close(const list& stack) const { 
-    return !stack.empty() && Random::chance(4); 
+    return !stack.empty() && Rand::chance(4); 
   }
 
   /** Emits a random control-opener instruction and pushes it to the stack. */
   void open_control_block(Script& script, list& stack) const {
-    const auto& handler = Random::pick(control_handlers);
+    const auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
@@ -2305,9 +2316,9 @@ struct InstructionParam {
   /** Returns a randomly generated argument string that matches this schema. */
   str generate() const {
     switch (type) {
-      case Type::UInt:  return to_string(Random::num(min, max));
-      case Type::Str:   return Random::pick(messages);
-      case Type::Var:   return Random::pick(vars);
+      case Type::UInt:  return to_string(Rand::num(min, max));
+      case Type::Str:   return Rand::pick(messages);
+      case Type::Var:   return Rand::pick(vars);
       default:          return "<?>";  // Should never be hit
     }
   }
@@ -2642,7 +2653,7 @@ namespace csopesy {
     }
 
     str render() const {
-      auto stream = oss();
+      auto stream = osstream();
       for (const auto& row: grid) {
         for (const auto& cell: row)
           stream << symbols[cell];
@@ -2672,7 +2683,7 @@ namespace csopesy {
         auto [x, y] = pos(stack.back());
         stack.pop_back();
         
-        for (auto dir: Random::shuffle(dirs)) {
+        for (auto dir: Rand::shuffle(dirs)) {
           auto [dx, dy] = pos(dir);
           int nx = x + dx*2;
           int ny = y + dy*2;
@@ -2755,7 +2766,7 @@ namespace csopesy::Position {
 class Process {
   using Interpreter = InstructionInterpreter;
   using Script = Instruction::Script;
-  inline static Interpreter& interpreter = Interpreter::instance();
+  inline static Interpreter& interpreter = Interpreter::get();
   
   public:
   // === Components ===
@@ -2772,19 +2783,52 @@ class Process {
 
   /** @brief Executes a single instruction step for the given process. */
   bool step() {
-    if (data.state.finished() || data.program.finished()) {
-      data.state.finish();  // Mark as finished
+    if (data.program.finished())
       return true;          // Process is done
-    }
 
     auto ip = data.program.ip;
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);
 
     // Advance to next instruction if IP unchanged
-    data.program.ip += (ip == data.program.ip);
+    if (ip == data.program.ip)
+      data.program.ip++ ;
+
     return false;
   }
+};
+
+------------------------------
+ FILE:  ProcessControl.hpp
+ PATH:  core\process\ProcessControl.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "ProcessProgram.hpp"
+
+
+/**
+ * @brief Tracks the execution state of a process.
+ * 
+ * Supports transitions between Ready, Sleeping, and Finished states,
+ * and stores the number of ticks remaining for a sleeping process.
+ */
+class ProcessControl {
+  public:
+
+  uint sleep_ticks = 0;
+  
+  // === Methods ===
+  
+  /** @brief Returns true if the process is currently sleeping. */
+  bool sleeping() const { return sleep_ticks > 0; }    
+
+  /** @brief Puts the process to sleep for a number of ticks. */
+  void sleep_for(uint ticks) { sleep_ticks = ticks; }
+
+  /** @brief Advances sleep state by one tick, if sleeping. */
+  void tick() { if (sleep_ticks > 0) --sleep_ticks; }
 };
 
 ------------------------------
@@ -2812,7 +2856,7 @@ class ProcessData {
   using Script = Instruction::Script;
   using list = vector<str>;
 
-public:
+  public:
   // === Identity ===
   uint id = 0;            // Unique process ID
   str name = "";          // Human-readable process name (e.g. p01, p02)
@@ -2825,9 +2869,9 @@ public:
   Time stime = {};        // Timestamp of when the process was created
   
   // === Components ===
-  ProcessControl state;     // Current state of the process (Ready, Running, Sleeping, Finished)
-  ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
   ProcessProgram program; // List of instructions and execution context
+  ProcessControl control; // Sleep controller of the process
+  ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
 
   // === Methods ===
 
@@ -2979,45 +3023,6 @@ class ProcessProgram {
 };
 
 ------------------------------
- FILE:  ProcessControl.hpp
- PATH:  core\process\ProcessControl.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
-#include "types.hpp"
-
-
-/**
- * @brief Tracks the execution state of a process.
- * 
- * Supports transitions between Ready, Sleeping, and Finished states,
- * and stores the number of ticks remaining for a sleeping process.
- */
-class ProcessControl {
-  uint sleep_ticks = 0;
-  
-  public:
-  State value = State::Ready;
-
-  // === State Queries ===
-
-  /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return sleep_ticks > 0; }
-  
-  /** @brief Returns true if the process has finished execution. */
-  bool finished() const { return value == State::Finished; }
-  
-  // === State Transitions ===
-
-  /** @brief Sets the process state to Finished. */
-  void finish() { value = State::Finished; }
-
-  /** @brief Puts the process to sleep for a number of ticks. */
-  void sleep_for(uint ticks) { sleep_ticks = ticks; }
-};
-
-------------------------------
  FILE:  types.hpp
  PATH:  core\process\types.hpp
 ------------------------------
@@ -3026,11 +3031,6 @@ class ProcessControl {
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 
-
-/** An enum representing the possible states of a process. */
-enum class State {
-  Ready, Sleeping, Finished,
-};
 
 /** A loop frame from a FOR-like instruction. */
 struct ContextFrame {
@@ -3179,7 +3179,7 @@ class Scheduler {
   void generate_processes() {
     auto make_process = [&](uint pid, str name="") {
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto size  = Random::num(data.config.min_ins, data.config.max_ins);
+      auto size  = Rand::num(data.config.min_ins, data.config.max_ins);
       data.add_process(Process(pid, move(pname), size));
       data.rqueue.push(pid);
     };
@@ -3199,12 +3199,11 @@ class Scheduler {
       auto& process = core.get_job();
       core.release();
 
-      if (process.data.state.finished())
+      if (process.data.program.finished())
         data.finished_pids.push_back(process.data.id);
       else
         data.rqueue.push(process.data.id);
     }
-
   }
 };
 
@@ -3548,7 +3547,7 @@ inline SchedulerStrategy get_scheduler_strategy(str& name, SchedulerConfig& conf
  */
 inline Shell::Shell(EventEmitter& emitter): 
     global(emitter), 
-    interpreter(Interpreter::instance()),
+    interpreter(Interpreter::get()),
     screen(storage) {
   
   // Register all command handlers

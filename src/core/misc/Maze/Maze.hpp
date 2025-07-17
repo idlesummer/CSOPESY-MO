@@ -31,7 +31,7 @@ namespace csopesy {
     }
 
     str render() const {
-      auto stream = oss();
+      auto stream = osstream();
       for (const auto& row: grid) {
         for (const auto& cell: row)
           stream << symbols[cell];
@@ -61,7 +61,7 @@ namespace csopesy {
         auto [x, y] = pos(stack.back());
         stack.pop_back();
         
-        for (auto dir: Random::shuffle(dirs)) {
+        for (auto dir: Rand::shuffle(dirs)) {
           auto [dx, dy] = pos(dir);
           int nx = x + dx*2;
           int ny = y + dy*2;
