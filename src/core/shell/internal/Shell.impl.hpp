@@ -56,7 +56,7 @@ class Shell {
         });
 
       } else {
-        cout << "[Shell] Input stream closed.\n";
+        cout << "\n[Shell] Input stream closed.\n";
         active = false;
       }
     }
@@ -68,16 +68,13 @@ class Shell {
     void emit(str name, any data={}) { global.emit(move(name), move(data)); }
 
 
-    // === Member variables ===
+    // ------ Member variables ------
+
     EventEmitter& global;
-    CommandInterpreter& interpreter;
-    
-    // === Lifecycle management ===
+    CommandInterpreter& interpreter;    
     Thread thread;
-    atomic_bool active = true;
-    
-    // === Shell subcomponents ===
+    atomic_bool active;
     Scheduler scheduler; 
-    ShellStorage storage;  // Dynamic storage for shell data
+    ShellStorage storage;
     ShellScreen screen;
 };

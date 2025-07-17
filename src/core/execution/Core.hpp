@@ -30,7 +30,7 @@ class Core {
   using func = func<bool(Core&)>;
 
   /** @brief Constructs a core with the given ID and starts the thread. */
-    Core(uint id=0): 
+  Core(uint id=0): 
     id          (id),                 // Core ID
     job         (nullptr),            // Pointer to the currently assigned process (if any)
     job_ticks   (0),                  // Number of ticks the current process has been running
@@ -58,10 +58,10 @@ class Core {
   void release() { if (job) set_job(nullptr); }
 
   /** @brief Returns true no process is assigned to the core. */
-  bool is_idle() const { return job == nullptr; }
+  auto is_idle() -> bool const { return job == nullptr; }
 
   /** @brief Returns the currently assigned job. */
-  Process& get_job() {
+  auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
   }
