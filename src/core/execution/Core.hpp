@@ -67,26 +67,22 @@ class Core {
   }
 
   /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }
+  void set_preempt(func handler) { preempt = handler; }     
 
-  
-  // === Member variables ===
-  uint id;                    
-  
-  // === Process Job State ===
-  Process* job = nullptr; 
-  uint job_ticks = 0;       
-  bool can_release = false;   
-  func preempt = nullptr;    
-  
-  // === Execution Control ===
-  atomic_bool active = false;   
-  Thread thread;              
+  // ------ Member variables ------
 
+  uint id;                      
+  Process* job; 
+  uint job_ticks;       
+  bool can_release;   
+  func preempt;    
+  atomic_bool active;   
+  Thread thread; 
+
+  // ------ Internal Logic ------
 
   private:
 
-  
   /** @brief Performs one CPU tick: steps the assigned process if valid. */
   void tick() {
     if (job == nullptr) return; // If no process is assigned to this core, skip the tick
@@ -112,7 +108,7 @@ class Core {
       thread.join();            // Waits for the thread to finish
   }
 
-  // === Helper methods ===
+  // ------ Helper methods ------
 
   /** @brief Assigns or clears the process currently running on this core. */
   void set_job(Process* process, int core_id=-1) {
@@ -122,5 +118,5 @@ class Core {
     job = process;              // Update process pointer slot (null if releasing)
     job_ticks = 0;              // Reset job tick counter — either a new job or clearing old one
     can_release = false;        // Always reset release flag; only tick() will set it to true when appropriate
-  }
+  }    
 };

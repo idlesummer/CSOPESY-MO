@@ -13,7 +13,7 @@
  */
 class SchedulerData {
   using Cores = CoreManager;
-  using ProcessPtr = unique_ptr<Process>;
+  using ProcessPtr = uptr<Process>;
   using queue = queue<uint>;
   using map = unordered_map<uint, ProcessPtr>;
   using list = vector<uint>;
