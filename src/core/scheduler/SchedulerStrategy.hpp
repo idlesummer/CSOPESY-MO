@@ -23,7 +23,6 @@ class SchedulerStrategy {
     tick_handler    (nullptr),            // Main strategy logic executed each tick
     preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
 
-
   /** @brief Sets the strategy name. */
   auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
 

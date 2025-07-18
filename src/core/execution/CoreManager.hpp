@@ -40,10 +40,10 @@ class CoreManager {
   // === Accessors ===
 
   /** @brief Returns number of cores. */
-  auto size() -> uint const { return cores.size(); }
+  auto size() const -> uint { return cores.size(); }
   
   /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
-  auto get_usage() -> float const {
+  auto get_usage() const -> float {
     if (cores.empty()) return 0.0f;
     return cast<float>(get_busy_size()) / cast<float>(cores.size());
   }
@@ -79,7 +79,7 @@ class CoreManager {
   // ------ Helper Methods ------
 
   /** @brief Returns the number of currently busy (non-idle) cores. */
-  auto get_busy_size() -> uint const {
+  auto get_busy_size() const -> uint {
     return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
   }
 

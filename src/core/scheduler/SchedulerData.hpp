@@ -8,29 +8,22 @@
 /**
  * @brief Encapsulates scheduling context passed to strategy functions.
  * 
- * Provides access to the current core list, ready queue, and tick counter.
+ * Provides access to the current core vec<uint>, ready queue, and tick counter.
  * Also handles state reset and tick progression during simulation.
  */
-class SchedulerData {
-  using Cores = CoreManager;
-  using ProcessPtr = uptr<Process>;
-  using queue = queue<uint>;
-  using map = unordered_map<uint, ProcessPtr>;
-  using list = vector<uint>;
-
-  auint next_pid = 1;       // Monotonic PID counter for generating unique process IDs
-  
+class SchedulerData {  
   public:
-  list finished_pids = {};  // PIDs of Finished processes 
-  queue rqueue = {};        // Ready queue of proc_table waiting to be scheduled
-  map proc_table = {};      // Container for all proc_table
-  Cores cores;              // Reference to the list of scheduler cores
-  SchedulerConfig config;   // Runtime configuration settings
-
-  // === Methods ===
+  
+  SchedulerData():
+    finished_pids (vec<uint>()),                // PIDs of Finished processes 
+    rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
+    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
+    config        (SchedulerConfig()),          // Runtime configuration settings
+    cores         (CoreManager()) {}            // Owned instance of scheduler core manager
 
   /** @brief Returns a unique, incrementing process ID. */
-  uint new_pid() { return next_pid++; }
+  auto new_pid() -> uint { return next_pid++; }
 
   /** @brief Adds a process to the process table. */
   void add_process(Process proc) {
@@ -40,29 +33,35 @@ class SchedulerData {
   }
 
   /** @brief Check if a process with the given ID exists. */
-  bool has_process(uint id) const { return proc_table.contains(id); }
+  auto has_process(uint id) const -> bool { return proc_table.contains(id); }
 
   /** @brief Check if a process with the given name exists. */
-  bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
-
-  // === Accessors ===
+  auto has_process(const str& name) const -> bool { return !!find_process_by_name(name, false); }
   
   /** @brief Returns a reference wrapper to the process with the given PID. */
-  Process& get_process(uint id) { return *proc_table.at(id); }
+  auto get_process(uint id) -> Process& { return *proc_table.at(id); }
 
   /** @brief Returns a reference wrapper to the process with the given name. */
-  Process& get_process(const str& name) { return *find_process_by_name(name); }
+  auto get_process(const str& name) -> Process& { return *find_process_by_name(name); }
   
-  /** @brief Returns the list of running process IDs. */
-  list get_running_pids() { return cores.get_running_pids(); }
+  /** @brief Returns the vec<uint> of running process IDs. */
+  auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
-  // ========================
-  // === Private Helpers ====
-  // ========================
+  // ------ Member variables ------
+
+  vec<uint> finished_pids;         
+  queue<uint> rqueue;                 
+  map<uint, uptr<Process>> proc_table;
+  SchedulerConfig config;             
+  CoreManager cores;                  
+  atomic_uint next_pid = 1;           
+
+  // ------ Internal logic ------
+
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
-  Process* find_process_by_name(const str& name, bool throw_if_missing=true) const {
+  auto find_process_by_name(const str& name, bool throw_if_missing=true) const -> Process* {
     for (auto& [_, proc]: proc_table)
       if (proc->data.name == name)
         return proc.get();

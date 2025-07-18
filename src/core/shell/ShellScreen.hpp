@@ -23,13 +23,13 @@ class ShellScreen {
   void switch_to_main() { switch_to(0); }
 
   /** Returns the screen ID string. */
-  auto get_id() -> uint const { return storage.get<uint>("screen.id"); }
+  auto get_id() const -> uint { return storage.get<uint>("screen.id"); }
 
   /** Helper: Check if screen matches an exact string (e.g. "p01") */
-  auto is(uint id) -> bool const { return get_id() == id; }
+  auto is(uint id) const -> bool { return get_id() == id; }
 
   /** True if current screen is the main screen. */
-  auto is_main() -> bool const { return get_id() == 0; }
+  auto is_main() const -> bool { return get_id() == 0; }
 
   // ------ Member variables ------
   ShellStorage& storage;

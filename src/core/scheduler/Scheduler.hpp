@@ -64,8 +64,8 @@ class Scheduler {
   // ------ Member variables ------
 
   vec<str> names;                
-  uint ticks = 0;             
-  bool generating = false;    
+  uint ticks;             
+  bool generating;    
   SchedulerData data;         
   SchedulerStrategy strategy;
 
@@ -74,7 +74,7 @@ class Scheduler {
   private:
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
-  auto interval_has_elapsed() -> bool const {
+  auto interval_has_elapsed() const -> bool {
     uint freq = data.config.batch_process_freq;
     return freq > 0 && (ticks % freq == 0);
   }

@@ -31,18 +31,18 @@ class SchedulerConfig {
   }
 
   /** @brief Retrieves the string value for a given key. */
-  auto get(const str& key) -> str const {
+  auto get(const str& key) const -> str {
     auto it = entries.find(key);
     return it != entries.end() ? it->second : "";
   }
 
   /** @brief Retrieves the string value for a given key as a uint. */
-  auto get_uint(const str& key) -> uint const {
+  auto get_uint(const str& key) const -> uint {
     return stoul(get(key));
   }
 
   /** @brief Retrieves the string value for a given key as bool. */
-  auto get_bool(const str& key) -> bool const {
+  auto get_bool(const str& key) const -> bool {
     auto v = get(key);
     return v == "1" || v == "true";
   }
