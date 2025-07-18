@@ -33,7 +33,7 @@ Please write in clear sections and simple language for onboarding a new develope
 #include "core/shell/Shell.hpp"
 
 int main() {
-  auto running = abool(true); // Global run flag for main loop
+  auto running = atomic_bool(true); // Global run flag for main loop
   auto global  = EventEmitter();    // Central event system
   auto shell   = Shell(global);     // Main shell interface
 
@@ -68,16 +68,17 @@ int main() {
 /** @brief Represents a parsed command-line input. */
 class Command {
   public:
-    Command():
-      name  (""s),              // The command name (e.g., "screen", "exit")
-      args  (vec<str>()),       // Positional arguments for the command
-      flags (map<str,str>()) {} // Map of flags and their associated values (if any)
+
+  Command():
+    name  (""s),              // The command name (e.g., "screen", "exit")
+    args  (vec<str>()),       // Positional arguments for the command
+    flags (map<str,str>()) {} // Map of flags and their associated values (if any)
 
 
-    // === Member variables ===
-    str name;    
-    vec<str> args;    
-    map<str,str> flags;   
+  // ------- Member variables -------
+  str name;    
+  vec<str> args;    
+  map<str,str> flags;   
 };
 
 ------------------------------
@@ -95,33 +96,34 @@ class Command {
 class Shell;
 class CommandHandler {
   public:
-    CommandHandler():
-      name     (""s),                 // Command name (e.g., "screen", "exit")
-      desc     (""s),                 // Description for help or documentation
-      min_args (0u),                  // Minimum number of required arguments
-      max_args (UINT_MAX),            // Maximum number of allowed arguments
-      flags    (vec<CommandFlag>()),  // Valid flags for this command
-      validate (nullptr),             // Optional validation hook
-      execute  (nullptr) {}           // Main handler for executing the command
 
-    // === Chainable Setters ===
-    auto set_name(const str& value) -> CommandHandler& { return name = value, *this; }
-    auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
-    auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
-    auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
-    auto set_flags(const vec<CommandFlag>& value) -> CommandHandler& { return flags = value, *this; }
-    auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
-    auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
+  CommandHandler():
+    name     (""s),         // Command name (e.g., "screen", "exit")
+    desc     (""s),         // Description for help or documentation
+    min_args (0u),          // Minimum number of required arguments
+    max_args (UINT_MAX),    // Maximum number of allowed arguments
+    flags    (vec<Flag>()), // Valid flags for this command
+    validate (nullptr),     // Optional validation hook
+    execute  (nullptr) {}   // Main handler for executing the command
 
-      
-    // === Member variables === 
-    str name;                        
-    str desc;                        
-    uint min_args;                
-    uint max_args;              
-    vec<CommandFlag> flags;                       
-    func<optional<str>(Command&,Shell&)> validate; 
-    func<void(Command&,Shell&)> execute;
+  // === Chainable Setters ===
+  auto set_name(const str& value) -> CommandHandler& { return name = value, *this; }
+  auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
+  auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
+  auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
+  auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
+  auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
+  auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
+
+    
+  // ------- Member variables -------
+  str name;                        
+  str desc;                        
+  uint min_args;                
+  uint max_args;              
+  vec<Flag> flags;                       
+  func<optional<str>(Command&,Shell&)> validate; 
+  func<void(Command&,Shell&)> execute;
 };
 
 ------------------------------
@@ -144,82 +146,83 @@ class Shell;  // Forward declaration
 class CommandInterpreter {
   public: 
 
-    CommandInterpreter():
-      handlers (map<str,CommandHandler>()) {} // Registry of available command handlers
+  CommandInterpreter():
+    handlers (map<str,CommandHandler>()) {} // Registry of available command handlers
+  
+  /** @brief Returns the global singleton get of the CommandInterpreter. */
+  static CommandInterpreter& get() {
+    static auto inst = CommandInterpreter();
+    return inst;
+  }
+
+  /** @brief Registers a command with its name and handlers. */
+  void register_command(CommandHandler handler) {
+    handlers[handler.name] = move(handler);
+  }
+
+  /** @brief Executes a command in the shell context. */ 
+  void execute(const str& line, Shell& shell) {
+
+    // Parse the command line into a Command (name, args, flags)
+    auto command = CommandParser::parse(line);  
+    if (command.name.empty()) 
+      return;
+
+    // Find command in the registry
+    auto it = handlers.find(command.name);       
+    if (it == handlers.end())
+      return void(cout << format("[Shell] Unknown command: {}\n", command.name));
+
+    auto& handler = it->second;
+
+    // Check for unknown/misused flags
+    if (invalid_flags(command, handler))
+      return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
+
+    // Check positional argument count
+    if (invalid_args(command, handler))
+      return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
+
+    // Run optional command-specific validation logic
+    if (auto msg = custom_validation(command, handler, shell))
+      return void(cout << format("[Shell] {}\n", *msg));
     
+    // Execute the command
+    cout << '\n';
+    handler.execute(command, shell);
+  }
 
-    /** @brief Returns the global singleton get of the CommandInterpreter. */
-    static CommandInterpreter& get() {
-      static auto inst = CommandInterpreter();
-      return inst;
-    }
+  // ------- Member variables -------
+  
+  map<str,CommandHandler> handlers; 
 
-    /** @brief Registers a command with its name and handlers. */
-    void register_command(CommandHandler handler) {
-      handlers[handler.name] = move(handler);
-    }
-
-    /** @brief Executes a command in the shell context. */ 
-    void execute(const str& line, Shell& shell) {
-
-      // Parse the command line into a Command (name, args, flags)
-      auto command = CommandParser::parse(line);  
-      if (command.name.empty()) 
-        return;
-
-      // Find command in the registry
-      auto it = handlers.find(command.name);       
-      if (it == handlers.end())
-        return void(cout << format("[Shell] Unknown command: {}\n", command.name));
-
-      auto& handler = it->second;
-
-      // Check for unknown/misused flags
-      if (invalid_flags(command, handler))
-        return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
-
-      // Check positional argument count
-      if (invalid_args(command, handler))
-        return void(cout << format("[Shell] Invalid number of arguments for '{}'\n", command.name));                  
-
-      // Run optional command-specific validation logic
-      if (auto msg = custom_validation(command, handler, shell))
-        return void(cout << format("[Shell] {}\n", *msg));
-      
-      // Execute the command
-      cout << '\n';
-      handler.execute(command, shell);
-    }
-
-
-    // === Member variables ===
-    map<str,CommandHandler> handlers; 
+  // ------- Internal logic -------
 
   private:
 
-    /** @brief Returns true if any flag is invalid or misused. */
-    static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
-      // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
-      return any_of(command.flags, [&](auto& flag) {
-        return none_of(handler.flags, [&](CommandFlag& f) {
-          return f.name == flag.first && f.has_arg == !flag.second.empty();
-        });
+  /** @brief Returns true if any flag is invalid or misused. */
+  static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
+    // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
+    return any_of(command.flags, [&](auto& flag) {
+      return none_of(handler.flags, [&](Flag& f) {
+        return f.name == flag.first && f.has_arg == !flag.second.empty();
       });
-    }
+    });
+  }
 
-    /** @brief Checks if argument count is within bounds. */
-    static auto invalid_args(Command& command, CommandHandler& handler) -> bool {
-      auto argc = command.args.size();
-      return argc < handler.min_args || argc > handler.max_args;
-    }
+  /** @brief Checks if argument count is within bounds. */
+  static auto invalid_args(Command& command, CommandHandler& handler) -> bool {
+    auto argc = command.args.size();
+    return argc < handler.min_args || argc > handler.max_args;
+  }
 
-    /** Runs the handler's custom validator and returns an optional error message. */
-    static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
-      if (!handler.validate) return nullopt;
-      if (auto err = handler.validate(command, shell))
-        return err->empty() ? "CommandHandler disabled or invalid." : *err;
-      return nullopt;
-    }
+  /** Runs the handler's custom validator and returns an optional error message. */
+  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
+    if (!handler.validate) return nullopt;
+    if (auto err = handler.validate(command, shell))
+      return err->empty() ? "CommandHandler disabled or invalid." : *err;
+    return nullopt;
+  }
 };
 
 ------------------------------
@@ -239,41 +242,41 @@ class CommandInterpreter {
 class CommandParser {
   public:
 
-    /** @brief A helper that parses a handler line string into a Handler Command object. */
-    static auto parse(const str& line) -> Command {
-      auto tokens = tokenize(line);
-      if (tokens.empty()) return {};
+  /** @brief A helper that parses a handler line string into a Handler Command object. */
+  static auto parse(const str& line) -> Command {
+    auto tokens = tokenize(line);
+    if (tokens.empty()) return {};
 
-      auto cmd = Command();
-      cmd.name = move(tokens[0]);
+    auto cmd = Command();
+    cmd.name = move(tokens[0]);
 
-      for (uint i=1; i < tokens.size(); ++i) {
-        str token = move(tokens[i]);
-        if (token[0] != '-') {
-          cmd.args.emplace_back(move(token));
-          continue;
-        }
-        bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
-        cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+    for (uint i=1; i < tokens.size(); ++i) {
+      str token = move(tokens[i]);
+      if (token[0] != '-') {
+        cmd.args.emplace_back(move(token));
+        continue;
       }
-      
-      return cmd;
+      bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
+      cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
     }
 
+    return cmd;
+  }
+
+  // ------ Internal logic ------
 
   private:
-
   
-    /** @brief A helper that splits a string into whitespace-separated tokens. */
-    static auto tokenize(const str& line) -> vector<str> {
-      if (line.empty()) return {};
-      auto stream = isstream(line);
-      auto tokens = vector<str>(); 
+  /** @brief A helper that splits a string into whitespace-separated tokens. */
+  static auto tokenize(const str& line) -> vector<str> {
+    if (line.empty()) return {};
+    auto stream = isstream(line);
+    auto tokens = vector<str>(); 
 
-      for (str token; stream >> token; )
-        tokens.emplace_back(move(token));
-      return tokens;
-    }
+    for (str token; stream >> token; )
+      tokens.emplace_back(move(token));
+    return tokens;
+  }
 };
 
 ------------------------------
@@ -286,9 +289,9 @@ class CommandParser {
 
 
 /** @brief Contains the flag name and whether it requires an argument. */
-struct CommandFlag {
-  str  name;              // Flag name (e.g., "-s", "-r", "-ls")
-  bool has_arg = false;   // Whether the flag requires an argument
+struct Flag {
+  str name = "";        // Flag name (e.g., "-s", "-r", "-ls")
+  bool has_arg = false; // Whether the flag requires an argument
 };
 
 ------------------------------
@@ -368,6 +371,7 @@ auto make_demo() -> CommandHandler {
     .set_desc("Creates and steps a demo process with random instructions.")
     .set_min_args(0)
     .set_max_args(0)
+    
     .set_execute([](Command&, Shell& shell) {
       auto& storage = shell.storage;
 
@@ -432,7 +436,7 @@ auto make_exit() -> CommandHandler {
       auto& screen = shell.screen;
 
       if (screen.is_main()) {
-        shell.request_stop();
+        shell.set_active(false);
         shell.emit("shutdown");
 
       } else {
@@ -1039,7 +1043,7 @@ auto get_command_handlers() -> vector<CommandHandler> {
     make_exit(),
     make_initialize(),
     make_process_smi(),
-    make_report_util(),
+    make_report_util(), 
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
@@ -1194,7 +1198,6 @@ using ordered_map = std::map<Key, Val>;
 
 template <typename Key, typename Val>
 using map = unordered_map<Key, Val>;
-
 
 ------------------------------
  FILE:  helpers.hpp
@@ -1403,10 +1406,16 @@ void enable_unicode() {
 #include <memory>
 
 
-using std::unique_ptr;
-using std::shared_ptr;
 using std::make_unique;
 using std::make_shared;
+
+// === Aliases ===
+
+template <typename Type>
+using uptr = std::unique_ptr<Type>;
+
+template <typename Type>
+using sptr = std::shared_ptr<Type>;
 
 ------------------------------
  FILE:  random.hpp
@@ -1540,7 +1549,7 @@ using std::atomic;
 using std::atomic_bool;
 using std::atomic_int;
 using std::atomic_uint;
-using abool = std::atomic_bool;
+using std::atomic_bool;
 using aint = std::atomic_int;
 using auint = std::atomic_uint;
 
@@ -1862,25 +1871,26 @@ class EventEmitter {
  */
 class Core {
   public:
-  using func = function<bool(Core&)>;
+  using func = func<bool(Core&)>;
 
-  // == Identity ===
-  uint id;                    // Core ID
-  
-  // === Process Job State ===
-  Process* job     = nullptr; // Pointer to the currently assigned process (if any)
-  uint job_ticks   = 0;       // Number of ticks the current process has been running
-  bool can_release = false;   // Whether the process is eligible for release by the Scheduler
-  func preempt  = nullptr;    // Optional strategy-injected logic
-  
-  // === Execution Control ===
-  abool running    = false;   // Atomic flag for tick loop
-  Thread thread;              // Background ticking thread
-
-  // === Methods ===
-
-  /** @brief Constructs a scheduler core with the given ID and starts the thread. */
-  Core(uint id=0): id(id) { start(); }
+  /** @brief Constructs a core with the given ID and starts the thread. */
+  Core(uint id=0): 
+    id          (id),                 // Core ID
+    job         (nullptr),            // Pointer to the currently assigned process (if any)
+    job_ticks   (0),                  // Number of ticks the current process has been running
+    can_release (false),              // Whether the process is eligible for release by the Scheduler
+    preempt     (nullptr),            // Optional strategy-injected logic
+    active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
+    thread      ()                    // Background ticking thread
+  { 
+    // Launch the background thread that ticks continuously
+    thread = Thread([this] { 
+      while (active) {
+        tick();
+        sleep_for(1ms);
+      }
+    });
+  }
 
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
@@ -1892,24 +1902,31 @@ class Core {
   void release() { if (job) set_job(nullptr); }
 
   /** @brief Returns true no process is assigned to the core. */
-  bool is_idle() const { return job == nullptr; }
+  auto is_idle() const -> bool { return job == nullptr; }
 
   /** @brief Returns the currently assigned job. */
-  Process& get_job() {
+  auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
   }
 
   /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }
+  void set_preempt(func handler) { preempt = handler; }     
 
+  // ------ Member variables ------
 
-  // ========================
-  // === Private Members ====
-  // ========================
+  uint id;                      
+  Process* job; 
+  uint job_ticks;       
+  bool can_release;   
+  func preempt;    
+  atomic_bool active;   
+  Thread thread; 
+
+  // ------ Internal logic ------
+
   private:
 
-  
   /** @brief Performs one CPU tick: steps the assigned process if valid. */
   void tick() {
     if (job == nullptr) return; // If no process is assigned to this core, skip the tick
@@ -1928,27 +1945,14 @@ class Core {
       can_release = true;
   }
 
-  /** @brief Only called by constructor to launch the core's background thread and start ticking. */
-  void start() {
-    if (running) return;        // If already running, do nothing (prevent duplicate threads)
-
-    running = true;             // Mark the core as active/busy
-    thread = Thread([this] {    // Launch the background thread that ticks continuously
-      while (running) {
-        tick();
-        sleep_for(1ms);
-      }
-    });
-  }
-
   /** @brief Signals the core to stop and joins the thread cleanly. */
   void stop() {
-    running = false;            // Signals the thread to stop
+    active = false;            // Signals the thread to stop
     if (thread.joinable())      // Only joins if the thread is valid
       thread.join();            // Waits for the thread to finish
   }
 
-  // === Helper methods ===
+  // ------ Helper methods ------
 
   /** @brief Assigns or clears the process currently running on this core. */
   void set_job(Process* process, int core_id=-1) {
@@ -1958,7 +1962,7 @@ class Core {
     job = process;              // Update process pointer slot (null if releasing)
     job_ticks = 0;              // Reset job tick counter â€” either a new job or clearing old one
     can_release = false;        // Always reset release flag; only tick() will set it to true when appropriate
-  }
+  }    
 };
 
 ------------------------------
@@ -1986,80 +1990,76 @@ class Core {
  * - `get_running_pids()` and `get_busy_core_ids()`: Extract diagnostic metadata from active cores.
  * 
  * Design Notes:
- * - Cores are stored as `unique_ptr<Core>` to ensure clean ownership and destruction.
- * - Always use reference-returning accessors (`CoreRefs`) instead of raw pointer access.
+ * - vec<uptr<Core>> are stored as `uptr<Core>` to ensure clean ownership and destruction.
+ * - Always use reference-returning accessors (`vec<ref<Core>>`) instead of raw pointer access.
  * - Guards against null pointers even though `resize()` always populates all slots.
  * - Scheduler is the only component expected to use this class directly.
  */
 class CoreManager {
-  using CoreRefs = vector<ref<Core>>; // For exposing multiple cores as return values
-  using CorePtr = unique_ptr<Core>;   // Internal ownership via unique_ptr
-  using Cores = vector<CorePtr>;      // Internal list of cores
-  using list = vector<uint>;          // For returning PID lists
-  using bool_func = function<bool(CorePtr&)>; // For private helper
-  using uint_func = function<uint(Core&)>;    // For private helper
-  
-  Cores cores = {};
-
   public:
 
-  /** @brief Clears and reinitializes the core list with the specified number of cores */
+  CoreManager():
+    cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
+
+  /** @brief Clears and reinitializes the core vec<uint> with the specified number of cores */
   void resize(uint size) {
     cores.clear();                    // Destroys all existing cores
     cores.reserve(size);              // Optional: preallocate to avoid reallocations
-    for (uint i=0; i < size; ++i) {
+    for (uint i=0; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i));
-    }
   }
 
   // === Accessors ===
 
   /** @brief Returns number of cores. */
-  uint size() const { return cores.size(); }
+  auto size() const -> uint { return cores.size(); }
   
-  /** @brief @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
-  float get_usage() const {
+  /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
+  auto get_usage() const -> float {
     if (cores.empty()) return 0.0f;
     return cast<float>(get_busy_size()) / cast<float>(cores.size());
   }
 
-  /** @brief @brief Access a specific core by index. */
-  Core& get(uint i) { return *cores.at(i); }
+  /** @brief Access a specific core by index. */
+  auto get(uint i) -> Core& { return *cores.at(i); }
 
   /** @brief Returns references to all cores. */
-  CoreRefs get_all() { return filter_cores([](auto& ptr) { return true; }); }
+  auto get_all() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return true; }); }
 
-  /** @brief Returns a list of references to all idle cores. */
-  CoreRefs get_idle() { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
+  /** @brief Returns a vec<uint> of references to all idle cores. */
+  auto get_idle() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
 
-  /** @brief Returns a list of references to all busy (non-idle) cores. */
-  CoreRefs get_busy() { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
+  /** @brief Returns a vec<uint> of references to all busy (non-idle) cores. */
+  auto get_busy() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
   
-  /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
-  CoreRefs get_releasable() { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
+  /** @brief Returns a vec<uint> of references to all busy (non-idle) and releasable  cores. */
+  auto get_releasable() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
-  /** @brief @brief Returns a list of IDs for all busy (non-idle) cores. */
-  list get_busy_core_ids() { return extract_ids([](Core& core) { return core.id; }); }
+  /** @brief @brief Returns a vec<uint> of IDs for all busy (non-idle) cores. */
+  auto get_busy_core_ids() -> vec<uint> { return extract_ids([](Core& core) { return core.id; }); }
 
-  /** @brief Returns a list of pids to all busy (non-idle) cores. */
-  list get_running_pids() { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
+  /** @brief Returns a vec<uint> of pids to all busy (non-idle) cores. */
+  auto get_running_pids() -> vec<uint> { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
 
-  // ========================
-  // === Private Members ====
-  // ========================
+  // ------ Internal logic ------
+
   private:
 
-  // === Helper Methods === 
+  // ------ Member variables ------
+  vec<uptr<Core>> cores;
+
+  // ------ Helper Methods ------
 
   /** @brief Returns the number of currently busy (non-idle) cores. */
-  uint get_busy_size() const {
+  auto get_busy_size() const -> uint {
     return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
   }
 
   /** @brief Returns references to cores that satisfy the given filter condition. */
-  CoreRefs filter_cores(bool_func predicate) {
-    auto result = CoreRefs();       // Create a list of core reference wrappers
-    result.reserve(cores.size());   // Optional: preallocate to avoid reallocations
+  template <typename Func>
+  auto filter_cores(Func predicate) -> vec<ref<Core>> {
+    auto result = vec<ref<Core>>();         // Create a vec<uint> of core reference wrappers
+    result.reserve(cores.size());           // Optional: preallocate to avoid reallocations
 
     for (auto& ptr: cores)
       if (ptr != nullptr && predicate(ptr)) // Only include non-null cores that pass the filter
@@ -2067,11 +2067,12 @@ class CoreManager {
     return result;
   }
 
-  /** @brief Extracts a list of uint values from all busy cores using the given accessor. */
-  list extract_ids(uint_func getter) {
-    auto busy = get_busy();         // Store once to reuse
-    list result;
-    result.reserve(busy.size());    // Reserve exactly what we need
+  /** @brief Extracts a vec<uint> of uint values from all busy cores using the given accessor. */
+  template <typename Func>
+  auto extract_ids(Func getter) -> vec<uint> {
+    auto busy = get_busy();                 // Store once to reuse
+    auto result = vec<uint>();
+    result.reserve(busy.size());            // Reserve exactly what we need
 
     for (auto& ref: busy)
       result.push_back(getter(ref.get()));
@@ -3110,22 +3111,16 @@ class ContextStack {
  * orchestration of ticks and process generation.
  */
 class Scheduler {
-  using queue = vector<str>;
-  using list = vector<uint>;
-  queue names;                // Deferred generation queue for user-inserted proc_table
-  
   public:
-  // === Internal State ===
-  uint ticks = 0;             // Global tick counter
-  bool generating = false;    // Flag indicating auto-generation mode
-  
-  // === Components ===
-  SchedulerData data;         // Internal state (cores, proc_table, queue)
-  SchedulerStrategy strategy; // Contains the scheduler strategy
 
-  // === Methods ===
+  Scheduler():
+    names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
+    ticks      (0u),                    // Global tick counter
+    generating (false),                 // Flag indicating auto-generation mode
+    data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
+    strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
-  /** Adds a user-named process to the pending generation queue. */
+  /** Adds a user-named process to the pending generation vec<str>. */
   void enqueue_process(str name) { names.push_back(move(name)); }
 
   /** Enables or disables automatic process generation each tick. */
@@ -3162,15 +3157,20 @@ class Scheduler {
     data.config = move(config);                                   
   }
 
+  // ------ Member variables ------
 
-  // ========================
-  // === Private Helpers ====
-  // ========================
+  vec<str> names;                
+  uint ticks;             
+  bool generating;    
+  SchedulerData data;         
+  SchedulerStrategy strategy;
+
+  // ------ Internal logic ------
+
   private:
 
-
   /** @brief Helper that checks if the current tick matches the process generation interval. */
-  bool interval_has_elapsed() const {
+  auto interval_has_elapsed() const -> bool {
     uint freq = data.config.batch_process_freq;
     return freq > 0 && (ticks % freq == 0);
   }
@@ -3222,15 +3222,11 @@ class Scheduler {
  * Allows easy iteration, modification, and serialization of scheduler settings.
  */
 class SchedulerConfig {
-  using map = ordered_map<str, str>;
-  
   public:
-  map entries;
 
-  // === Methods ===
-
-  /** @brief Initializes the default scheduler configuration. */
-  SchedulerConfig() {
+  SchedulerConfig():
+    entries (ordered_map<str,str>())
+  {
     entries["scheduler"] = "fcfs";
     entries["num-cpu"] = "1";
     entries["quantum-cycles"] = "1";
@@ -3242,28 +3238,31 @@ class SchedulerConfig {
   }
 
   /** @brief Sets the value of a configuration key. */
-  bool set(const str& key, const str& value) {
+  auto set(const str& key, const str& value) -> bool {
     if (!entries.contains(key)) return false;
     entries[key] = value;
     return true;
   }
 
   /** @brief Retrieves the string value for a given key. */
-  str get(const str& key) const {
+  auto get(const str& key) const -> str {
     auto it = entries.find(key);
     return it != entries.end() ? it->second : "";
   }
 
   /** @brief Retrieves the string value for a given key as a uint. */
-  uint get_uint(const str& key) const {
+  auto get_uint(const str& key) const -> uint {
     return stoul(get(key));
   }
 
   /** @brief Retrieves the string value for a given key as bool. */
-  bool get_bool(const str& key) const {
+  auto get_bool(const str& key) const -> bool {
     auto v = get(key);
     return v == "1" || v == "true";
   }
+
+  // ------ Member variables ------
+  ordered_map<str,str> entries;
 };
 
 ------------------------------
@@ -3281,29 +3280,22 @@ class SchedulerConfig {
 /**
  * @brief Encapsulates scheduling context passed to strategy functions.
  * 
- * Provides access to the current core list, ready queue, and tick counter.
+ * Provides access to the current core vec<uint>, ready queue, and tick counter.
  * Also handles state reset and tick progression during simulation.
  */
-class SchedulerData {
-  using Cores = CoreManager;
-  using ProcessPtr = unique_ptr<Process>;
-  using queue = queue<uint>;
-  using map = unordered_map<uint, ProcessPtr>;
-  using list = vector<uint>;
-
-  auint next_pid = 1;       // Monotonic PID counter for generating unique process IDs
-  
+class SchedulerData {  
   public:
-  list finished_pids = {};  // PIDs of Finished processes 
-  queue rqueue = {};        // Ready queue of proc_table waiting to be scheduled
-  map proc_table = {};      // Container for all proc_table
-  Cores cores;              // Reference to the list of scheduler cores
-  SchedulerConfig config;   // Runtime configuration settings
-
-  // === Methods ===
+  
+  SchedulerData():
+    finished_pids (vec<uint>()),                // PIDs of Finished processes 
+    rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
+    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
+    config        (SchedulerConfig()),          // Runtime configuration settings
+    cores         (CoreManager()) {}            // Owned instance of scheduler core manager
 
   /** @brief Returns a unique, incrementing process ID. */
-  uint new_pid() { return next_pid++; }
+  auto new_pid() -> uint { return next_pid++; }
 
   /** @brief Adds a process to the process table. */
   void add_process(Process proc) {
@@ -3313,29 +3305,35 @@ class SchedulerData {
   }
 
   /** @brief Check if a process with the given ID exists. */
-  bool has_process(uint id) const { return proc_table.contains(id); }
+  auto has_process(uint id) const -> bool { return proc_table.contains(id); }
 
   /** @brief Check if a process with the given name exists. */
-  bool has_process(const str& name) const { return !!find_process_by_name(name, false); }
-
-  // === Accessors ===
+  auto has_process(const str& name) const -> bool { return !!find_process_by_name(name, false); }
   
   /** @brief Returns a reference wrapper to the process with the given PID. */
-  Process& get_process(uint id) { return *proc_table.at(id); }
+  auto get_process(uint id) -> Process& { return *proc_table.at(id); }
 
   /** @brief Returns a reference wrapper to the process with the given name. */
-  Process& get_process(const str& name) { return *find_process_by_name(name); }
+  auto get_process(const str& name) -> Process& { return *find_process_by_name(name); }
   
-  /** @brief Returns the list of running process IDs. */
-  list get_running_pids() { return cores.get_running_pids(); }
+  /** @brief Returns the vec<uint> of running process IDs. */
+  auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
-  // ========================
-  // === Private Helpers ====
-  // ========================
+  // ------ Member variables ------
+
+  vec<uint> finished_pids;         
+  queue<uint> rqueue;                 
+  map<uint, uptr<Process>> proc_table;
+  SchedulerConfig config;             
+  CoreManager cores;                  
+  atomic_uint next_pid = 1;           
+
+  // ------ Internal logic ------
+
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
-  Process* find_process_by_name(const str& name, bool throw_if_missing=true) const {
+  auto find_process_by_name(const str& name, bool throw_if_missing=true) const -> Process* {
     for (auto& [_, proc]: proc_table)
       if (proc->data.name == name)
         return proc.get();
@@ -3366,28 +3364,27 @@ class SchedulerData {
  */
 class SchedulerStrategy {
   public:
+
   using PreemptHandler = Core::func;
-  using TickHandler = function<void(SchedulerData&)>;
+  using TickHandler = func<void(SchedulerData&)>;
 
-  // === Members ===
-  str name;              // Strategy identifier (e.g., "fcfs", "rr")
-  SchedulerConfig config;         // Strategy-specific configuration
-  TickHandler tick_handler;       // Main strategy logic executed each tick
-  PreemptHandler preempt_handler; // Core-level preemption policy (optional)
-
-  // === Methods Methods ===
+  SchedulerStrategy():
+    name            (""s),                // Strategy identifier (e.g., "fcfs", "rr")
+    config          (SchedulerConfig()),  // Strategy-specific configuration
+    tick_handler    (nullptr),            // Main strategy logic executed each tick
+    preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
 
   /** @brief Sets the strategy name. */
-  SchedulerStrategy& set_name(str n) { return name = n, *this; }
+  auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
 
   /** @brief Sets the configuration for this strategy. */
-  SchedulerStrategy& set_config(SchedulerConfig c) { return config = move(c), *this; }
+  auto set_config(SchedulerConfig c) -> SchedulerStrategy& { return config = move(c), *this; }
 
   /** @brief Sets the main logic to run on each tick. */
-  SchedulerStrategy& on_tick(TickHandler t) { return tick_handler = move(t), *this; }
+  auto on_tick(TickHandler t) -> SchedulerStrategy& { return tick_handler = move(t), *this; }
 
   /** @brief Sets the per-core preemption policy. */
-  SchedulerStrategy& on_preempt(PreemptHandler p) { return preempt_handler = move(p), *this; }
+  auto on_preempt(PreemptHandler p) -> SchedulerStrategy& { return preempt_handler = move(p), *this; }
 
   // === Execution ===
 
@@ -3397,6 +3394,13 @@ class SchedulerStrategy {
       throw runtime_error("SchedulerStrategy::tick called without on_tick handler.");
     tick_handler(data);
   }
+
+  // ------ Member variables ------
+
+  str name;              
+  SchedulerConfig config;         
+  TickHandler tick_handler;       
+  PreemptHandler preempt_handler;
 };
 
 ------------------------------
@@ -3447,7 +3451,7 @@ struct SchedulerConfig {
  * - Lazy: cores pull from the queue only when idle
  * - Immediate-arrival: proc_table are enqueued as soon as they arrive
  */
-inline SchedulerStrategy make_fcfs_strategy(SchedulerConfig& config) {
+auto make_fcfs_strategy(SchedulerConfig& config) -> SchedulerStrategy {
 
   // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
   return SchedulerStrategy()
@@ -3488,7 +3492,7 @@ inline SchedulerStrategy make_fcfs_strategy(SchedulerConfig& config) {
  * - Preemptive: proc_table are interrupted after a time quantum.
  * - Immediate arrival: proc_table are placed into the ready queue directly.
  */
-inline SchedulerStrategy make_rr_strategy(SchedulerConfig& config) {
+auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
   return SchedulerStrategy()
     .set_name("rr")
     .set_config(config)
@@ -3523,7 +3527,7 @@ inline SchedulerStrategy make_rr_strategy(SchedulerConfig& config) {
 #include "rr.hpp"
 
 
-inline SchedulerStrategy get_scheduler_strategy(str& name, SchedulerConfig& config) {
+auto get_scheduler_strategy(str& name, SchedulerConfig& config) -> SchedulerStrategy {
   if (name == "fcfs") return make_fcfs_strategy(config);
   if (name == "rr")   return make_rr_strategy(config);
   throw runtime_error(format("Unknown strategy name: {}", name));
@@ -3546,10 +3550,14 @@ inline SchedulerStrategy get_scheduler_strategy(str& name, SchedulerConfig& conf
  * the CommandInterpreter with all available commands.
  */
 inline Shell::Shell(EventEmitter& emitter): 
-    global(emitter), 
-    interpreter(Interpreter::get()),
-    screen(storage) {
-  
+    global      (emitter),                    // Reference to the global EventEmitter
+    interpreter (CommandInterpreter::get()),  // Instance of the command interpreter
+    thread      (),                           // Shell thread (starts later in start())
+    active      (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    scheduler   (Scheduler()),                // Owned scheduler instance
+    storage     (ShellStorage()),             // Storage for dynamic shell/session data
+    screen      (storage)                     // Owned instance of shell screen manager
+{  
   // Register all command handlers
   for (auto handler: get_command_handlers())
     interpreter.register_command(move(handler));
@@ -3565,15 +3573,14 @@ inline Shell::Shell(EventEmitter& emitter):
 #include "core/common/constants/banner.hpp"
 
 
-class ShellScreen {
-  using Storage = ShellStorage;
-  Storage& storage;
-  
+class ShellScreen {  
   public:
   
   /** Initializes the screen and defaults to the main screen (ID 0). */
-  ShellScreen(Storage& storage): storage(storage) {
-    storage.set("screen.id", uint(0));
+  ShellScreen(ShellStorage& storage): 
+    storage(storage) 
+  {
+    storage.set("screen.id", 0u);
   }
 
   /** Switch to a screen by ID. Use "main" or "" for the main screen. */
@@ -3583,24 +3590,19 @@ class ShellScreen {
   }
 
   /** Switch to the main screen (empty ID). */
-  void switch_to_main() {
-    switch_to(0);
-  }
+  void switch_to_main() { switch_to(0); }
 
   /** Returns the screen ID string. */
-  uint get_id() const {
-    return storage.get<uint>("screen.id");
-  }
+  auto get_id() const -> uint { return storage.get<uint>("screen.id"); }
 
   /** Helper: Check if screen matches an exact string (e.g. "p01") */
-  bool is(uint id) const {
-    return get_id() == id;
-  }
+  auto is(uint id) const -> bool { return get_id() == id; }
 
   /** True if current screen is the main screen. */
-  bool is_main() const {
-    return get_id() == 0;
-  }
+  auto is_main() const -> bool { return get_id() == 0; }
+
+  // ------ Member variables ------
+  ShellStorage& storage;
 };
 
 ------------------------------
@@ -3669,80 +3671,70 @@ class ShellStorage {
 #include "core/shell/ShellScreen.hpp"
 
 
-class Shell {
-  using Interpreter = CommandInterpreter;
-  using Storage = ShellStorage;
-  using Screen = ShellScreen;
-  
+class Shell {  
   public:
 
-  // === Core system components ===
-  EventEmitter& global;
-  Interpreter& interpreter;
-  
-  // === Shell subcomponents ===
-  Scheduler scheduler; 
-  Storage storage;  ///< Dynamic storage for shell data
-  Screen screen;
+    /** @see See Shell.hpp for implementation. */
+    Shell(EventEmitter& emitter);
 
-  // === Control & lifecycle ===
-  Thread thread;
-  abool active = true;
+    /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
+    void start() {
+      // system("cls");
+      Ansi::enable();
+      enable_unicode();
 
-  // === Methods ===
-
-  /** @brief See Shell.hpp for implementation. */
-  Shell(EventEmitter& emitter);
-
-  /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
-  void start() {
-    // system("cls");
-    Ansi::enable();
-    enable_unicode();
-
-    // Starts the tick handler that runs the scheduler.
-    global.on("tick", [&] { 
-      // Ensures scheduler.tick() does not conflict with shell command access
-      // Uses global with_locked(...) wrapper to synchronize with shared SchedulerData
-      with_locked([&] { scheduler.tick(); });
-    });
-  
-    // Start CLI in a separate thread
-    thread = Thread([&] {
-      cout << '\n';   // Lets make it a convention that line 1 is empty.
-      while (active) 
-        tick();
-    });
-  }
-
-  /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
-  void stop() {
-    active = false;
-    if (thread.joinable()) 
-      thread.join();
-
-    system("cls");
-  }
-
-  /** @brief Executes a single shell tick (input + command dispatch). */
-  void tick() {
-    cout << ">>> " << flush;
-
-    if (str input; getline(cin, input)) {
-      with_locked([&]{
-        interpreter.execute(move(input), *this);
-        cout << '\n';
+      // Starts the tick handler that runs the scheduler.
+      global.on("tick", [&] { 
+        with_locked([&] { scheduler.tick(); }); // Makes scheduler.tick() does not conflict with shell commands
       });
-
-    } else {
-      cout << "[Shell] Input stream closed.\n";
-      active = false;
+    
+      // Start CLI in a separate thread
+      thread = Thread([&] {
+        cout << '\n';   // Lets make it a convention that line 1 is empty.
+        while (active) 
+          tick();
+      });
     }
-  }
 
-  /** @brief Signals the shell to stop from within the shell thread. */
-  void request_stop() { active = false; } 
+    /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
+    void stop() {
+      active = false;
+      if (thread.joinable()) 
+        thread.join();
 
-  /** @brief Emits an event using the global EventEmitter. */
-  void emit(str name, any data={}) { global.emit(move(name), move(data)); }
+      system("cls");
+    }
+
+    /** @brief Executes a single shell tick (input + command dispatch). */
+    void tick() {
+      cout << ">>> " << flush;
+
+      if (str input; getline(cin, input)) {
+        with_locked([&]{
+          interpreter.execute(move(input), *this);
+          cout << '\n';
+        });
+
+      } else {
+        cout << "\n[Shell] Input stream closed.\n";
+        active = false;
+      }
+    }
+
+    /** @brief Signals the shell to stop from within the shell thread. */
+    void set_active(bool flag) { active = flag; }
+
+    /** @brief Emits an event using the global EventEmitter. */
+    void emit(str name, any data={}) { global.emit(move(name), move(data)); }
+
+
+    // ------ Member variables ------
+
+    EventEmitter& global;
+    CommandInterpreter& interpreter;    
+    Thread thread;
+    atomic_bool active;
+    Scheduler scheduler; 
+    ShellStorage storage;
+    ShellScreen screen;
 };

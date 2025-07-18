@@ -29,23 +29,20 @@ class CoreManager {
   CoreManager():
     cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
 
-  /** @brief Clears and reinitializes the core vec<uint> with the specified number of cores */
+  /** @brief Clears and reinitializes the core list with the specified number of cores */
   void resize(uint size) {
-    cores.clear();                    // Destroys all existing cores
-    cores.reserve(size);              // Optional: preallocate to avoid reallocations
+    cores.clear();                // Destroys all existing cores
+    cores.reserve(size);          // Optional: preallocate to avoid reallocations
     for (uint i=0; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i));
   }
-
-  // === Accessors ===
 
   /** @brief Returns number of cores. */
   auto size() const -> uint { return cores.size(); }
   
   /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
   auto get_usage() const -> float {
-    if (cores.empty()) return 0.0f;
-    return cast<float>(get_busy_size()) / cast<float>(cores.size());
+    return cores.empty() ? 0.f : float(get_busy_size()) / float(cores.size());
   }
 
   /** @brief Access a specific core by index. */
@@ -54,20 +51,20 @@ class CoreManager {
   /** @brief Returns references to all cores. */
   auto get_all() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return true; }); }
 
-  /** @brief Returns a vec<uint> of references to all idle cores. */
+  /** @brief Returns a list of references to all idle cores. */
   auto get_idle() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return ptr->is_idle(); }); }
 
-  /** @brief Returns a vec<uint> of references to all busy (non-idle) cores. */
+  /** @brief Returns a list of references to all busy (non-idle) cores. */
   auto get_busy() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
   
-  /** @brief Returns a vec<uint> of references to all busy (non-idle) and releasable  cores. */
+  /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
   auto get_releasable() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
-  /** @brief @brief Returns a vec<uint> of IDs for all busy (non-idle) cores. */
-  auto get_busy_core_ids() -> vec<uint> { return extract_ids([](Core& core) { return core.id; }); }
+  /** @brief @brief Returns a list of IDs for all busy (non-idle) cores. */
+  auto get_busy_core_ids() -> vec<uint> { return extract_ids([](auto& core) { return core.id; }); }
 
-  /** @brief Returns a vec<uint> of pids to all busy (non-idle) cores. */
-  auto get_running_pids() -> vec<uint> { return extract_ids([](Core& core) { return core.get_job().data.id; }); }
+  /** @brief Returns a list of pids to all busy (non-idle) cores. */
+  auto get_running_pids() -> vec<uint> { return extract_ids([](auto& core) { return core.get_job().data.id; }); }
 
   // ------ Internal logic ------
 
@@ -84,26 +81,28 @@ class CoreManager {
   }
 
   /** @brief Returns references to cores that satisfy the given filter condition. */
-  template <typename Func>
-  auto filter_cores(Func predicate) -> vec<ref<Core>> {
-    auto result = vec<ref<Core>>();         // Create a vec<uint> of core reference wrappers
-    result.reserve(cores.size());           // Optional: preallocate to avoid reallocations
+  template <typename Func = bool(*)(uptr<Core>&)>
+  auto filter_cores(Func func) -> vec<ref<Core>> {
+    auto result = vec<ref<Core>>();           // Create a list of core reference wrappers
+    result.reserve(cores.size());             // Optional: preallocate to avoid reallocations
 
     for (auto& ptr: cores)
-      if (ptr != nullptr && predicate(ptr)) // Only include non-null cores that pass the filter
-        result.push_back(ref(*ptr));        // Store a reference wrapper of the matching core
+      if (ptr != nullptr && func(ptr))        // Only include non-null cores that pass the filter
+        result.push_back(ref(*ptr));          // Store a reference wrapper of the matching core
+    
     return result;
   }
 
-  /** @brief Extracts a vec<uint> of uint values from all busy cores using the given accessor. */
-  template <typename Func>
-  auto extract_ids(Func getter) -> vec<uint> {
-    auto busy = get_busy();                 // Store once to reuse
+  /** @brief Extracts a list of uint values from all busy cores using the given accessor. */
+  template <typename Func = bool(*)(Core&)>
+  auto extract_ids(Func func) -> vec<uint> {
+    auto busy = get_busy();                   // Store once to reuse
     auto result = vec<uint>();
-    result.reserve(busy.size());            // Reserve exactly what we need
+    result.reserve(busy.size());              // Reserve exactly what we need
 
     for (auto& ref: busy)
-      result.push_back(getter(ref.get()));
+      result.push_back(func(ref.get()));
+
     return result;
   }
 };

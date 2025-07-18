@@ -32,5 +32,6 @@ class ShellScreen {
   auto is_main() const -> bool { return get_id() == 0; }
 
   // ------ Member variables ------
+  
   ShellStorage& storage;
 };
