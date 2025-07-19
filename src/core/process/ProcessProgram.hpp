@@ -10,27 +10,22 @@
  * and a control context stack (used by FOR loops).
  */
 class ProcessProgram {
-  using Script = Instruction::Script;
-  using Stack = ContextStack;
-
   public:
-  Script script = {}; // Flat list of all program instructions
-  Stack context = {}; // Stack of active loop contexts
-  uint ip = 0;        // Current instruction pointer
 
-  // === Methods ===
-  
   /** @brief Loads an instruction script. */
-  ProcessProgram(Script script): script(move(script)) {}
+  ProcessProgram(Instruction::Script script): 
+    script  (Instruction::Script(move(script))),  // Flat list of all program instructions
+    context (ContextStack()),                     // Stack of active loop contexts
+    ip      (0) {}                                // Current instruction pointer
 
   /** @brief Returns the size of the script. */
-  uint size() const { return script.size(); }
+  auto size() -> uint { return script.size(); }
   
   /** @brief Check if the program has completed execution. */
-  bool finished() const { return ip >= script.size(); }
+  auto finished() -> bool { return ip >= script.size(); }
 
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
-  str render_script() const {
+  auto render_script() -> str {
     // Compute the width needed to align inst indices
     uint width = count_digits(script.size()-1);
     auto out = osstream();
@@ -43,7 +38,7 @@ class ProcessProgram {
   }
 
   /** @brief Returns a formatted view of the current context stack. */
-  str render_context() const {
+  auto render_context() -> str {
     // If there are no loop frames, return empty
     if (context.empty()) 
       return "  <empty>\n";  
@@ -59,13 +54,18 @@ class ProcessProgram {
     return out.str();
   }
 
-  // ========================
-  // === Private Members ====
-  // ========================
+  // ------ Member variables ------
+
+  Instruction::Script script;
+  ContextStack context;
+  uint ip;
+
+  // ------ Internal logic ------
+
   private:
 
   /** @brief Helper to renders a single instruction line from the script with formatting. */
-  str render_line(uint idx, uint width) const {
+  auto render_line(uint idx, uint width) -> str {
     char marker = (idx == ip) ? '>' : ' ';
     auto opcode = script[idx].opcode.substr(0, 10);
     auto line = osstream();
@@ -79,7 +79,7 @@ class ProcessProgram {
   }
 
   /** @brief Helper to renders a single loop frame from the context stack with formatting. */
-  str render_frame(uint idx, uint width) const {
+  auto render_frame(uint idx, uint width) -> str {
     auto& frame = context.at(idx);
     auto& inst = script[frame.start];
     auto out = osstream();

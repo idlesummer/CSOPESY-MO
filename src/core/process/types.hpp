@@ -17,21 +17,25 @@ struct ContextFrame {
   * and iteration counts during process execution.
   */
 class ContextStack {
-  using Stack = vector<ContextFrame>;
-  Stack stack;
-
   public:
+
+  ContextStack():
+    stack (vector<ContextFrame>()) {}
   
   /** Checks if top frame matches the opcode. */
-  bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }
+  auto matches(const str& opcode) -> bool { 
+    return !empty() && top().opcode == opcode; 
+  }
 
   /** Checks if top frame matches the opcode, start address, and has an initialized exit address. */
-  bool matches(const str& opcode, uint start) const {
+  auto matches(const str& opcode, uint start) -> bool {
     return !empty() && top().opcode == opcode && top().start == start;
   }
 
   /** Returns true if the top frame starts at the given instruction pointer. */
-  bool starts_at(uint ip) const { return !empty() && top().start == ip; }
+  auto starts_at(uint ip) -> bool { 
+    return !empty() && top().start == ip; 
+  }
 
   /** Push a new loop context onto the stack. */
   void push(str opcode, uint start, uint count) {
@@ -42,19 +46,22 @@ class ContextStack {
   void pop() { stack.pop_back(); }
 
   /** Check if the loop context stack is empty. */
-  bool empty() const { return stack.empty(); }
+  auto empty() -> bool { return stack.empty(); }
 
   /** Get the number of loop contexts in the stack. */
-  uint size() const { return stack.size(); }
+  auto size() -> uint { return stack.size(); }
 
   /** Clear all loop contexts from the stack. */
   void clear() { stack.clear(); }
 
   /** Access the top loop context */
-  ContextFrame& top() { return stack.back(); }
-  const ContextFrame& top() const { return stack.back(); }
+  auto top() -> ContextFrame& { return stack.back(); }
 
   /** Access a loop context by index. */
-  ContextFrame& at(uint index) { return stack.at(index); }
-  const ContextFrame& at(uint index) const { return stack.at(index); }
+  auto at(uint index) -> ContextFrame& { return stack.at(index); }
+
+  private:
+
+  // ------ Member variables ------
+  vector<ContextFrame> stack;
 };

@@ -15,9 +15,9 @@ auto make_screen() -> CommandHandler {
     .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
     
     .set_validate([](Command& command, Shell& shell) -> Str {
-      bool has_ls = command.flags.contains("-ls");
-      bool has_s = command.flags.contains("-s");
-      bool has_r = command.flags.contains("-r");
+      auto has_ls = command.flags.contains("-ls");
+      auto has_s = command.flags.contains("-s");
+      auto has_r = command.flags.contains("-r");
 
       if (has_s + has_ls + has_r > 1)
         return "You must use only one of -s, -r, or -ls.";
@@ -38,8 +38,8 @@ auto make_screen() -> CommandHandler {
         auto& config = data.config;
         auto& cores = data.cores;
 
-        uint size = cores.size();
-        uint busy = cores.get_busy().size();
+        auto size = cores.size();
+        auto busy = cores.get_busy().size();
         float cpu_util = cores.get_usage() * 100;
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
@@ -80,7 +80,7 @@ auto make_screen() -> CommandHandler {
         const str& name = command.flags.at("-s");
 
         auto process_exists = [&](const str& name) -> bool {
-          const auto& data = scheduler.data;
+          auto& data = scheduler.data;
           return data.has_process(name);
         };
 
@@ -89,7 +89,7 @@ auto make_screen() -> CommandHandler {
 
         scheduler.enqueue_process(name);
         cout << format("\nWaiting for process creation: {}", name);
-        bool created = false;
+        auto created = false;
 
         for (uint i = 0; i < 30; ++i) {
           if (scheduler.data.has_process(name)) {
@@ -118,14 +118,14 @@ auto make_screen() -> CommandHandler {
         for (auto& log : process.data.logs)
           cout << format("  {}\n", log);
 
-        const auto& program = process.data.program;
+        auto& program = process.data.program;
         cout << format("Current instruction line: {}\n", program.ip);
         cout << format("Lines of code: {}\n", program.size());
       }
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        const auto& name = command.flags.at("-r");
+        auto& name = command.flags.at("-r");
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
@@ -139,7 +139,7 @@ auto make_screen() -> CommandHandler {
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (const auto& log : process.data.logs)
+        for (auto& log: process.data.logs)
           cout << format("  {}\n", log);
 
         cout << format("Current instruction line: {}\n", process.data.program.ip);

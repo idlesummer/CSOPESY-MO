@@ -3,30 +3,33 @@
 #include "types.hpp"
 
 
-class ProcessMemory {
-  using map = unordered_map<str, uint>;
-  
+class ProcessMemory { 
   public:
-  map symbol_table;
+  
+  ProcessMemory():
+    symbol_table (map<str,uint>()) {}
 
   /** Memory mutators */
   void set(str key, uint value) {
     symbol_table[move(key)] = value;
   }
-
+  
   /** Memory accessors */
-  uint get(const str& key) const {
+  auto get(const str& key) const -> uint {
     auto it = symbol_table.find(key);
     return it != symbol_table.end() ? it->second : 0;
   }
   
   /** Resolves a token as a literal or variable lookup */
-  uint resolve(const str& token) const {
+  auto resolve(const str& token) const -> uint {
     return isdigit(token[0]) ? stoul(token) : get(token);
   }
-
+  
   /** Exposes internal variable bindings */
-  const auto& get_symbol_table() const {
+  auto get_symbol_table() -> map<str,uint>& {
     return symbol_table;
   }
+
+  // ------ Member variables ------
+  map<str,uint> symbol_table;
 };
