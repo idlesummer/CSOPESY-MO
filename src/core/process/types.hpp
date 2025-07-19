@@ -20,7 +20,7 @@ class ContextStack {
   public:
 
   ContextStack():
-    stack (vector<ContextFrame>()) {}
+    stack (vec<ContextFrame>()) {}
   
   /** Checks if top frame matches the opcode. */
   auto matches(const str& opcode) -> bool { 
@@ -63,5 +63,5 @@ class ContextStack {
   private:
 
   // ------ Member variables ------
-  vector<ContextFrame> stack;
+  vec<ContextFrame> stack;
 };

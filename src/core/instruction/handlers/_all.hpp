@@ -9,7 +9,7 @@
 // #include "subtract.hpp"
 
 
-auto get_instruction_handlers() -> vector<InstructionHandler> {
+auto get_instruction_handlers() -> vec<InstructionHandler> {
   return {
     // make_add(),
     // make_declare(),

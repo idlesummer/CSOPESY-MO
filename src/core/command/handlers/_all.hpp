@@ -15,7 +15,7 @@
 #include "test.hpp"
 
   
-auto get_command_handlers() -> vector<CommandHandler> {
+auto get_command_handlers() -> vec<CommandHandler> {
   return {
     make_cls(),
     make_config(),

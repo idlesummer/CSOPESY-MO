@@ -36,10 +36,10 @@ class CommandParser {
   private:
   
   /** @brief A helper that splits a string into whitespace-separated tokens. */
-  static auto tokenize(const str& line) -> vector<str> {
+  static auto tokenize(const str& line) -> vec<str> {
     if (line.empty()) return {};
     auto stream = isstream(line);
-    auto tokens = vector<str>(); 
+    auto tokens = vec<str>(); 
 
     for (str token; stream >> token; )
       tokens.emplace_back(move(token));

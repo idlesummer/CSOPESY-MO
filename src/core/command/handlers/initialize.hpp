@@ -32,7 +32,7 @@ auto make_initialize() -> CommandHandler {
 
     .set_execute([](Command& command, Shell& shell) {
       auto& storage = shell.storage;
-      auto& lines = storage.get<vector<str>>("initialize.cache");
+      auto& lines = storage.get<vec<str>>("initialize.cache");
       auto config = SchedulerConfig();
 
       for (auto& line : lines) {

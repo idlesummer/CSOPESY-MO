@@ -19,7 +19,7 @@ class Scheduler {
 
   Scheduler():
     names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
-    ticks      (0u),                    // Global tick counter
+    ticks      (0),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
