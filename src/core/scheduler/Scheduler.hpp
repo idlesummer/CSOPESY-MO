@@ -74,7 +74,7 @@ class Scheduler {
   private:
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
-  auto interval_has_elapsed() const -> bool {
+  auto interval_has_elapsed() -> bool {
     uint freq = data.config.batch_process_freq;
     return freq > 0 && (ticks % freq == 0);
   }

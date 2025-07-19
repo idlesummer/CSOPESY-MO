@@ -18,7 +18,7 @@ class CommandHandler {
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
 
-  // === Chainable Setters ===
+  // Chainable Setters
   auto set_name(const str& value) -> CommandHandler& { return name = value, *this; }
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
@@ -26,7 +26,6 @@ class CommandHandler {
   auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
-
     
   // ------- Member variables -------
   str name;                        

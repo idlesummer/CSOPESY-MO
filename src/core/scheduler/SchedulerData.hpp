@@ -33,10 +33,10 @@ class SchedulerData {
   }
 
   /** @brief Check if a process with the given ID exists. */
-  auto has_process(uint id) const -> bool { return proc_table.contains(id); }
+  auto has_process(uint id) -> bool { return proc_table.contains(id); }
 
   /** @brief Check if a process with the given name exists. */
-  auto has_process(const str& name) const -> bool { return !!find_process_by_name(name, false); }
+  auto has_process(const str& name) -> bool { return !!find_process_by_name(name, false); }
   
   /** @brief Returns a reference wrapper to the process with the given PID. */
   auto get_process(uint id) -> Process& { return *proc_table.at(id); }
@@ -61,7 +61,7 @@ class SchedulerData {
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
-  auto find_process_by_name(const str& name, bool throw_if_missing=true) const -> Process* {
+  auto find_process_by_name(const str& name, bool throw_if_missing=true) -> Process* {
     for (auto& [_, proc]: proc_table)
       if (proc->data.name == name)
         return proc.get();

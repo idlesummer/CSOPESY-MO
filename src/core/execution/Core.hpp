@@ -58,7 +58,7 @@ class Core {
   void release() { if (job) set_job(nullptr); }
 
   /** @brief Returns true no process is assigned to the core. */
-  auto is_idle() const -> bool { return job == nullptr; }
+  auto is_idle() -> bool { return job == nullptr; }
 
   /** @brief Returns the currently assigned job. */
   auto get_job() -> Process& {

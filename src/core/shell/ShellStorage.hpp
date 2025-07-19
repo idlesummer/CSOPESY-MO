@@ -28,7 +28,7 @@ class ShellStorage {
   void set(const str& key, Type value) { storage[key] = move(value); }
 
   /** Check if a key exists in the storage. */
-  auto has(const str& key) const -> bool { return storage.contains(key); }
+  auto has(const str& key) -> bool { return storage.contains(key); }
 
   /** Remove a key from storage. */
   void remove(const str& key) { storage.erase(key); }
