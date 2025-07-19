@@ -25,6 +25,10 @@ $gptPrompt = @"
 
 You are a senior developer reviewing this project for a new team member.
 
+> Note: This codebase uses the macro `#define let auto&&` as a syntactic shorthand
+> to mimic dynamic-language style in function parameters. When you see `let`, 
+> interpret it as `auto&&`.
+
 Please do the following:
 
 1. **Give an overview** of what this project does and its main components.
@@ -69,4 +73,4 @@ foreach ($file in $files) {
   Get-Content $file.FullName | Add-Content -Path $outputFile
 }
 
-Write-Host "Generated $outputFile with GPT prompt and $($files.Count) files."
+Write-Host "> Generated $outputFile with GPT prompt and $($files.Count) files."

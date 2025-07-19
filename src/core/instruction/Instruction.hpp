@@ -8,7 +8,7 @@ struct Instruction {
   using list  = vector<str>;
   
   str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
-  list args;  ///< List of string arguments
+  list args;      ///< List of string arguments
 
 /**
  * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.

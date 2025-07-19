@@ -12,16 +12,18 @@
 class ProcessControl {
   public:
 
-  uint sleep_ticks = 0;
-  
-  // === Methods ===
+  ProcessControl():
+    sleep_ticks (0) {}
   
   /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return sleep_ticks > 0; }    
-
+  auto sleeping() const -> bool { return sleep_ticks > 0; }    
+  
   /** @brief Puts the process to sleep for a number of ticks. */
   void sleep_for(uint ticks) { sleep_ticks = ticks; }
-
+  
   /** @brief Advances sleep state by one tick, if sleeping. */
   void tick() { if (sleep_ticks > 0) --sleep_ticks; }
+  
+  // ------ Member variables ------
+  uint sleep_ticks;
 };

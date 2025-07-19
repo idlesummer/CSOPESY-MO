@@ -103,7 +103,7 @@ class Core {
 
   /** @brief Signals the core to stop and joins the thread cleanly. */
   void stop() {
-    active = false;            // Signals the thread to stop
+    active = false;             // Signals the thread to stop
     if (thread.joinable())      // Only joins if the thread is valid
       thread.join();            // Waits for the thread to finish
   }
