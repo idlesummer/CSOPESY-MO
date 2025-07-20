@@ -20,12 +20,8 @@ class InstructionHandler {
   auto set_opcode(str op) -> InstructionHandler { return opcode = move(op), *this; }
   auto set_open_opcode(str op) -> InstructionHandler { return open_opcode = move(op), *this; }
   auto set_exit_opcode(str op) -> InstructionHandler { return exit_opcode = move(op), *this; }
-  auto add_signature(vec<InstructionParam> sig) -> InstructionHandler {
-    return signatures.push_back(std::move(sig)), *this;
-  }
-  auto set_execute(func<void(Instruction&,ProcessData&)> fn) -> InstructionHandler {
-    return execute = move(fn), *this;
-  }
+  auto add_signature(vec<InstructionParam> sig) -> InstructionHandler { return signatures.push_back(move(sig)), *this; }
+  auto set_execute(func<void(Instruction&,ProcessData&)> fn) -> InstructionHandler { return execute = move(fn), *this; }
 
   /** Returns true if this instruction begins a open control block (e.g., FOR). */
   auto is_control_open() const -> bool { return !exit_opcode.empty(); }
