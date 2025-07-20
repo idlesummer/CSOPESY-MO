@@ -4,11 +4,10 @@
 
 /** Represents a single process instruction. */
 struct Instruction {
-  using Script = vector<Instruction>;
-  using list  = vector<str>;
-  
+  using Script = vec<Instruction>;
+
   str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
-  list args;      ///< List of string arguments
+  vec<str> args;      ///< List of string arguments
 
 /**
  * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.

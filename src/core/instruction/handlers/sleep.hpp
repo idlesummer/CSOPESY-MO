@@ -10,7 +10,7 @@ inline InstructionHandler make_sleep() {
   return {
     .opcode = "SLEEP",
     .signatures = {{ Param::UInt8() }},
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint duration = stoul(inst.args[0]);
       proc.get_state().sleep_for(duration);
     },

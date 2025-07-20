@@ -10,7 +10,7 @@ inline InstructionHandler make_declare() {
   return {
     .opcode = "DECLARE",
     .signatures = {{ Param::Var(), Param::UInt16() }},
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint value = stoul(inst.args[1]);
       proc.get_memory().set(inst.args[0], value);
     },

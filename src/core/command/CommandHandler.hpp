@@ -28,6 +28,7 @@ class CommandHandler {
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
     
   // ------- Member variables -------
+  
   str name;                        
   str desc;                        
   uint min_args;                

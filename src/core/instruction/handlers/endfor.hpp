@@ -3,25 +3,24 @@
 #include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
-#include "core/process/ProcessProgram.hpp"
 
 
-inline InstructionHandler make_endfor() {
-  return {
-    .opcode = "ENDFOR",
-    .open_opcode = "FOR",
-    .execute = [](const Instruction& inst, ProcessData& process) {
+auto make_endfor() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("ENDFOR")
+    .set_open_opcode("FOR")
+    .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto& context = program.context;
 
       // Check if block is inside a FOR loop
       if (!context.matches("FOR"))
         throw runtime_error("[ENDFOR] No matching FOR block on stack.");
-      
+
       auto& frame = context.top();
+      auto& for_inst = program.script.at(frame.start);
 
       // Cache exit address if it's not set
-      auto& for_inst = program.script.at(frame.start);
       if (for_inst.exit == 0)
         for_inst.exit = program.ip + 1;
 
@@ -29,8 +28,6 @@ inline InstructionHandler make_endfor() {
       if (--frame.count > 0)
         return void(program.ip = frame.start);
 
-      // Loop finished - pop the context frame
       context.pop();
-    },
-  };
+    });
 }

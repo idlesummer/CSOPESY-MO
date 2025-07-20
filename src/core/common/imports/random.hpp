@@ -45,9 +45,10 @@ public:
 
   /** Pick a Random element from a non-empty vector */
   template <typename Type>
-  static auto pick(const std::vector<Type>& list) -> Type {
-    if (list.empty()) throw std::runtime_error("Cannot pick from empty list.");
-    return list[num(0, static_cast<int>(list.size()) - 1)];
+  static auto pick(Type&& list) -> decltype(auto) {
+    if (list.empty())
+      throw runtime_error("Cannot pick from empty list.");
+    return std::forward<Type>(list)[num(0, static_cast<int>(list.size()) - 1)];
   }
 
   /** Shuffle a vector in place */

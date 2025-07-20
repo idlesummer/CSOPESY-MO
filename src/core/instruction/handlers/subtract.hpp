@@ -15,7 +15,7 @@ inline InstructionHandler make_subtract() {
       { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
       { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
     },
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint lhs = proc.get_memory().get(inst.args[1]);
       uint rhs = proc.get_memory().resolve(inst.args[2]);
       proc.get_memory().set(inst.args[0], (lhs > rhs) ? (lhs-rhs) : 0);

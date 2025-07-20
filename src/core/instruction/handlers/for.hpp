@@ -6,11 +6,9 @@
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_for() {
-  using Param = InstructionParam;
-  
+auto make_for() -> InstructionHandler {
   // === Skips ahead to the matching ENDFOR. ===
-  auto skip_block = [](auto& program, const Instruction& inst) {
+  auto skip_block = [](auto& program, auto& inst) {
     
     // Use cached exit if available
     if (inst.exit != 0)
@@ -22,8 +20,8 @@ inline InstructionHandler make_for() {
 
     // Otherwise, scan ahead to find the matching ENDFOR
     for (uint i = start+1; i < script.size(); ++i) {
-      const auto& opcode = script[i].opcode;
-      const int delta = (opcode == "FOR") - (opcode == "ENDFOR");
+      auto& opcode = script[i].opcode;
+      int delta = (opcode == "FOR") - (opcode == "ENDFOR");
       depth += delta;
       
       // If matching ENDFOR is found, cache exit address and exit loop
@@ -36,24 +34,18 @@ inline InstructionHandler make_for() {
     throw runtime_error("[FOR] Mismatched FOR/ENDFOR blocks.");
   };
 
-  return {
-    .opcode = "FOR",
-    .exit_opcode = "ENDFOR",
-    .signatures = {{ Param::UInt(1, 5) }},
-    .execute = [&](const Instruction& inst, ProcessData& process) {
-      auto& program = process.program;
+  return InstructionHandler()
+    .set_opcode("FOR")
+    .set_exit_opcode("ENDFOR")
+    .add_signature({ InstructionParam::UInt(1, 5) })
+    .set_execute([&](Instruction& inst, ProcessData& proc) {
+      auto& program = proc.program;
       auto count = stoul(inst.args[0]);
-      
-      // Skip loop entirely if loop count is zero
       if (count == 0)
-        return skip_block(program, inst);
-      
+        return skip_block(program, inst);  // Skip if count is 0
+
       auto& context = program.context;
-      auto ip = program.ip;
-      
-      // Push context if this FOR hasn't been visited yet
-      if (!context.starts_at(ip))
-        context.push("FOR", ip, count);
-    },
-  };
+      if (!context.starts_at(program.ip))
+        context.push("FOR", program.ip, count);
+    });
 }

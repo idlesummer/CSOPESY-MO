@@ -5,16 +5,12 @@
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_print() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "PRINT",
-    .signatures = {
-      { Param::Str() },
-      { Param::Str(), Param::Var()},
-    },
-    .execute = [](const Instruction& inst, ProcessData& process) {
-      process.log(inst.args[0]);
-    },
-  };
+auto make_print() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("PRINT")
+    .add_signature({ InstructionParam::Str() })
+    .add_signature({ InstructionParam::Str(), InstructionParam::Var() })
+    .set_execute([](Instruction& inst, ProcessData& proc) {
+      proc.log(inst.args[0]);
+    });
 }

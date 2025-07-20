@@ -6,32 +6,35 @@
 class ProcessData; // Forward declaration
 
 /** Represents an executable instruction handler. */
-struct InstructionHandler {
-  using func = function<void(const Instruction&, ProcessData&)>;
-  using Schema = InstructionParam;
-  using list = vector<InstructionParam::Signature>;
+class InstructionHandler {
+  public:
 
-  // === Opcode name ===
-  str opcode;           /// The opcode string representing the instruction.
-  
-  // === Optional Metadata ===
-  str open_opcode; ///< For control instruction with a matching open
-  str exit_opcode; ///< For control instruction with a matching exit
-  list signatures;      ///< Describes expected argument types
-  
-  // === Execute function ===
-  func execute;         ///< Function to execute the instruction
-  
-  // === Helpers ===
+  InstructionHandler():
+    opcode      (""s),                                // The opcode string representing the instruction.
+    open_opcode (""s),                                // For control instruction with a matching open
+    exit_opcode (""s),                                // For control instruction with a matching exit
+    signatures  (vec<InstructionParam::Signature>()), // Describes expected argument types
+    execute     (nullptr) {}                          // Function to execute the instruction
+    
+  // Chainable setters
+  auto set_opcode(str op) -> InstructionHandler { return opcode = move(op), *this; }
+  auto set_open_opcode(str op) -> InstructionHandler { return open_opcode = move(op), *this; }
+  auto set_exit_opcode(str op) -> InstructionHandler { return exit_opcode = move(op), *this; }
+  auto add_signature(vec<InstructionParam> sig) -> InstructionHandler {
+    return signatures.push_back(std::move(sig)), *this;
+  }
+  auto set_execute(func<void(Instruction&,ProcessData&)> fn) -> InstructionHandler {
+    return execute = move(fn), *this;
+  }
 
   /** Returns true if this instruction begins a open control block (e.g., FOR). */
-  bool is_control_open() const { return !exit_opcode.empty(); }
+  auto is_control_open() const -> bool { return !exit_opcode.empty(); }
 
   /** Returns true if this instruction begins a exit control block (e.g., FOR). */
-  bool is_control_exit() const { return !open_opcode.empty(); }
+  auto is_control_exit() const -> bool { return !open_opcode.empty(); }
 
   /** Generates a random instruction based on the signature. */
-  Instruction generate() const {
+  auto generate() const -> Instruction {
     auto inst = Instruction(opcode);
     if (signatures.empty())
       return inst;
@@ -43,4 +46,12 @@ struct InstructionHandler {
       inst.args.push_back(rule.generate());
     return inst;
   }
+
+  // ------ Member variables ------
+
+  str opcode;                                     
+  str open_opcode;                                
+  str exit_opcode;                                
+  vec<InstructionParam::Signature> signatures;    
+  func<void(Instruction&,ProcessData&)> execute;  
 };
