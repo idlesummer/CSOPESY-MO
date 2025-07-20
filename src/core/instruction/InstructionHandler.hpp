@@ -24,21 +24,21 @@ class InstructionHandler {
   auto set_execute(func<void(Instruction&,ProcessData&)> fn) -> InstructionHandler { return execute = move(fn), *this; }
 
   /** Returns true if this instruction begins a open control block (e.g., FOR). */
-  auto is_control_open() const -> bool { return !exit_opcode.empty(); }
+  auto is_control_open() -> bool { return !exit_opcode.empty(); }
 
   /** Returns true if this instruction begins a exit control block (e.g., FOR). */
-  auto is_control_exit() const -> bool { return !open_opcode.empty(); }
+  auto is_control_exit() -> bool { return !open_opcode.empty(); }
 
   /** Generates a random instruction based on the signature. */
-  auto generate() const -> Instruction {
+  auto generate() -> Instruction {
     auto inst = Instruction(opcode);
     if (signatures.empty())
       return inst;
 
-    const auto& signature = Rand::pick(signatures);
+    auto& signature = Rand::pick(signatures);
     inst.args.reserve(signature.size()); // Micro-optimization: Preallocate space
 
-    for (const auto& rule: signature)
+    for (auto& rule: signature)
       inst.args.push_back(rule.generate());
     return inst;
   }

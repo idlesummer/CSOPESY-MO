@@ -9,19 +9,17 @@ struct InstructionParam {
 
   /** Supported argument types. */
   enum class Type {
-    UInt,       ///< Unsigned integer (with optional min/max)
-    Str,        ///< Variable or string identifier
-    Var         ///< Fixed set of variables
+    UInt,       // Unsigned integer (with optional min/max)
+    Str,        // Variable or string identifier
+    Var         // Fixed set of variables
   };
 
-  Type type;    ///< The argument's expected type
-  uint min = 0; ///< Minimum value (for UInt)
-  uint max = 0; ///< Maximum value (for UInt)
-
-  // === Argument Generator ===
+  Type type;    // The argument's expected type
+  uint min = 0; // Minimum value (for UInt)
+  uint max = 0; // Maximum value (for UInt)
 
   /** Returns a randomly generated argument string that matches this schema. */
-  str generate() const {
+  auto generate() -> str {
     switch (type) {
       case Type::UInt:  return to_string(Rand::num(min, max));
       case Type::Str:   return Rand::pick(messages);
@@ -32,11 +30,11 @@ struct InstructionParam {
 
   // === Static Constructors ===
 
-  static InstructionParam Var() { return { Type::Var }; }
-  static InstructionParam Str() { return { Type::Str }; }
-  static InstructionParam UInt(uint min, uint max) { return { Type::UInt, min, max }; }
-  static InstructionParam UInt8() { return UInt(0, 255); }
-  static InstructionParam UInt16() { return UInt(0, 65535); }
+  static auto Var() -> InstructionParam { return { Type::Var }; }
+  static auto Str() -> InstructionParam { return { Type::Str }; }
+  static auto UInt(uint min, uint max) -> InstructionParam { return { Type::UInt, min, max }; }
+  static auto UInt8() -> InstructionParam { return UInt(0, 255); }
+  static auto UInt16() -> InstructionParam { return UInt(0, 65535); }
   
   private:
 
