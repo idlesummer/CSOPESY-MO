@@ -1,8 +1,8 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
+#include "core/instruction/types.hpp"
 #include "core/process/ProcessData.hpp"
 
 
@@ -37,7 +37,8 @@ auto make_for() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("FOR")
     .set_exit_opcode("ENDFOR")
-    .add_signature({ InstructionParam::UInt(1, 5) })
+    .add_signature(Signature().uintT(1, 5))
+    
     .set_execute([&](Instruction& inst, ProcessData& proc) {
       auto& program = proc.program;
       auto count = stoul(inst.args[0]);
