@@ -43,6 +43,9 @@ class Scheduler {
     // TODO: Clean/update paging info  
     // memory.tick(data);
 
+    // Tick sleeping processes
+    tick_sleeping_processes();
+      
     // Assign new processes to idle cores
     strategy.tick(data);
     ++ticks;
@@ -105,8 +108,26 @@ class Scheduler {
 
       if (process.data.program.finished())
         data.finished_pids.push_back(process.data.id);
-      else
-        data.rqueue.push(process.data.id);
+      else if (process.data.control.sleeping())
+        data.wqueue.push_back(process.data.id);     
+      else                                      
+        data.rqueue.push(process.data.id);  // Not finished, not sleeping → just resume later
+    }
+  }
+
+  void tick_sleeping_processes() {
+    auto& wqueue = data.wqueue;
+    for (auto it = wqueue.begin(); it != wqueue.end(); ) {
+      auto& process = data.get_process(*it);
+      process.step();             // decrement sleep_ticks
+
+      if (!process.data.control.sleeping()) {
+        data.rqueue.push(*it);    // ready again
+        it = wqueue.erase(it);    // remove from wqueue
+        continue;
+      }
+
+      ++it;                       // still sleeping
     }
   }
 };

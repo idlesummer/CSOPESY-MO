@@ -8,25 +8,25 @@
 auto make_endfor() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("ENDFOR")
-    .set_open_opcode("FOR")
+    .set_open("FOR")
+
     .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto& context = program.context;
+      auto& frame = context.top();
+      auto& frame_inst = program.script.at(frame.ip);
 
       // Check if block is inside a FOR loop
-      if (!context.matches("FOR"))
+      if (frame_inst.opcode != "FOR")
         throw runtime_error("[ENDFOR] No matching FOR block on stack.");
 
-      auto& frame = context.top();
-      auto& for_inst = program.script.at(frame.start);
-
       // Cache exit address if it's not set
-      if (for_inst.exit == 0)
-        for_inst.exit = program.ip + 1;
+      if (inst.exit == 0)
+        inst.exit = program.ip + 1;
 
       // Decrement loop count; jump back if more iterations remain
-      if (--frame.count > 0)
-        return void(program.ip = frame.start);
+      if (--frame.ctr > 0)
+        return void(program.ip = frame.ip + 1);
 
       context.pop();
     });

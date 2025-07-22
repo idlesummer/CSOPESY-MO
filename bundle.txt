@@ -2,6 +2,10 @@
 
 You are a senior developer reviewing this project for a new team member.
 
+> Note: This codebase uses the macro #define let auto&& as a syntactic shorthand
+> to mimic dynamic-language style in function parameters. When you see let, 
+> interpret it as uto&&.
+
 Please do the following:
 
 1. **Give an overview** of what this project does and its main components.
@@ -74,7 +78,6 @@ class Command {
     args  (vec<str>()),       // Positional arguments for the command
     flags (map<str,str>()) {} // Map of flags and their associated values (if any)
 
-
   // ------- Member variables -------
   str name;    
   vec<str> args;    
@@ -106,7 +109,7 @@ class CommandHandler {
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
 
-  // === Chainable Setters ===
+  // Chainable Setters
   auto set_name(const str& value) -> CommandHandler& { return name = value, *this; }
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
@@ -114,9 +117,9 @@ class CommandHandler {
   auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
-
     
   // ------- Member variables -------
+  
   str name;                        
   str desc;                        
   uint min_args;                
@@ -268,10 +271,10 @@ class CommandParser {
   private:
   
   /** @brief A helper that splits a string into whitespace-separated tokens. */
-  static auto tokenize(const str& line) -> vector<str> {
+  static auto tokenize(const str& line) -> vec<str> {
     if (line.empty()) return {};
     auto stream = isstream(line);
-    auto tokens = vector<str>(); 
+    auto tokens = vec<str>(); 
 
     for (str token; stream >> token; )
       tokens.emplace_back(move(token));
@@ -485,7 +488,7 @@ auto make_initialize() -> CommandHandler {
 
     .set_execute([](Command& command, Shell& shell) {
       auto& storage = shell.storage;
-      auto& lines = storage.get<vector<str>>("initialize.cache");
+      auto& lines = storage.get<vec<str>>("initialize.cache");
       auto config = SchedulerConfig();
 
       for (auto& line : lines) {
@@ -737,9 +740,9 @@ auto make_screen() -> CommandHandler {
     .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
     
     .set_validate([](Command& command, Shell& shell) -> Str {
-      bool has_ls = command.flags.contains("-ls");
-      bool has_s = command.flags.contains("-s");
-      bool has_r = command.flags.contains("-r");
+      auto has_ls = command.flags.contains("-ls");
+      auto has_s = command.flags.contains("-s");
+      auto has_r = command.flags.contains("-r");
 
       if (has_s + has_ls + has_r > 1)
         return "You must use only one of -s, -r, or -ls.";
@@ -760,8 +763,8 @@ auto make_screen() -> CommandHandler {
         auto& config = data.config;
         auto& cores = data.cores;
 
-        uint size = cores.size();
-        uint busy = cores.get_busy().size();
+        auto size = cores.size();
+        auto busy = cores.get_busy().size();
         float cpu_util = cores.get_usage() * 100;
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
@@ -802,7 +805,7 @@ auto make_screen() -> CommandHandler {
         const str& name = command.flags.at("-s");
 
         auto process_exists = [&](const str& name) -> bool {
-          const auto& data = scheduler.data;
+          auto& data = scheduler.data;
           return data.has_process(name);
         };
 
@@ -811,7 +814,7 @@ auto make_screen() -> CommandHandler {
 
         scheduler.enqueue_process(name);
         cout << format("\nWaiting for process creation: {}", name);
-        bool created = false;
+        auto created = false;
 
         for (uint i = 0; i < 30; ++i) {
           if (scheduler.data.has_process(name)) {
@@ -840,14 +843,14 @@ auto make_screen() -> CommandHandler {
         for (auto& log : process.data.logs)
           cout << format("  {}\n", log);
 
-        const auto& program = process.data.program;
+        auto& program = process.data.program;
         cout << format("Current instruction line: {}\n", program.ip);
         cout << format("Lines of code: {}\n", program.size());
       }
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        const auto& name = command.flags.at("-r");
+        auto& name = command.flags.at("-r");
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
@@ -861,7 +864,7 @@ auto make_screen() -> CommandHandler {
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (const auto& log : process.data.logs)
+        for (auto& log: process.data.logs)
           cout << format("  {}\n", log);
 
         cout << format("Current instruction line: {}\n", process.data.program.ip);
@@ -1034,7 +1037,7 @@ auto make_util() -> CommandHandler {
 #include "test.hpp"
 
   
-auto get_command_handlers() -> vector<CommandHandler> {
+auto get_command_handlers() -> vec<CommandHandler> {
   return {
     make_cls(),
     make_config(),
@@ -1200,12 +1203,14 @@ template <typename Key, typename Val>
 using map = unordered_map<Key, Val>;
 
 ------------------------------
- FILE:  forward.hpp
- PATH:  core\common\imports\forward.hpp
+ FILE:  conventions.hpp
+ PATH:  core\common\imports\conventions.hpp
 ------------------------------
 
 #pragma once
 #include <utility> // for std::forward
+
+#define let auto&&
 
 
 template <typename Type>
@@ -1483,9 +1488,10 @@ public:
 
   /** Pick a Random element from a non-empty vector */
   template <typename Type>
-  static auto pick(const std::vector<Type>& list) -> Type {
-    if (list.empty()) throw std::runtime_error("Cannot pick from empty list.");
-    return list[num(0, static_cast<int>(list.size()) - 1)];
+  static auto pick(Type&& list) -> decltype(auto) {
+    if (list.empty())
+      throw runtime_error("Cannot pick from empty list.");
+    return std::forward<Type>(list)[num(0, static_cast<int>(list.size()) - 1)];
   }
 
   /** Shuffle a vector in place */
@@ -1615,7 +1621,7 @@ inline constexpr Context with;
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"
-#include "forward.hpp"
+#include "conventions.hpp"
 #include "helpers.hpp"
 #include "io.hpp"
 #include "misc.hpp"
@@ -1917,7 +1923,7 @@ class Core {
   void release() { if (job) set_job(nullptr); }
 
   /** @brief Returns true no process is assigned to the core. */
-  auto is_idle() const -> bool { return job == nullptr; }
+  auto is_idle() -> bool { return job == nullptr; }
 
   /** @brief Returns the currently assigned job. */
   auto get_job() -> Process& {
@@ -2025,10 +2031,10 @@ class CoreManager {
   }
 
   /** @brief Returns number of cores. */
-  auto size() const -> uint { return cores.size(); }
+  auto size() -> uint { return cores.size(); }
   
   /** @brief Returns the current CPU core utilization as a float [0.0, 1.0]. */
-  auto get_usage() const -> float {
+  auto get_usage() -> float {
     return cores.empty() ? 0.f : float(get_busy_size()) / float(cores.size());
   }
 
@@ -2063,7 +2069,7 @@ class CoreManager {
   // ------ Helper Methods ------
 
   /** @brief Returns the number of currently busy (non-idle) cores. */
-  auto get_busy_size() const -> uint {
+  auto get_busy_size() -> uint {
     return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
   }
 
@@ -2105,11 +2111,10 @@ class CoreManager {
 
 /** Represents a single process instruction. */
 struct Instruction {
-  using Script = vector<Instruction>;
-  using list  = vector<str>;
-  
+  using Script = vec<Instruction>;
+
   str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
-  list args;  ///< List of string arguments
+  vec<str> args;      ///< List of string arguments
 
 /**
  * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
@@ -2126,48 +2131,61 @@ struct Instruction {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "Instruction.hpp"
-#include "InstructionParam.hpp"
+#include "types.hpp"
 
 class ProcessData; // Forward declaration
 
 /** Represents an executable instruction handler. */
-struct InstructionHandler {
-  using func = function<void(const Instruction&, ProcessData&)>;
-  using Schema = InstructionParam;
-  using list = vector<InstructionParam::Signature>;
+class InstructionHandler {
+  public:
 
-  // === Opcode name ===
-  str opcode;           /// The opcode string representing the instruction.
+  InstructionHandler():
+    opcode      (""s),              // The opcode string representing the instruction.
+    open_opcode (""s),              // For control instruction with a matching open
+    exit_opcode (""s),              // For control instruction with a matching exit
+    signatures  (vec<Signature>()), // Describes expected argument types
+    execute     (nullptr) {}        // Function to execute the instruction
+    
+  // Chainable setters
   
-  // === Optional Metadata ===
-  str open_opcode; ///< For control instruction with a matching open
-  str exit_opcode; ///< For control instruction with a matching exit
-  list signatures;      ///< Describes expected argument types
-  
-  // === Execute function ===
-  func execute;         ///< Function to execute the instruction
-  
-  // === Helpers ===
+  /** @brief Sets the opcode for this instruction. */
+  auto set_opcode(str op) -> InstructionHandler { return opcode = move(op), *this; }
 
-  /** Returns true if this instruction begins a open control block (e.g., FOR). */
-  bool is_control_open() const { return !exit_opcode.empty(); }
+  /** @brief Sets the matching open opcode (used by control exit instructions). */
+  auto set_open(str op) -> InstructionHandler { return open_opcode = move(op), *this; }
+  
+  /** @brief Sets the matching exit opcode (used by control open instructions). */
+  auto set_exit(str op) -> InstructionHandler { return exit_opcode = move(op), *this; }
+  
+  /** @brief Adds a signature definition to the instruction. */
+  auto add_signature(Signature sig) -> InstructionHandler { return signatures.push_back(move(sig)), *this; }
+  
+  /** @brief Sets the execution function for this instruction. */
+  auto set_execute(func<void(Instruction&,ProcessData&)> fn) -> InstructionHandler { return execute = move(fn), *this; }
 
-  /** Returns true if this instruction begins a exit control block (e.g., FOR). */
-  bool is_control_exit() const { return !open_opcode.empty(); }
+  /** @brief Returns true if this instruction begins a open control block (e.g., FOR). */
+  auto is_control_open() -> bool { return !exit_opcode.empty(); }
+
+  /** @brief Returns true if this instruction begins a exit control block (e.g., FOR). */
+  auto is_control_exit() -> bool { return !open_opcode.empty(); }
 
   /** Generates a random instruction based on the signature. */
-  Instruction generate() const {
+  auto generate() -> Instruction {
     auto inst = Instruction(opcode);
-    if (signatures.empty())
-      return inst;
+    if (signatures.empty()) return inst;
 
-    const auto& signature = Rand::pick(signatures);
-    inst.args.reserve(signature.size()); // Micro-optimization: Preallocate space
-
-    for (const auto& rule: signature)
-      inst.args.push_back(rule.generate());
+    auto& sig = Rand::pick(signatures);
+    inst.args = sig.generate();
     return inst;
   }
+
+  // ------ Member variables ------
+
+  str opcode;                                     
+  str open_opcode;                                
+  str exit_opcode;                                
+  vec<Signature> signatures;    
+  func<void(Instruction&,ProcessData&)> execute;  
 };
 
 ------------------------------
@@ -2184,20 +2202,41 @@ struct InstructionHandler {
 
 /** Central registry and dispatcher for all instruction types. */
 class InstructionInterpreter {
-  using Script = Instruction::Script;
-  using map  = unordered_map<str, InstructionHandler>;
-  using list = vector<ref<const InstructionHandler>>;
+  private:
+  
+  /** 
+   * Private constructor to enforce singleton access via get().
+   * Initializes and registers all handlers once. 
+   */
+  InstructionInterpreter():
+    handlers         (map<str,InstructionHandler>()),   // opcode -> handler
+    all_handlers     (vec<ref<InstructionHandler>>()),  // cached reference list for introspection
+    flat_handlers    (vec<ref<InstructionHandler>>()),  // Handlers for non-control instructions
+    control_handlers (vec<ref<InstructionHandler>>())   // Handlers for control instructions
+  {
+    for (auto& inst: get_instruction_handlers())
+      register_instruction(move(inst));
 
-  map handlers;           ///< opcode â†’ handler
-  list all_handlers;      ///< cached reference list for introspection
-  list flat_handlers;     ///< Handlers for non-control instructions
-  list control_handlers;  ///< Handlers for control instructions
+    // Categorize and cache handler references for quick lookup
+    all_handlers.reserve(handlers.size());
+
+    for (auto& [_, handler]: handlers) {
+      all_handlers.push_back(ref(handler));  // Add to full list
+
+      // Separate into control vs. flat based on metadata
+      if (handler.is_control_exit()) continue;
+      if (handler.is_control_open())
+        control_handlers.push_back(ref(handler));
+      else
+        flat_handlers.push_back(ref(handler));
+    }
+  }
 
   public:
 
   /** Returns the global singleton get of the InstructionInterpreter. */
-  static InstructionInterpreter& get() {
-    static InstructionInterpreter inst;
+  static auto get() -> InstructionInterpreter& {
+    static auto inst = InstructionInterpreter();
     return inst;
   }
 
@@ -2207,7 +2246,7 @@ class InstructionInterpreter {
   }
 
   /** Execute an instruction using its handler. */
-  void execute(const Instruction& inst, ProcessData& proc) const {
+  void execute(Instruction& inst, ProcessData& proc) {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
       throw runtime_error("Unknown instruction: " + inst.opcode);
@@ -2215,24 +2254,19 @@ class InstructionInterpreter {
     it->second.execute(inst, proc);
   }
 
-  /** Returns list of registered handlers. */
-  const list& get_handlers() const { return all_handlers; }
-  const list& get_flat_handlers() const { return flat_handlers; }
-  const list& get_control_handlers() const { return control_handlers; }
-
   /**
    * Generates a random list of up to `size` instructions with proper block closure.
    * May exceed size due to necessary ENDFOR-like closures.
    */
-  Script generate_script(uint size, uint max_depth=3) {
-    auto script = Script();
-    list stack; // Tracks opened control blocks
+  auto generate_script(uint size, uint max_depth=3) -> Instruction::Script {
+    auto script = Instruction::Script();
+    auto stack = vec<ref<InstructionHandler>>();  // Tracks opened control blocks
 
     while (script.size() < size) {
-      if (should_open(stack, max_depth))  // For opening control instructions
+      if (should_open(stack, max_depth))          // For opening control instructions
         open_control_block(script, stack);
       
-      else if (should_close(stack))       // For closing control instructions
+      else if (should_close(stack))               // For closing control instructions
         close_control_block(script, stack);
 
       if (!flat_handlers.empty())                 // For adding flat instructions
@@ -2246,112 +2280,126 @@ class InstructionInterpreter {
     return script;
   }
 
-  private:
+  // ------ Member variables ------
 
-  /** 
-   * Private constructor to enforce singleton access via get().
-   * Initializes and registers all handlers once. 
-   */
-  InstructionInterpreter() {
-    for (auto& inst: get_instruction_handlers())
-      register_instruction(move(inst));
+  map<str,InstructionHandler> handlers;           
+  vec<ref<InstructionHandler>> all_handlers;      
+  vec<ref<InstructionHandler>> flat_handlers;     
+  vec<ref<InstructionHandler>> control_handlers;
 
-    // Categorize and cache handler references for quick lookup
-    all_handlers.reserve(handlers.size());
-
-    for (const auto& [_, handler]: handlers) {
-      all_handlers.push_back(cref(handler));  // Add to full list
-
-      // Separate into control vs. flat based on metadata
-      if (handler.is_control_exit()) continue;
-      if (handler.is_control_open())
-        control_handlers.push_back(cref(handler));
-      else
-        flat_handlers.push_back(cref(handler));
-    }
-  }
-
-  // === Internal Helpers ===
+  // ------ Internal helpers ------
 
   /** Returns true if a control block can be opened (depth-limited, random chance). */
-  bool should_open(const list& stack, uint max_depth) const { 
+  bool should_open(vec<ref<InstructionHandler>>& stack, uint max_depth) { 
     return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
   /** Returns true if a control block can be closed (if any open, random chance). */
-  bool should_close(const list& stack) const { 
+  bool should_close(vec<ref<InstructionHandler>>& stack) { 
     return !stack.empty() && Rand::chance(4); 
   }
 
   /** Emits a random control-opener instruction and pushes it to the stack. */
-  void open_control_block(Script& script, list& stack) const {
-    const auto& handler = Rand::pick(control_handlers);
+  void open_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+    auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
 
   /** Emits the matching end-opcode of the current open control block. */
-  void close_control_block(Script& script, list& stack) const {
+  void close_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
     if (stack.empty())
       throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
     
-    const auto& opener = stack.back();
+    auto& opener = stack.back();
     script.emplace_back(opener.get().exit_opcode);
     stack.pop_back();
   }
 };
 
 ------------------------------
- FILE:  InstructionParam.hpp
- PATH:  core\instruction\InstructionParam.hpp
+ FILE:  types.hpp
+ PATH:  core\instruction\types.hpp
 ------------------------------
 
 #pragma once
 #include "core/common/imports/_all.hpp"
 
 
-/** Represents a schema used to validate and generate instruction arguments. */
-struct InstructionParam {
-  using list = vector<str>;
-  using Signature = vector<InstructionParam>;
+/** @brief Represents one argument in an instruction signature. */
+class Arg {
+  public:
 
-  /** Supported argument types. */
-  enum class Type {
-    UInt,       ///< Unsigned integer (with optional min/max)
-    Str,        ///< Variable or string identifier
-    Var         ///< Fixed set of variables
-  };
+  Arg(str type, uint min=0, uint max=0): 
+    type (move(type)),  // Parameter type: "str", "uint", or "var"
+    min  (min),         // Minimum value (for "uint" type)
+    max  (max) {}       // Maximum value (for "uint" type)
+  
+  // ------ Member variables ------
+  str type; 
+  uint min; 
+  uint max; 
+};
 
-  Type type;    ///< The argument's expected type
-  uint min = 0; ///< Minimum value (for UInt)
-  uint max = 0; ///< Maximum value (for UInt)
+/** @brief Builder for defining and generating argument signatures for instructions. */
+class Signature {
+  public:
 
-  // === Argument Generator ===
+  Signature(): 
+    args(vec<Arg>()) {}   // Initializes an empty signature
 
-  /** Returns a randomly generated argument string that matches this schema. */
-  str generate() const {
-    switch (type) {
-      case Type::UInt:  return to_string(Rand::num(min, max));
-      case Type::Str:   return Rand::pick(messages);
-      case Type::Var:   return Rand::pick(vars);
-      default:          return "<?>";  // Should never be hit
+  // === Builders ===
+
+  /** @brief Adds a string argument. */
+  auto Str() -> Signature& { return add("str"); }
+
+  /** @brief Adds a variable name argument. */
+  auto Var() -> Signature& { return add("var"); }
+
+  /** @brief Adds an unsigned integer argument. */
+  auto Uint(uint min, uint max) -> Signature& { return add("uint", min, max); }
+
+  /** @brief Adds an unsigned 8-bit integer argument (0â€“255). */
+  auto Uint8() -> Signature& { return Uint(0, 255); }
+
+  /** @brief Adds an unsigned 16-bit integer argument (0â€“65535). */
+  auto Uint16() -> Signature& { return Uint(0, 65535); }
+
+  // === Accessors ===
+
+  /** @brief Returns the full list of argument specs. */
+  auto get() -> vec<Arg>& { return args; }
+
+  /** @brief Returns the number of arguments in the signature. */
+  auto size() -> uint { return args.size(); }
+
+  // === Generator (optional utility) ===
+
+  /** @brief Generates a list of example argument values matching the signature. */
+  auto generate() -> vector<str> {
+    auto result = vector<str>();
+    for (auto& arg: args) {
+      if (arg.type == "uint")     result.push_back(to_string(Rand::num(arg.min, arg.max)));
+      else if (arg.type == "str") result.push_back(Rand::pick(messages));
+      else if (arg.type == "var") result.push_back(Rand::pick(vars));
+      else                        result.push_back("<?>");
     }
+    return result;
   }
 
-  // === Static Constructors ===
-
-  static InstructionParam Var() { return { Type::Var }; }
-  static InstructionParam Str() { return { Type::Str }; }
-  static InstructionParam UInt(uint min, uint max) { return { Type::UInt, min, max }; }
-  static InstructionParam UInt8() { return UInt(0, 255); }
-  static InstructionParam UInt16() { return UInt(0, 65535); }
-  
   private:
 
-  inline static const list vars = {"x", "y", "z"};
-  inline static const list messages = {
-    "Lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
-  };
+  // ------ Member variables ------
+  vec<Arg> args;
+
+  // ------ Constants ------
+  inline static  auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
+  inline static  auto vars = vec<str>{ "x", "y", "z" };
+
+  // ------ Internal Helpers ------
+  
+  /** @brief Adds a generic argument of given type and optional bounds. */
+  auto add(str type, uint min=0, uint max=0) -> Signature& { return args.emplace_back(move(type), min, max), *this; }
 };
 
 ------------------------------
@@ -2376,7 +2424,7 @@ inline InstructionHandler make_add() {
       { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
       { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
     },
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint lhs = proc.get_memory().get(inst.args[1]);
       uint rhs = proc.get_memory().resolve(inst.args[2]);
       proc.get_memory().set(inst.args[0], lhs + rhs);
@@ -2401,7 +2449,7 @@ inline InstructionHandler make_declare() {
   return {
     .opcode = "DECLARE",
     .signatures = {{ Param::Var(), Param::UInt16() }},
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint value = stoul(inst.args[1]);
       proc.get_memory().set(inst.args[0], value);
     },
@@ -2419,25 +2467,25 @@ inline InstructionHandler make_declare() {
 #include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
-#include "core/process/ProcessProgram.hpp"
 
 
-inline InstructionHandler make_endfor() {
-  return {
-    .opcode = "ENDFOR",
-    .open_opcode = "FOR",
-    .execute = [](const Instruction& inst, ProcessData& process) {
+auto make_endfor() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("ENDFOR")
+    .set_open("FOR")
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto& context = program.context;
 
       // Check if block is inside a FOR loop
       if (!context.matches("FOR"))
         throw runtime_error("[ENDFOR] No matching FOR block on stack.");
-      
+
       auto& frame = context.top();
+      auto& for_inst = program.script.at(frame.start);
 
       // Cache exit address if it's not set
-      auto& for_inst = program.script.at(frame.start);
       if (for_inst.exit == 0)
         for_inst.exit = program.ip + 1;
 
@@ -2445,10 +2493,8 @@ inline InstructionHandler make_endfor() {
       if (--frame.count > 0)
         return void(program.ip = frame.start);
 
-      // Loop finished - pop the context frame
       context.pop();
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -2459,16 +2505,15 @@ inline InstructionHandler make_endfor() {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
+#include "core/instruction/types.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_for() {
-  using Param = InstructionParam;
+auto make_for() -> InstructionHandler {
   
   // === Skips ahead to the matching ENDFOR. ===
-  auto skip_block = [](auto& program, const Instruction& inst) {
+  auto skip_block = [](auto& program, auto& inst) {
     
     // Use cached exit if available
     if (inst.exit != 0)
@@ -2480,8 +2525,8 @@ inline InstructionHandler make_for() {
 
     // Otherwise, scan ahead to find the matching ENDFOR
     for (uint i = start+1; i < script.size(); ++i) {
-      const auto& opcode = script[i].opcode;
-      const int delta = (opcode == "FOR") - (opcode == "ENDFOR");
+      auto& opcode = script[i].opcode;
+      int delta = (opcode == "FOR") - (opcode == "ENDFOR");
       depth += delta;
       
       // If matching ENDFOR is found, cache exit address and exit loop
@@ -2494,26 +2539,21 @@ inline InstructionHandler make_for() {
     throw runtime_error("[FOR] Mismatched FOR/ENDFOR blocks.");
   };
 
-  return {
-    .opcode = "FOR",
-    .exit_opcode = "ENDFOR",
-    .signatures = {{ Param::UInt(1, 5) }},
-    .execute = [&](const Instruction& inst, ProcessData& process) {
+  return InstructionHandler()
+    .set_opcode("FOR")
+    .set_exit("ENDFOR")
+    .add_signature(Signature().Uint(1, 5))
+
+    .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto count = stoul(inst.args[0]);
-      
-      // Skip loop entirely if loop count is zero
       if (count == 0)
-        return skip_block(program, inst);
-      
+        return skip_block(program, inst);  // Skip if count is 0
+
       auto& context = program.context;
-      auto ip = program.ip;
-      
-      // Push context if this FOR hasn't been visited yet
-      if (!context.starts_at(ip))
-        context.push("FOR", ip, count);
-    },
-  };
+      if (!context.matches(program.ip))
+        context.push("FOR", program.ip, count);
+    });
 }
 
 ------------------------------
@@ -2523,23 +2563,20 @@ inline InstructionHandler make_for() {
 
 #pragma once
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
+#include "core/instruction/types.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_print() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "PRINT",
-    .signatures = {
-      { Param::Str() },
-      { Param::Str(), Param::Var()},
-    },
-    .execute = [](const Instruction& inst, ProcessData& process) {
+auto make_print() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("PRINT")
+    .add_signature(Signature().Str())
+    .add_signature(Signature().Str().Var())
+    
+    .set_execute([](Instruction& inst, ProcessData& process) {
       process.log(inst.args[0]);
-    },
-  };
+    });
 }
 
 ------------------------------
@@ -2549,21 +2586,19 @@ inline InstructionHandler make_print() {
 
 #pragma once
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_sleep() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "SLEEP",
-    .signatures = {{ Param::UInt8() }},
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+auto make_sleep() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("SLEEP")
+    .add_signature(Signature().Var())  // Expect a single uint8 argument
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
       uint duration = stoul(inst.args[0]);
-      proc.get_state().sleep_for(duration);
-    },
-  };
+      process.control.sleep_for(duration);
+    });
 }
 
 ------------------------------
@@ -2588,7 +2623,7 @@ inline InstructionHandler make_subtract() {
       { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
       { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
     },
-    .execute = [](const Instruction& inst, ProcessData& proc) {
+    .execute = [](Instruction& inst, ProcessData& proc) {
       uint lhs = proc.get_memory().get(inst.args[1]);
       uint rhs = proc.get_memory().resolve(inst.args[2]);
       proc.get_memory().set(inst.args[0], (lhs > rhs) ? (lhs-rhs) : 0);
@@ -2608,11 +2643,11 @@ inline InstructionHandler make_subtract() {
 #include "endfor.hpp"
 #include "for.hpp"
 #include "print.hpp"
-// #include "sleep.hpp"
+#include "sleep.hpp"
 // #include "subtract.hpp"
 
 
-auto get_instruction_handlers() -> vector<InstructionHandler> {
+auto get_instruction_handlers() -> vec<InstructionHandler> {
   return {
     // make_add(),
     // make_declare(),
@@ -2779,25 +2814,23 @@ namespace csopesy::Position {
 
 
 class Process {
-  using Interpreter = InstructionInterpreter;
-  using Script = Instruction::Script;
-  inline static Interpreter& interpreter = Interpreter::get();
-  
-  public:
-  // === Components ===
-  ProcessData data;         // Data container of process
-
-  // === Methods ===
+  public:  
 
   /** @brief Creates a process with a random instruction script. */
   Process(uint pid, str name, uint size): 
-    data(pid, move(name), move(interpreter.generate_script(size))) {}
+    data(           // Data container of process
+      ProcessData(
+        pid,
+        move(name),
+        move(interpreter.generate_script(size))
+      )
+    ) {}
   
   /** @brief Appends a log message (e.g. from PRINT instruction). */
   void log(str line) { data.log(move(line)); }
 
   /** @brief Executes a single instruction step for the given process. */
-  bool step() {
+  auto step() -> bool {
     if (data.program.finished())
       return true;          // Process is done
 
@@ -2807,10 +2840,14 @@ class Process {
 
     // Advance to next instruction if IP unchanged
     if (ip == data.program.ip)
-      data.program.ip++ ;
+      data.program.ip++;
 
     return false;
   }
+
+  // ------ Member variables ------
+  inline static auto& interpreter = InstructionInterpreter::get();
+  ProcessData data;
 };
 
 ------------------------------
@@ -2832,18 +2869,20 @@ class Process {
 class ProcessControl {
   public:
 
-  uint sleep_ticks = 0;
-  
-  // === Methods ===
+  ProcessControl():
+    sleep_ticks (0) {}
   
   /** @brief Returns true if the process is currently sleeping. */
-  bool sleeping() const { return sleep_ticks > 0; }    
-
+  auto sleeping() const -> bool { return sleep_ticks > 0; }    
+  
   /** @brief Puts the process to sleep for a number of ticks. */
   void sleep_for(uint ticks) { sleep_ticks = ticks; }
-
+  
   /** @brief Advances sleep state by one tick, if sleeping. */
   void tick() { if (sleep_ticks > 0) --sleep_ticks; }
+  
+  // ------ Member variables ------
+  uint sleep_ticks;
 };
 
 ------------------------------
@@ -2868,34 +2907,31 @@ class ProcessControl {
  * Process class, which owns and manipulates this data.
  */
 class ProcessData {
-  using Script = Instruction::Script;
-  using list = vector<str>;
-
   public:
-  // === Identity ===
-  uint id = 0;            // Unique process ID
-  str name = "";          // Human-readable process name (e.g. p01, p02)
-  
-  // === Properties ===
-  list logs = {};         // Output logs collected from PRINT instructions
-  
-  // === Scheduling/Execution Metadata ===
-  int core_id = -1;       // ID of the core this process is assigned to (-1 if unassigned)
-  Time stime = {};        // Timestamp of when the process was created
-  
-  // === Components ===
-  ProcessProgram program; // List of instructions and execution context
-  ProcessControl control; // Sleep controller of the process
-  ProcessMemory memory;   // Key-value variable store (e.g. for DECLARE, ADD, etc.)
-
-  // === Methods ===
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, Script script): 
-    id(id), name(move(name)), program(script), stime(Clock::now()) {}
+  ProcessData(uint id, str name, Instruction::Script script): 
+    id      (id),                     // Unique process ID
+    name    (move(name)),             // Human-readable process name (e.g. p01, p02)
+    logs    (vec<str>()),             // Output logs collected from PRINT instructions
+    core_id (-1),                     // ID of the core this process is assigned to (-1 if unassigned)
+    stime   (Clock::now()),           // Timestamp of when the process was created
+    program (ProcessProgram(script)), // List of instructions and execution context
+    control (ProcessControl()),       // Sleep controller of the process
+    memory  (ProcessMemory()) {}      // Key-value variable store (e.g. for DECLARE, ADD, etc.)
 
   /** @brief Append a log message (used for PRINT instructions) */
   void log(str line) { logs.push_back(move(line)); }
+
+  // ------ Member variables ------
+  uint id;            
+  str name;          
+  vec<str> logs;         
+  int core_id;       
+  Time stime;        
+  ProcessProgram program; 
+  ProcessControl control; 
+  ProcessMemory memory;   
 };
 
 ------------------------------
@@ -2908,32 +2944,35 @@ class ProcessData {
 #include "types.hpp"
 
 
-class ProcessMemory {
-  using map = unordered_map<str, uint>;
-  
+class ProcessMemory { 
   public:
-  map symbol_table;
+  
+  ProcessMemory():
+    symbol_table (map<str,uint>()) {}
 
   /** Memory mutators */
   void set(str key, uint value) {
     symbol_table[move(key)] = value;
   }
-
+  
   /** Memory accessors */
-  uint get(const str& key) const {
+  auto get(const str& key) const -> uint {
     auto it = symbol_table.find(key);
     return it != symbol_table.end() ? it->second : 0;
   }
   
   /** Resolves a token as a literal or variable lookup */
-  uint resolve(const str& token) const {
+  auto resolve(const str& token) const -> uint {
     return isdigit(token[0]) ? stoul(token) : get(token);
   }
-
+  
   /** Exposes internal variable bindings */
-  const auto& get_symbol_table() const {
+  auto get_symbol_table() -> map<str,uint>& {
     return symbol_table;
   }
+
+  // ------ Member variables ------
+  map<str,uint> symbol_table;
 };
 
 ------------------------------
@@ -2953,27 +2992,22 @@ class ProcessMemory {
  * and a control context stack (used by FOR loops).
  */
 class ProcessProgram {
-  using Script = Instruction::Script;
-  using Stack = ContextStack;
-
   public:
-  Script script = {}; // Flat list of all program instructions
-  Stack context = {}; // Stack of active loop contexts
-  uint ip = 0;        // Current instruction pointer
 
-  // === Methods ===
-  
   /** @brief Loads an instruction script. */
-  ProcessProgram(Script script): script(move(script)) {}
+  ProcessProgram(Instruction::Script script): 
+    script  (Instruction::Script(move(script))),  // Flat list of all program instructions
+    context (ContextStack()),                     // Stack of active loop contexts
+    ip      (0) {}                                // Current instruction pointer
 
   /** @brief Returns the size of the script. */
-  uint size() const { return script.size(); }
+  auto size() -> uint { return script.size(); }
   
   /** @brief Check if the program has completed execution. */
-  bool finished() const { return ip >= script.size(); }
+  auto finished() -> bool { return ip >= script.size(); }
 
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
-  str render_script() const {
+  auto render_script() -> str {
     // Compute the width needed to align inst indices
     uint width = count_digits(script.size()-1);
     auto out = osstream();
@@ -2986,7 +3020,7 @@ class ProcessProgram {
   }
 
   /** @brief Returns a formatted view of the current context stack. */
-  str render_context() const {
+  auto render_context() -> str {
     // If there are no loop frames, return empty
     if (context.empty()) 
       return "  <empty>\n";  
@@ -3002,13 +3036,18 @@ class ProcessProgram {
     return out.str();
   }
 
-  // ========================
-  // === Private Members ====
-  // ========================
+  // ------ Member variables ------
+
+  Instruction::Script script;
+  ContextStack context;
+  uint ip;
+
+  // ------ Internal logic ------
+
   private:
 
   /** @brief Helper to renders a single instruction line from the script with formatting. */
-  str render_line(uint idx, uint width) const {
+  auto render_line(uint idx, uint width) -> str {
     char marker = (idx == ip) ? '>' : ' ';
     auto opcode = script[idx].opcode.substr(0, 10);
     auto line = osstream();
@@ -3022,7 +3061,7 @@ class ProcessProgram {
   }
 
   /** @brief Helper to renders a single loop frame from the context stack with formatting. */
-  str render_frame(uint idx, uint width) const {
+  auto render_frame(uint idx, uint width) -> str {
     auto& frame = context.at(idx);
     auto& inst = script[frame.start];
     auto out = osstream();
@@ -3061,21 +3100,25 @@ struct ContextFrame {
   * and iteration counts during process execution.
   */
 class ContextStack {
-  using Stack = vector<ContextFrame>;
-  Stack stack;
-
   public:
+
+  ContextStack():
+    stack (vec<ContextFrame>()) {}
   
   /** Checks if top frame matches the opcode. */
-  bool matches(const str& opcode) const { return !empty() && top().opcode == opcode; }
+  auto matches(const str& opcode) -> bool { 
+    return !empty() && top().opcode == opcode; 
+  }
 
   /** Checks if top frame matches the opcode, start address, and has an initialized exit address. */
-  bool matches(const str& opcode, uint start) const {
+  auto matches(const str& opcode, uint start) -> bool {
     return !empty() && top().opcode == opcode && top().start == start;
   }
 
   /** Returns true if the top frame starts at the given instruction pointer. */
-  bool starts_at(uint ip) const { return !empty() && top().start == ip; }
+  auto matches(uint ip) -> bool { 
+    return !empty() && top().start == ip; 
+  }
 
   /** Push a new loop context onto the stack. */
   void push(str opcode, uint start, uint count) {
@@ -3086,21 +3129,24 @@ class ContextStack {
   void pop() { stack.pop_back(); }
 
   /** Check if the loop context stack is empty. */
-  bool empty() const { return stack.empty(); }
+  auto empty() -> bool { return stack.empty(); }
 
   /** Get the number of loop contexts in the stack. */
-  uint size() const { return stack.size(); }
+  auto size() -> uint { return stack.size(); }
 
   /** Clear all loop contexts from the stack. */
   void clear() { stack.clear(); }
 
   /** Access the top loop context */
-  ContextFrame& top() { return stack.back(); }
-  const ContextFrame& top() const { return stack.back(); }
+  auto top() -> ContextFrame& { return stack.back(); }
 
   /** Access a loop context by index. */
-  ContextFrame& at(uint index) { return stack.at(index); }
-  const ContextFrame& at(uint index) const { return stack.at(index); }
+  auto at(uint index) -> ContextFrame& { return stack.at(index); }
+
+  private:
+
+  // ------ Member variables ------
+  vec<ContextFrame> stack;
 };
 
 ------------------------------
@@ -3129,7 +3175,7 @@ class Scheduler {
 
   Scheduler():
     names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
-    ticks      (0u),                    // Global tick counter
+    ticks      (0),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
@@ -3184,7 +3230,7 @@ class Scheduler {
   private:
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
-  auto interval_has_elapsed() const -> bool {
+  auto interval_has_elapsed() -> bool {
     uint freq = data.config.batch_process_freq;
     return freq > 0 && (ticks % freq == 0);
   }
@@ -3252,25 +3298,25 @@ class SchedulerConfig {
   }
 
   /** @brief Sets the value of a configuration key. */
-  auto set(auto&& key, auto&& value) -> bool {
+  auto set(const str& key, const str& value) -> bool {
     if (!entries.contains(key)) return false;
     entries[key] = value;
     return true;
   }
 
   /** @brief Retrieves the string value for a given key. */
-  auto get(auto&& key) const -> str {
+  auto get(const str& key) -> str {
     auto it = entries.find(key);
     return it != entries.end() ? it->second : "";
   }
 
   /** @brief Retrieves the string value for a given key as a uint. */
-  auto get_uint(auto&& key) const -> uint {
+  auto get_uint(const str& key) -> uint {
     return stoul(get(key));
   }
 
   /** @brief Retrieves the string value for a given key as bool. */
-  auto get_bool(auto&& key) const -> bool {
+  auto get_bool(const str& key) -> bool {
     auto v = get(key);
     return v == "1" || v == "true";
   }
@@ -3319,10 +3365,10 @@ class SchedulerData {
   }
 
   /** @brief Check if a process with the given ID exists. */
-  auto has_process(uint id) const -> bool { return proc_table.contains(id); }
+  auto has_process(uint id) -> bool { return proc_table.contains(id); }
 
   /** @brief Check if a process with the given name exists. */
-  auto has_process(const str& name) const -> bool { return !!find_process_by_name(name, false); }
+  auto has_process(const str& name) -> bool { return !!find_process_by_name(name, false); }
   
   /** @brief Returns a reference wrapper to the process with the given PID. */
   auto get_process(uint id) -> Process& { return *proc_table.at(id); }
@@ -3347,7 +3393,7 @@ class SchedulerData {
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
-  auto find_process_by_name(const str& name, bool throw_if_missing=true) const -> Process* {
+  auto find_process_by_name(const str& name, bool throw_if_missing=true) -> Process* {
     for (auto& [_, proc]: proc_table)
       if (proc->data.name == name)
         return proc.get();
@@ -3607,13 +3653,13 @@ class ShellScreen {
   void switch_to_main() { switch_to(0); }
 
   /** Returns the screen ID string. */
-  auto get_id() const -> uint { return storage.get<uint>("screen.id"); }
+  auto get_id() -> uint { return storage.get<uint>("screen.id"); }
 
   /** Helper: Check if screen matches an exact string (e.g. "p01") */
-  auto is(uint id) const -> bool { return get_id() == id; }
+  auto is(uint id) -> bool { return get_id() == id; }
 
   /** True if current screen is the main screen. */
-  auto is_main() const -> bool { return get_id() == 0; }
+  auto is_main() -> bool { return get_id() == 0; }
 
   // ------ Member variables ------
   ShellStorage& storage;
@@ -3654,7 +3700,7 @@ class ShellStorage {
   void set(const str& key, Type value) { storage[key] = move(value); }
 
   /** Check if a key exists in the storage. */
-  auto has(const str& key) const -> bool { return storage.contains(key); }
+  auto has(const str& key) -> bool { return storage.contains(key); }
 
   /** Remove a key from storage. */
   void remove(const str& key) { storage.erase(key); }

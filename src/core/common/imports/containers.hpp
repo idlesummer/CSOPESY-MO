@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <list>
 #include <map>
 #include <queue>
 #include <unordered_map>
@@ -9,6 +10,7 @@
 
 
 using std::array;
+using std::list;
 using std::make_pair;
 using std::out_of_range;
 using std::pair;

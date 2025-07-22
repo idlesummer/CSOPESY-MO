@@ -22,10 +22,10 @@ class InstructionHandler {
   auto set_opcode(str op) -> InstructionHandler { return opcode = move(op), *this; }
 
   /** @brief Sets the matching open opcode (used by control exit instructions). */
-  auto set_open_opcode(str op) -> InstructionHandler { return open_opcode = move(op), *this; }
+  auto set_open(str op) -> InstructionHandler { return open_opcode = move(op), *this; }
   
   /** @brief Sets the matching exit opcode (used by control open instructions). */
-  auto set_exit_opcode(str op) -> InstructionHandler { return exit_opcode = move(op), *this; }
+  auto set_exit(str op) -> InstructionHandler { return exit_opcode = move(op), *this; }
   
   /** @brief Adds a signature definition to the instruction. */
   auto add_signature(Signature sig) -> InstructionHandler { return signatures.push_back(move(sig)), *this; }

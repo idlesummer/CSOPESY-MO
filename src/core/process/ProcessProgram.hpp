@@ -81,15 +81,14 @@ class ProcessProgram {
   /** @brief Helper to renders a single loop frame from the context stack with formatting. */
   auto render_frame(uint idx, uint width) -> str {
     auto& frame = context.at(idx);
-    auto& inst = script[frame.start];
+    auto& inst = script[frame.ip];
     auto out = osstream();
 
-    out << format("  [{}] {:<6}", idx, frame.opcode);
-    out << format(" @{:0{}}", frame.start, width);
+    out << format("  [{}]", idx);
+    out << format(" @{:0{}}", frame.ip, width);
     out << format("  exit: {:0{}}", inst.exit, width);
-    out << format("  count: {}", frame.count);
+    out << format("  count: {}", frame.ctr);
     out << '\n';
-
     return out.str();
   }
 };

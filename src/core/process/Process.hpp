@@ -24,8 +24,8 @@ class Process {
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
     if (data.program.finished())
-      return true;          // Process is done
-
+      return true;          
+      
     auto ip = data.program.ip;
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);

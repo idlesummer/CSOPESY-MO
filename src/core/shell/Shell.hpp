@@ -9,7 +9,7 @@
  * including handlers that use Shell&. This constructor populates
  * the CommandInterpreter with all available commands.
  */
-inline Shell::Shell(EventEmitter& emitter): 
+Shell::Shell(EventEmitter& emitter): 
     global      (emitter),                    // Reference to the global EventEmitter
     interpreter (CommandInterpreter::get()),  // Instance of the command interpreter
     thread      (),                           // Shell thread (starts later in start())

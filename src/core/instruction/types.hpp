@@ -27,16 +27,19 @@ class Signature {
   // === Builders ===
 
   /** @brief Adds a string argument. */
-  auto strT() -> Signature& { return add("str"); }
+  auto Str() -> Signature& { return add("str"); }
 
   /** @brief Adds a variable name argument. */
-  auto varT() -> Signature& { return add("var"); }
+  auto Var() -> Signature& { return add("var"); }
 
-  /** @brief Adds an unsigned integer argument with optional bounds. */
-  auto uintT(uint min=0, uint max=65535) -> Signature& { return add("uint", min, max); }
+  /** @brief Adds an unsigned integer argument. */
+  auto Uint(uint min, uint max) -> Signature& { return add("uint", min, max); }
 
-  /** @brief Adds a generic argument of given type and optional bounds. */
-  auto add(str type, uint min=0, uint max=0) -> Signature& { return args.emplace_back(move(type), min, max), *this; }
+  /** @brief Adds an unsigned 8-bit integer argument (0–255). */
+  auto Uint8() -> Signature& { return Uint(0, 255); }
+
+  /** @brief Adds an unsigned 16-bit integer argument (0–65535). */
+  auto Uint16() -> Signature& { return Uint(0, 65535); }
 
   // === Accessors ===
 
@@ -68,4 +71,9 @@ class Signature {
   // ------ Constants ------
   inline static  auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
   inline static  auto vars = vec<str>{ "x", "y", "z" };
+
+  // ------ Internal Helpers ------
+  
+  /** @brief Adds a generic argument of given type and optional bounds. */
+  auto add(str type, uint min=0, uint max=0) -> Signature& { return args.emplace_back(move(type), min, max), *this; }
 };

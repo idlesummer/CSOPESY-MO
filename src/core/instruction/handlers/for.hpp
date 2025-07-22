@@ -7,6 +7,7 @@
 
 
 auto make_for() -> InstructionHandler {
+  
   // === Skips ahead to the matching ENDFOR. ===
   auto skip_block = [](auto& program, auto& inst) {
     
@@ -36,17 +37,19 @@ auto make_for() -> InstructionHandler {
 
   return InstructionHandler()
     .set_opcode("FOR")
-    .set_exit_opcode("ENDFOR")
-    .add_signature(Signature().uintT(1, 5))
-    
-    .set_execute([&](Instruction& inst, ProcessData& proc) {
-      auto& program = proc.program;
+    .set_exit("ENDFOR")
+    .add_signature(Signature().Uint(1, 5))
+
+    .set_execute([&](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
       auto count = stoul(inst.args[0]);
+
+      // Skip if counter is 0
       if (count == 0)
-        return skip_block(program, inst);  // Skip if count is 0
+        return skip_block(program, inst);
 
       auto& context = program.context;
-      if (!context.starts_at(program.ip))
-        context.push("FOR", program.ip, count);
+      if (!context.top_ip_is(program.ip))
+        context.push(program.ip, count);
     });
 }
