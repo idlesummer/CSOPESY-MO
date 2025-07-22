@@ -10,22 +10,23 @@ auto make_sleep() -> InstructionHandler {
     .add_signature(Signature().Uint(0, 3))
 
     .set_execute([](Instruction& inst, ProcessData& process) {
-      auto& control = process.control;
-
-      // Already sleeping — just tick and return
-      if (control.sleeping())
-        return void(control.tick());
-      
       auto& program = process.program;
+      auto& control = process.control;
       auto& context = program.context;
 
-      // If we already pushed a SLEEP marker at this IP, we’re done
-      if (context.top_ip_is(program.ip));
-        return void(context.pop());  // Remove SLEEP marker after waking
+      // Phase 1: First-time setup
+      if (!context.top_ip_is(program.ip)) {
+        context.push(program.ip);
+        control.sleep_for(stoul(inst.args[0]));
+      }
 
-      // First-time execution, push marker and sleep
-      uint duration = stoul(inst.args[0]);
-      context.push(program.ip);
-      control.sleep_for(duration);
+      // Phase 2: Sleep body
+      if (!control.sleeping())  // If not sleeping anymore, advance
+        context.pop();        
+
+      else {                    // If still sleeping, block ip advancing
+        control.tick();
+        program.block = true;
+      }
     });
 }

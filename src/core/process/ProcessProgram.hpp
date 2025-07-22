@@ -16,6 +16,7 @@ class ProcessProgram {
   ProcessProgram(Instruction::Script script): 
     script  (Instruction::Script(move(script))),  // Flat list of all program instructions
     context (ContextStack()),                     // Stack of active loop contexts
+    block   (false),                              // For blocking instruction pointer advancing
     ip      (0) {}                                // Current instruction pointer
 
   /** @brief Returns the size of the script. */
@@ -59,6 +60,7 @@ class ProcessProgram {
   Instruction::Script script;
   ContextStack context;
   uint ip;
+  bool block;
 
   // ------ Internal logic ------
 

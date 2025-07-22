@@ -16,7 +16,7 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
     make_endfor(),
     make_for(),
     make_print(),
-    // make_sleep(),
+    make_sleep(),
     // make_subtract(),
   };
 }

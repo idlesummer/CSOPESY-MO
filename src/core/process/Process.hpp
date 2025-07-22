@@ -23,17 +23,20 @@ class Process {
 
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
-    if (data.program.finished())
+    auto& program = data.program;
+    program.block = false;        // Reset blocking instruction
+
+    if (program.finished())
       return true;          
       
-    auto ip = data.program.ip;
+    auto ip = program.ip; 
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);
 
-    // Advance to next instruction if IP unchanged
-    if (ip == data.program.ip)
+    // Only auto-advance if not blocked and IP unchanged
+    if (!program.block && ip == data.program.ip)
       data.program.ip++;
-
+      
     return false;
   }
 
