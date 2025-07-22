@@ -33,7 +33,7 @@ class ProcessProgram {
 
   /** @brief Advances the instruction pointer by a relative offset. */
   void move_ip(int offset) {
-    bool underflows = offset < 0 && ip < static_cast<uint>(-offset);
+    bool underflows = offset < 0 && ip < cast<uint>(-offset);
     ip_was_set = true;
     ip = underflows ? 0 : ip + offset;
   }

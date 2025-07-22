@@ -45,8 +45,6 @@ auto make_for() -> InstructionHandler {
       auto& program = process.program;
       auto count = stoul(inst.args[0]);
 
-      cout << format("FOR @{} pushed with count = {}\n", program.ip, count);
-
       // Skip if counter is 0
       if (count == 0)
         return skip_block(program, inst);

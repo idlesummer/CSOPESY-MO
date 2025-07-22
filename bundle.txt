@@ -1172,6 +1172,7 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/
 
 #pragma once
 #include <array>
+#include <list>
 #include <map>
 #include <queue>
 #include <unordered_map>
@@ -1181,6 +1182,7 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/
 
 
 using std::array;
+using std::list;
 using std::make_pair;
 using std::out_of_range;
 using std::pair;
@@ -2477,21 +2479,20 @@ auto make_endfor() -> InstructionHandler {
     .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto& context = program.context;
+      auto& frame = context.top();
+      auto& frame_inst = program.script.at(frame.ip);
 
       // Check if block is inside a FOR loop
-      if (!context.matches("FOR"))
+      if (frame_inst.opcode != "FOR")
         throw runtime_error("[ENDFOR] No matching FOR block on stack.");
 
-      auto& frame = context.top();
-      auto& for_inst = program.script.at(frame.start);
-
       // Cache exit address if it's not set
-      if (for_inst.exit == 0)
-        for_inst.exit = program.ip + 1;
+      if (inst.exit == 0)
+        inst.exit = program.ip + 1;
 
       // Decrement loop count; jump back if more iterations remain
-      if (--frame.count > 0)
-        return void(program.ip = frame.start);
+      if (--frame.ctr > 0)
+        return void(program.set_ip(frame.ip+1));
 
       context.pop();
     });
@@ -2517,10 +2518,10 @@ auto make_for() -> InstructionHandler {
     
     // Use cached exit if available
     if (inst.exit != 0)
-      return void(program.ip = inst.exit);
+      return void(program.set_ip(inst.exit));
     
-    auto start = program.ip;
     auto& script = program.script;
+    uint start = program.ip;
     uint depth = 1;
 
     // Otherwise, scan ahead to find the matching ENDFOR
@@ -2531,7 +2532,8 @@ auto make_for() -> InstructionHandler {
       
       // If matching ENDFOR is found, cache exit address and exit loop
       if (depth == 0) {
-        program.ip = inst.exit = i + 1;
+        inst.exit = i + 1;
+        program.set_ip(inst.exit);
         return;
       }
     }
@@ -2547,12 +2549,16 @@ auto make_for() -> InstructionHandler {
     .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto count = stoul(inst.args[0]);
+
+      cout << format("FOR @{} pushed with count = {}\n", program.ip, count);
+
+      // Skip if counter is 0
       if (count == 0)
-        return skip_block(program, inst);  // Skip if count is 0
+        return skip_block(program, inst);
 
       auto& context = program.context;
-      if (!context.matches(program.ip))
-        context.push("FOR", program.ip, count);
+      if (!context.top_ip_is(program.ip))
+        context.push(program.ip, count);
     });
 }
 
@@ -2593,11 +2599,27 @@ auto make_print() -> InstructionHandler {
 auto make_sleep() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SLEEP")
-    .add_signature(Signature().Var())  // Expect a single uint8 argument
+    .add_signature(Signature().Uint(0, 3))
 
     .set_execute([](Instruction& inst, ProcessData& process) {
-      uint duration = stoul(inst.args[0]);
-      process.control.sleep_for(duration);
+      auto& program = process.program;
+      auto& control = process.control;
+      auto& context = program.context;
+
+      // Phase 1: First-time setup
+      if (!context.top_ip_is(program.ip)) {
+        context.push(program.ip);
+        control.sleep_for(stoul(inst.args[0]));
+      }
+
+      // Phase 2: Sleep body
+      if (!control.sleeping())  // If not sleeping anymore, advance
+        context.pop();        
+
+      else {                    // If still sleeping, block ip advancing
+        control.tick();
+        program.move_ip(0);
+      }
     });
 }
 
@@ -2654,7 +2676,7 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
     make_endfor(),
     make_for(),
     make_print(),
-    // make_sleep(),
+    make_sleep(),
     // make_subtract(),
   };
 }
@@ -2831,17 +2853,19 @@ class Process {
 
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
-    if (data.program.finished())
-      return true;          // Process is done
-
-    auto ip = data.program.ip;
+    auto& program = data.program;
+    if (program.finished())
+      return true;          
+      
+    auto ip = program.ip; 
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);
 
-    // Advance to next instruction if IP unchanged
-    if (ip == data.program.ip)
-      data.program.ip++;
-
+    // Don't auto-advance ip if it was not manually set
+    if (!program.ip_was_set)
+      program.ip++;
+    
+    program.ip_was_set = false;
     return false;
   }
 
@@ -2996,15 +3020,29 @@ class ProcessProgram {
 
   /** @brief Loads an instruction script. */
   ProcessProgram(Instruction::Script script): 
-    script  (Instruction::Script(move(script))),  // Flat list of all program instructions
-    context (ContextStack()),                     // Stack of active loop contexts
-    ip      (0) {}                                // Current instruction pointer
+    script     (Instruction::Script(move(script))),  // Flat list of all program instructions
+    context    (ContextStack()),                     // Stack of active loop contexts
+    ip_was_set (false),                              // For blocking instruction pointer advancing
+    ip         (0) {}                                // Current instruction pointer
 
   /** @brief Returns the size of the script. */
   auto size() -> uint { return script.size(); }
   
   /** @brief Check if the program has completed execution. */
   auto finished() -> bool { return ip >= script.size(); }
+
+  /** @brief Manually sets the instruction pointer to a specific address. */
+  void set_ip(uint addr) {
+    ip_was_set = true;
+    ip = addr;
+  }
+
+  /** @brief Advances the instruction pointer by a relative offset. */
+  void move_ip(int offset) {
+    bool underflows = offset < 0 && ip < cast<uint>(-offset);
+    ip_was_set = true;
+    ip = underflows ? 0 : ip + offset;
+  }
 
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
   auto render_script() -> str {
@@ -3040,6 +3078,7 @@ class ProcessProgram {
 
   Instruction::Script script;
   ContextStack context;
+  bool ip_was_set;
   uint ip;
 
   // ------ Internal logic ------
@@ -3063,15 +3102,14 @@ class ProcessProgram {
   /** @brief Helper to renders a single loop frame from the context stack with formatting. */
   auto render_frame(uint idx, uint width) -> str {
     auto& frame = context.at(idx);
-    auto& inst = script[frame.start];
+    auto& inst = script[frame.ip];
     auto out = osstream();
 
-    out << format("  [{}] {:<6}", idx, frame.opcode);
-    out << format(" @{:0{}}", frame.start, width);
+    out << format("  [{}]", idx);
+    out << format(" @{:0{}}", frame.ip, width);
     out << format("  exit: {:0{}}", inst.exit, width);
-    out << format("  count: {}", frame.count);
+    out << format("  count: {}", frame.ctr);
     out << '\n';
-
     return out.str();
   }
 };
@@ -3088,59 +3126,45 @@ class ProcessProgram {
 
 /** A loop frame from a FOR-like instruction. */
 struct ContextFrame {
-  str  opcode;  // Control frame opcode, e.g., "FOR"
-  uint start;   // Address where the loop starts
-  uint count;   // Number of iterations remaining
+  uint ip;    // Address where the loop starts
+  uint ctr;   // Number of iterations remaining
 };
 
 /**
   * @brief A stack structure used for managing nested FOR loop contexts.
   * 
   * Stores control frames for tracking loop entry points, exit conditions, 
-  * and iteration counts during process execution.
+  * and iteration counts during process execution. Could also be used to
+  * track sleep.
   */
 class ContextStack {
   public:
 
   ContextStack():
     stack (vec<ContextFrame>()) {}
-  
-  /** Checks if top frame matches the opcode. */
-  auto matches(const str& opcode) -> bool { 
-    return !empty() && top().opcode == opcode; 
-  }
-
-  /** Checks if top frame matches the opcode, start address, and has an initialized exit address. */
-  auto matches(const str& opcode, uint start) -> bool {
-    return !empty() && top().opcode == opcode && top().start == start;
-  }
 
   /** Returns true if the top frame starts at the given instruction pointer. */
-  auto matches(uint ip) -> bool { 
-    return !empty() && top().start == ip; 
-  }
+  auto top_ip_is(uint ip) -> bool {  return !empty() && top().ip == ip; }
 
-  /** Push a new loop context onto the stack. */
-  void push(str opcode, uint start, uint count) {
-    stack.emplace_back(move(opcode), start, count);
-  }
+  /** Push a new context onto the stack. */
+  void push(uint start, uint count=0) { stack.emplace_back(start, count); }
 
-  /** Pop the top loop context from the stack. */
+  /** Pop the top context from the stack. */
   void pop() { stack.pop_back(); }
 
-  /** Check if the loop context stack is empty. */
+  /** Check if the context stack is empty. */
   auto empty() -> bool { return stack.empty(); }
 
-  /** Get the number of loop contexts in the stack. */
+  /** Get the number of contexts in the stack. */
   auto size() -> uint { return stack.size(); }
 
-  /** Clear all loop contexts from the stack. */
+  /** Clear all contexts from the stack. */
   void clear() { stack.clear(); }
 
-  /** Access the top loop context */
+  /** Access the top context */
   auto top() -> ContextFrame& { return stack.back(); }
 
-  /** Access a loop context by index. */
+  /** Access a context by index. */
   auto at(uint index) -> ContextFrame& { return stack.at(index); }
 
   private:
@@ -3199,6 +3223,9 @@ class Scheduler {
     // TODO: Clean/update paging info  
     // memory.tick(data);
 
+    // Tick sleeping processes
+    tick_sleeping_processes();
+      
     // Assign new processes to idle cores
     strategy.tick(data);
     ++ticks;
@@ -3261,8 +3288,26 @@ class Scheduler {
 
       if (process.data.program.finished())
         data.finished_pids.push_back(process.data.id);
-      else
-        data.rqueue.push(process.data.id);
+      else if (process.data.control.sleeping())
+        data.wqueue.push_back(process.data.id);     
+      else                                      
+        data.rqueue.push(process.data.id);  // Not finished, not sleeping â†’ just resume later
+    }
+  }
+
+  void tick_sleeping_processes() {
+    auto& wqueue = data.wqueue;
+    for (auto it = wqueue.begin(); it != wqueue.end(); ) {
+      auto& process = data.get_process(*it);
+      process.step();             // decrement sleep_ticks
+
+      if (!process.data.control.sleeping()) {
+        data.rqueue.push(*it);    // ready again
+        it = wqueue.erase(it);    // remove from wqueue
+        continue;
+      }
+
+      ++it;                       // still sleeping
     }
   }
 };
@@ -3349,6 +3394,7 @@ class SchedulerData {
   SchedulerData():
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
+    wqueue        (list<uint>()),              // Ready queue of processes waiting to be scheduled
     proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
     next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
     config        (SchedulerConfig()),          // Runtime configuration settings
@@ -3383,6 +3429,7 @@ class SchedulerData {
 
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
+  list<uint> wqueue;                 
   map<uint, uptr<Process>> proc_table;
   SchedulerConfig config;             
   CoreManager cores;                  
@@ -3609,7 +3656,7 @@ auto get_scheduler_strategy(str& name, SchedulerConfig& config) -> SchedulerStra
  * including handlers that use Shell&. This constructor populates
  * the CommandInterpreter with all available commands.
  */
-inline Shell::Shell(EventEmitter& emitter): 
+Shell::Shell(EventEmitter& emitter): 
     global      (emitter),                    // Reference to the global EventEmitter
     interpreter (CommandInterpreter::get()),  // Instance of the command interpreter
     thread      (),                           // Shell thread (starts later in start())
