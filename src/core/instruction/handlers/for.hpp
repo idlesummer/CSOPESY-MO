@@ -13,10 +13,10 @@ auto make_for() -> InstructionHandler {
     
     // Use cached exit if available
     if (inst.exit != 0)
-      return void(program.ip = inst.exit);
+      return void(program.set_ip(inst.exit));
     
-    auto start = program.ip;
     auto& script = program.script;
+    uint start = program.ip;
     uint depth = 1;
 
     // Otherwise, scan ahead to find the matching ENDFOR
@@ -27,7 +27,8 @@ auto make_for() -> InstructionHandler {
       
       // If matching ENDFOR is found, cache exit address and exit loop
       if (depth == 0) {
-        program.ip = inst.exit = i + 1;
+        inst.exit = i + 1;
+        program.set_ip(inst.exit);
         return;
       }
     }
@@ -43,6 +44,8 @@ auto make_for() -> InstructionHandler {
     .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto count = stoul(inst.args[0]);
+
+      cout << format("FOR @{} pushed with count = {}\n", program.ip, count);
 
       // Skip if counter is 0
       if (count == 0)

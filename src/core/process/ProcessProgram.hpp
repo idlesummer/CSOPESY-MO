@@ -14,16 +14,29 @@ class ProcessProgram {
 
   /** @brief Loads an instruction script. */
   ProcessProgram(Instruction::Script script): 
-    script  (Instruction::Script(move(script))),  // Flat list of all program instructions
-    context (ContextStack()),                     // Stack of active loop contexts
-    block   (false),                              // For blocking instruction pointer advancing
-    ip      (0) {}                                // Current instruction pointer
+    script     (Instruction::Script(move(script))),  // Flat list of all program instructions
+    context    (ContextStack()),                     // Stack of active loop contexts
+    ip_was_set (false),                              // For blocking instruction pointer advancing
+    ip         (0) {}                                // Current instruction pointer
 
   /** @brief Returns the size of the script. */
   auto size() -> uint { return script.size(); }
   
   /** @brief Check if the program has completed execution. */
   auto finished() -> bool { return ip >= script.size(); }
+
+  /** @brief Manually sets the instruction pointer to a specific address. */
+  void set_ip(uint addr) {
+    ip_was_set = true;
+    ip = addr;
+  }
+
+  /** @brief Advances the instruction pointer by a relative offset. */
+  void move_ip(int offset) {
+    bool underflows = offset < 0 && ip < static_cast<uint>(-offset);
+    ip_was_set = true;
+    ip = underflows ? 0 : ip + offset;
+  }
 
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
   auto render_script() -> str {
@@ -59,8 +72,8 @@ class ProcessProgram {
 
   Instruction::Script script;
   ContextStack context;
+  bool ip_was_set;
   uint ip;
-  bool block;
 
   // ------ Internal logic ------
 

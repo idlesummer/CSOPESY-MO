@@ -24,8 +24,6 @@ class Process {
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
     auto& program = data.program;
-    program.block = false;        // Reset blocking instruction
-
     if (program.finished())
       return true;          
       
@@ -33,10 +31,11 @@ class Process {
     auto& inst = data.program.script.at(ip);
     interpreter.execute(inst, data);
 
-    // Only auto-advance if not blocked and IP unchanged
-    if (!program.block && ip == data.program.ip)
-      data.program.ip++;
-      
+    // Don't auto-advance ip if it was not manually set
+    if (!program.ip_was_set)
+      program.ip++;
+    
+    program.ip_was_set = false;
     return false;
   }
 

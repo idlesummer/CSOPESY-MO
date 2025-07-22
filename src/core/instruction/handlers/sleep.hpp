@@ -26,7 +26,7 @@ auto make_sleep() -> InstructionHandler {
 
       else {                    // If still sleeping, block ip advancing
         control.tick();
-        program.block = true;
+        program.move_ip(0);
       }
     });
 }
