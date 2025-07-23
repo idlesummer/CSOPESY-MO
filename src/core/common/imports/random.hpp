@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
-#include <Random>
+#include <random>
 #include <stdexcept>
 #include "casts.hpp"
 #include "containers.hpp"
