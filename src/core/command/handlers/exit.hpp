@@ -17,8 +17,7 @@ auto make_exit() -> CommandHandler {
       auto& screen = shell.screen;
 
       if (screen.is_main()) {
-        shell.set_active(false);
-        shell.emit("shutdown");
+        shell.stop();
 
       } else {
         screen.switch_to_main();
