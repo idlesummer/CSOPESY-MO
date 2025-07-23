@@ -15,6 +15,7 @@ class CommandHandler {
     min_args (0u),          // Minimum number of required arguments
     max_args (UINT_MAX),    // Maximum number of allowed arguments
     flags    (vec<Flag>()), // Valid flags for this command
+    disabled (true),        // Commands are disabled by default
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
 
@@ -24,6 +25,7 @@ class CommandHandler {
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
   auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
+  auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
     
@@ -34,6 +36,7 @@ class CommandHandler {
   uint min_args;                
   uint max_args;              
   vec<Flag> flags;                       
+  bool disabled;
   func<optional<str>(Command&,Shell&)> validate; 
   func<void(Command&,Shell&)> execute;
 };

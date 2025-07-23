@@ -14,6 +14,7 @@ auto make_initialize() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     .set_flags({})
+    .set_disabled(false)
 
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;
@@ -46,8 +47,13 @@ auto make_initialize() -> CommandHandler {
       config.set("initialized", true);
       shell.scheduler.set_config(move(config));
 
-      cout << BANNER << '\n';
+      system("cls");
+      cout << format("{}\n", BANNER);
       cout << "[Shell] Scheduler config loaded.\n";
       storage.remove("initialize.cache");
+
+      // Enable other commands
+      for (auto& [name, handler]: shell.interpreter.handlers)
+        handler.set_disabled(false);
     });
 }

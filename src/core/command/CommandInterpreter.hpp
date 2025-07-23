@@ -42,6 +42,10 @@ class CommandInterpreter {
 
     auto& handler = it->second;
 
+    // Check if command is disabled
+    if (handler.disabled)
+      return void(cout << "[Shell] This command is unavailable.\n");
+
     // Check for unknown/misused flags
     if (invalid_flags(command, handler))
       return void(cout << format("[Shell] Invalid or misused flag(s) for '{}'\n", command.name));
