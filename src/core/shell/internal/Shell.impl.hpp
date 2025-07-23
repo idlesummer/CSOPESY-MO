@@ -16,15 +16,15 @@ class Shell {
   public:
 
   Shell(): 
-      global        (EventEmitter()),             // Reference to the global EventEmitter
-      interpreter   (CommandInterpreter::get()),  // Instance of the command interpreter
-      shell_thread  (),                           // Shell thread (starts later in start())
-      system_thread (),                           // Shell thread (starts later in start())
-      shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
-      system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
-      scheduler     (Scheduler()),                // Owned scheduler instance
-      storage       (ShellStorage()),             // Storage for dynamic shell/session data
-      screen        (storage) {}                  // Owned instance of shell screen manager
+    global        (EventEmitter()),             // Reference to the global EventEmitter
+    interpreter   (CommandInterpreter::get()),  // Instance of the command interpreter
+    shell_thread  (),                           // Shell thread (starts later in start())
+    system_thread (),                           // Shell thread (starts later in start())
+    shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    scheduler     (Scheduler()),                // Owned scheduler instance
+    storage       (ShellStorage()),             // Storage for dynamic shell/session data
+    screen        (storage) {}                  // Owned instance of shell screen manager
 
   /** @brief Starts shell and system threads and blocks until shutdown. */
   void start() {
