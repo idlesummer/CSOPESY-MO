@@ -4,14 +4,14 @@
 
 int main() {
   auto running = atomic_bool(true); // Global run flag for main loop
-  auto global  = EventEmitter();    // Central event system
-  auto shell   = Shell(global);     // Main shell interface
+  auto global = EventEmitter();     // Central event system
+  auto shell = Shell(global);       // Main shell interface
 
   // Listen for shutdown event to stop main loop
   global.on("shutdown", [&] {
+    running = false;
     cout << "[Shell] Shutting down...";
     sleep_for(200ms);
-    running = false;
   });
 
   shell.start();  // Launch shell thread

@@ -41,7 +41,6 @@ class Shell {
       active = false;
       if (thread.joinable()) 
         thread.join();
-
       system("cls");
     }
 
@@ -66,7 +65,6 @@ class Shell {
 
     /** @brief Emits an event using the global EventEmitter. */
     void emit(str name, any data={}) { global.emit(move(name), move(data)); }
-
 
     // ------ Member variables ------
 

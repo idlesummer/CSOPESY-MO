@@ -17,7 +17,7 @@ auto make_config() -> CommandHandler {
       auto& config = shell.scheduler.data.config;
       cout << "╭──────────────────────── Scheduler Configuration ───────────────────────╮\n";
 
-      for (auto& [key, val] : config.all()) {
+      for (auto& [key, val]: config.all()) {
         auto display = ""s;
 
         if (val.type() == typeid(str))

@@ -11,6 +11,7 @@ auto make_exit() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     .set_flags({})
+    .set_disabled(false)
 
     .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;

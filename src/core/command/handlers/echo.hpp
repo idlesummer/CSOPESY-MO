@@ -11,8 +11,10 @@ auto make_echo() -> CommandHandler {
     .set_min_args(1)
     .set_max_args(UINT_MAX)
     .set_flags({})
+    .set_disabled(false)
+
     .set_execute([](Command& command, Shell&) {
-      for (auto& arg : command.args)
+      for (auto& arg: command.args)
         cout << arg << ' ';
       cout << '\n';
     });

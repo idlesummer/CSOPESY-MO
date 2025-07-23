@@ -39,11 +39,11 @@ auto make_process_smi() -> CommandHandler {
       cout << format("ID: {}\n", process.data.core_id);
 
       cout << "Logs:\n";
-      for (auto& log : process.data.logs)
-        cout << log << '\n';
+      for (auto& log: process.data.logs)
+        cout << format("{}\n", log);
 
-      cout << "Current instruction line: " << program.ip << '\n';
-      cout << "Lines of code: " << program.script.size() << "\n\n";
+      cout << format("Current instruction line: {}\n", program.ip);
+      cout << format("Lines of code: {}\n\n", program.script.size());
 
       shell.storage.remove("process-smi.pid");
     });

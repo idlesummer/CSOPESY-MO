@@ -11,7 +11,8 @@ auto make_cls() -> CommandHandler {
     .set_desc("Clear screen contents.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
+    .set_disabled(false)
+
     .set_execute([](Command&, Shell&) {
       system("cls");
     });
