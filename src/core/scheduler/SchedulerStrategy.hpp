@@ -14,26 +14,28 @@
 class SchedulerStrategy {
   public:
 
-  using PreemptHandler = Core::func;
+  using PreemptFactory = func<Core::func(SchedulerData&)>;
   using TickHandler = func<void(SchedulerData&)>;
 
   SchedulerStrategy():
     name            (""s),                // Strategy identifier (e.g., "fcfs", "rr")
-    config          (Config()),  // Strategy-specific configuration
     tick_handler    (nullptr),            // Main strategy logic executed each tick
-    preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
+    preempt_factory (nullptr) {}          // Core-level preemption policy (optional)
 
   /** @brief Sets the strategy name. */
   auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
-
-  /** @brief Sets the configuration for this strategy. */
-  auto set_config(Config c) -> SchedulerStrategy& { return config = move(c), *this; }
 
   /** @brief Sets the main logic to run on each tick. */
   auto on_tick(TickHandler t) -> SchedulerStrategy& { return tick_handler = move(t), *this; }
 
   /** @brief Sets the per-core preemption policy. */
-  auto on_preempt(PreemptHandler p) -> SchedulerStrategy& { return preempt_handler = move(p), *this; }
+  auto on_preempt(PreemptFactory f) -> SchedulerStrategy& { return preempt_factory = move(f), *this;}
+
+  /** @brief Returns a Core-level preemption lambda bound to current SchedulerData. */
+  auto get_preempt_handler(SchedulerData& data) -> Core::func {
+    if (!preempt_factory) return nullptr;
+    return preempt_factory(data);
+  }
 
   // === Execution ===
 
@@ -47,7 +49,6 @@ class SchedulerStrategy {
   // ------ Member variables ------
 
   str name;              
-  Config config;         
   TickHandler tick_handler;       
-  PreemptHandler preempt_handler;
+  PreemptFactory preempt_factory;
 };

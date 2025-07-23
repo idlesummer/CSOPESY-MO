@@ -53,15 +53,18 @@ class Scheduler {
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
-    strategy = get_scheduler_strategy(config.gets("scheduler"), config);
+    strategy = get_scheduler_strategy(config.gets("scheduler"));
     data.cores.resize(config.getu("num-cpu"));                        
+
+    // Create the preempt handler from the factory method
+    auto preempt_handler = strategy.get_preempt_handler(data);
     
     // Inject in each core the preemption handler from strategy
-    if (strategy.preempt_handler != nullptr)         
+    if (preempt_handler != nullptr)
       for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(strategy.preempt_handler);
+        ref.get().set_preempt(preempt_handler);
 
-    data.config = move(config);                                   
+    data.config = move(config); // Must come last                               
   }
 
   // ------ Member variables ------
