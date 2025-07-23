@@ -31,13 +31,6 @@ class ProcessProgram {
     ip = addr;
   }
 
-  /** @brief Advances the instruction pointer by a relative offset. */
-  void move_ip(int offset) {
-    bool underflows = offset < 0 && ip < cast<uint>(-offset);
-    ip_was_set = true;
-    ip = underflows ? 0 : ip + offset;
-  }
-
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
   auto render_script() -> str {
     // Compute the width needed to align inst indices

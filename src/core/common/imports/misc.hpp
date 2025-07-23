@@ -8,6 +8,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 using std::runtime_error;
@@ -52,3 +53,9 @@ template <typename Type>
 auto move_iter(Type it) { 
   return std::make_move_iterator(it); 
 }
+
+// === Helpers ===
+
+/** @brief True if Type matches any in Types... */
+template <typename Type, typename... Types>
+static constexpr bool is_any_of = (std::is_same_v<std::decay_t<Type>, Types> || ...);

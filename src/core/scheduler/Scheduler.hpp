@@ -57,7 +57,7 @@ class Scheduler {
     data.cores.resize(config.num_cpu);                            
     
     // Inject in each core the preemption handler from strategy
-    if (strategy.preempt_handler)         
+    if (strategy.preempt_handler != nullptr)         
       for (auto& ref: data.cores.get_all())                       
         ref.get().set_preempt(strategy.preempt_handler);
 

@@ -22,7 +22,7 @@ class ProcessData {
     id      (id),                     // Unique process ID
     name    (move(name)),             // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),             // Output logs collected from PRINT instructions
-    core_id (-1),                     // ID of the core this process is assigned to (-1 if unassigned)
+    core_id (0u),                     // ID of the core this process is assigned to (0 if unassigned)
     stime   (Clock::now()),           // Timestamp of when the process was created
     program (ProcessProgram(script)), // List of instructions and execution context
     control (ProcessControl()),       // Sleep controller of the process
@@ -35,7 +35,7 @@ class ProcessData {
   uint id;            
   str name;          
   vec<str> logs;         
-  int core_id;       
+  uint core_id;       
   Time stime;        
   ProcessProgram program; 
   ProcessControl control; 

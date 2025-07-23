@@ -16,17 +16,17 @@ auto make_sleep() -> InstructionHandler {
 
       // Phase 1: First-time setup
       if (!context.top_ip_is(program.ip)) {
-        context.push(program.ip);
-        control.sleep_for(stoul(inst.args[0]));
+        context.push(program.ip);               // Mark SLEEP as active on the context stack
+        control.sleep_for(stoul(inst.args[0])); // Start sleep for given duration (in ticks)
       }
 
       // Phase 2: Sleep body
-      if (!control.sleeping())  // If not sleeping anymore, advance
+      if (!control.sleeping())                  // Done sleeping, remove context frame
         context.pop();        
 
-      else {                    // If still sleeping, block ip advancing
-        control.tick();
-        program.move_ip(0);
+      else {                                    
+        control.tick();                         // Still sleeping, consume one tick
+        program.set_ip(program.ip);             // Block ip auto-increment by setting manually
       }
     });
 }

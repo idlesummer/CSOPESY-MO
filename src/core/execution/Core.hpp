@@ -32,9 +32,9 @@ class Core {
   /** @brief Constructs a core with the given ID and starts the thread. */
   Core(uint id=0): 
     id          (id),                 // Core ID
-    job         (nullptr),            // Pointer to the currently assigned process (if any)
     job_ticks   (0),                  // Number of ticks the current process has been running
     can_release (false),              // Whether the process is eligible for release by the Scheduler
+    job         (nullptr),            // Pointer to the currently assigned process (if any)
     preempt     (nullptr),            // Optional strategy-injected logic
     active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
     thread      ()                    // Background ticking thread
@@ -72,9 +72,9 @@ class Core {
   // ------ Member variables ------
 
   uint id;                      
-  Process* job; 
   uint job_ticks;       
   bool can_release;   
+  Process* job; 
   func preempt;    
   atomic_bool active;   
   Thread thread; 

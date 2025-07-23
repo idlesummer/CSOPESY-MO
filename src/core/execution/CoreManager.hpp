@@ -32,9 +32,9 @@ class CoreManager {
   /** @brief Clears and reinitializes the core list with the specified number of cores */
   void resize(uint size) {
     cores.clear();                // Destroys all existing cores
-    cores.reserve(size);          // Optional: preallocate to avoid reallocations
+    cores.reserve(size);          // Preallocate to avoid reallocations
     for (uint i=0; i < size; ++i)
-      cores.emplace_back(make_unique<Core>(i));
+      cores.emplace_back(make_unique<Core>(i+1));
   }
 
   /** @brief Returns number of cores. */
@@ -83,12 +83,12 @@ class CoreManager {
   /** @brief Returns references to cores that satisfy the given filter condition. */
   template <typename Func = bool(*)(uptr<Core>&)>
   auto filter_cores(Func func) -> vec<ref<Core>> {
-    auto result = vec<ref<Core>>();           // Create a list of core reference wrappers
-    result.reserve(cores.size());             // Optional: preallocate to avoid reallocations
+    auto result = vec<ref<Core>>();     // Create a list of core reference wrappers
+    result.reserve(cores.size());       // Optional: preallocate to avoid reallocations
 
     for (auto& ptr: cores)
-      if (ptr != nullptr && func(ptr))        // Only include non-null cores that pass the filter
-        result.push_back(ref(*ptr));          // Store a reference wrapper of the matching core
+      if (ptr != nullptr && func(ptr))  // Only include non-null cores that pass the filter
+        result.push_back(ref(*ptr));    // Store a reference wrapper of the matching core
     
     return result;
   }
@@ -96,9 +96,9 @@ class CoreManager {
   /** @brief Extracts a list of uint values from all busy cores using the given accessor. */
   template <typename Func = bool(*)(Core&)>
   auto extract_ids(Func func) -> vec<uint> {
-    auto busy = get_busy();                   // Store once to reuse
+    auto busy = get_busy();             // Store once to reuse
     auto result = vec<uint>();
-    result.reserve(busy.size());              // Reserve exactly what we need
+    result.reserve(busy.size());        // Reserve exactly what we need
 
     for (auto& ref: busy)
       result.push_back(func(ref.get()));
