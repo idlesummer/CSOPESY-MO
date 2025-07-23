@@ -12,7 +12,7 @@
  * - Preemptive: proc_table are interrupted after a time quantum.
  * - Immediate arrival: proc_table are placed into the ready queue directly.
  */
-auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
+auto make_rr_strategy(Config& config) -> SchedulerStrategy {
   return SchedulerStrategy()
     .set_name("rr")
     .set_config(config)
@@ -30,7 +30,7 @@ auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
       }
     })
 
-    .on_preempt([quantum=config.quantum_cycles](Core& core) {
+    .on_preempt([quantum=config.getu("quantum-cycles")](Core& core) {
       return core.job_ticks >= quantum;  
     });
 }

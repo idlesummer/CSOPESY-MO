@@ -32,7 +32,7 @@ class Scheduler {
 
   /** @brief Executes the active strategy logic and increments the tick count. */
   void tick() {
-    if (!data.config.initialized) return;
+    if (!data.config.getb("initialized")) return;
 
     // Generate batch processes
     generate_processes();
@@ -52,9 +52,9 @@ class Scheduler {
   }
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
-  void set_config(SchedulerConfig config) {
-    strategy = get_scheduler_strategy(config.scheduler, config); 
-    data.cores.resize(config.num_cpu);                            
+  void set_config(Config config) {
+    strategy = get_scheduler_strategy(config.gets("scheduler"), config);
+    data.cores.resize(config.getu("num-cpu"));                        
     
     // Inject in each core the preemption handler from strategy
     if (strategy.preempt_handler != nullptr)         
@@ -78,7 +78,7 @@ class Scheduler {
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
   auto interval_has_elapsed() -> bool {
-    uint freq = data.config.batch_process_freq;
+    uint freq = data.config.getu("batch-process-freq");
     return freq > 0 && (ticks % freq == 0);
   }
 
@@ -86,7 +86,10 @@ class Scheduler {
   void generate_processes() {
     auto make_process = [&](uint pid, str name="") {
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto size  = Rand::num(data.config.min_ins, data.config.max_ins);
+      auto min = data.config.getu("min-ins");
+      auto max = data.config.getu("max-ins");
+      auto size = Rand::num(min, max);
+
       data.add_process(Process(pid, move(pname), size));
       data.rqueue.push(pid);
     };

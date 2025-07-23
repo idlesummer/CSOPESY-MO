@@ -19,7 +19,7 @@ class SchedulerStrategy {
 
   SchedulerStrategy():
     name            (""s),                // Strategy identifier (e.g., "fcfs", "rr")
-    config          (SchedulerConfig()),  // Strategy-specific configuration
+    config          (Config()),  // Strategy-specific configuration
     tick_handler    (nullptr),            // Main strategy logic executed each tick
     preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
 
@@ -27,7 +27,7 @@ class SchedulerStrategy {
   auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
 
   /** @brief Sets the configuration for this strategy. */
-  auto set_config(SchedulerConfig c) -> SchedulerStrategy& { return config = move(c), *this; }
+  auto set_config(Config c) -> SchedulerStrategy& { return config = move(c), *this; }
 
   /** @brief Sets the main logic to run on each tick. */
   auto on_tick(TickHandler t) -> SchedulerStrategy& { return tick_handler = move(t), *this; }
@@ -47,7 +47,7 @@ class SchedulerStrategy {
   // ------ Member variables ------
 
   str name;              
-  SchedulerConfig config;         
+  Config config;         
   TickHandler tick_handler;       
   PreemptHandler preempt_handler;
 };

@@ -36,8 +36,19 @@ using std::from_chars;
 constexpr auto NPOS = string::npos;
 
 // === Validation ===
-inline bool is_num(const std::string& s) {
+
+/** @brief Returns true if the string consists only of digit characters (0–9). */
+auto is_digits(const std::string& s) -> bool {
   return !s.empty() && std::ranges::all_of(s, [](char c) {
     return std::isdigit(static_cast<unsigned char>(c));
   });
+}
+
+// === Case conversions ===
+
+/** @brief Returns a lowercase copy of the given string. */
+auto lowercase(str raw) -> str {
+  for (char& c: raw)
+    c = tolower(c);
+  return raw;
 }

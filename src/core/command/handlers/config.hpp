@@ -16,14 +16,22 @@ auto make_config() -> CommandHandler {
       auto& config = shell.scheduler.data.config;
       cout << "\n";
       cout << "╭──────────────────────── Scheduler Configuration ───────────────────────╮\n";
-      cout << format("│ {:<22} │ {:<45} │\n", "Scheduler", config.scheduler);
-      cout << format("│ {:<22} │ {:<45} │\n", "CPU Cores", config.num_cpu);
-      cout << format("│ {:<22} │ {:<45} │\n", "Quantum Cycles", config.quantum_cycles);
-      cout << format("│ {:<22} │ {:<45} │\n", "Batch Process Freq", config.batch_process_freq);
-      cout << format("│ {:<22} │ {:<45} │\n", "Min Instructions", config.min_ins);
-      cout << format("│ {:<22} │ {:<45} │\n", "Max Instructions", config.max_ins);
-      cout << format("│ {:<22} │ {:<45} │\n", "Delays Per Exec", config.delays_per_exec);
-      cout << format("│ {:<22} │ {:<45} │\n", "Initialized", config.initialized ? "Yes" : "No");
+
+      for (auto& [key, val] : config.all()) {
+        auto display = ""s;
+
+        if (val.type() == typeid(str))
+          display = format("\"{}\"", cast<str>(val));
+        else if (val.type() == typeid(uint))
+          display = to_string(cast<uint>(val));
+        else if (val.type() == typeid(bool))
+          display = cast<bool>(val) ? "true" : "false";
+        else
+          display = "<unsupported>";
+
+        cout << format("│ {:<22} │ {:<45} │\n", key, display);
+      }
+
       cout << "╰────────────────────────────────────────────────────────────────────────╯\n";
     });
 }

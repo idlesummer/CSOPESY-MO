@@ -16,7 +16,8 @@ auto make_report_util() -> CommandHandler {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
-      if (!shell.scheduler.data.config.initialized)
+      auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
 
       return nullopt;

@@ -11,7 +11,7 @@
  * - Lazy: cores pull from the queue only when idle
  * - Immediate-arrival: proc_table are enqueued as soon as they arrive
  */
-auto make_fcfs_strategy(SchedulerConfig& config) -> SchedulerStrategy {
+auto make_fcfs_strategy(Config& config) -> SchedulerStrategy {
 
   // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
   return SchedulerStrategy()

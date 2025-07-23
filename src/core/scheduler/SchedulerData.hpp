@@ -15,12 +15,12 @@ class SchedulerData {
   public:
   
   SchedulerData():
+    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
-    wqueue        (list<uint>()),              // Ready queue of processes waiting to be scheduled
-    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    wqueue        (list<uint>()),               // Ready queue of processes waiting to be scheduled
     next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
-    config        (SchedulerConfig()),          // Runtime configuration settings
+    config        (Config()),          // Runtime configuration settings
     cores         (CoreManager()) {}            // Owned instance of scheduler core manager
 
   /** @brief Returns a unique, incrementing process ID. */
@@ -50,13 +50,13 @@ class SchedulerData {
 
   // ------ Member variables ------
 
+  map<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  map<uint, uptr<Process>> proc_table;
-  SchedulerConfig config;             
+  Config config;             
   CoreManager cores;                  
-  atomic_uint next_pid = 1;           
+  atomic_uint next_pid;           
 
   // ------ Internal logic ------
 

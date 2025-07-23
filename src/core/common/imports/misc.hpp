@@ -38,9 +38,9 @@ using std::nullopt;
 // === STL Utility Aliases ===
 using std::ranges::all_of;
 using std::ranges::any_of;
+using std::ranges::count_if;
 using std::ranges::find_if;
 using std::ranges::none_of;
-using std::ranges::count_if;
 using std::any_cast;
 using std::cref;
 using std::erase_if;
@@ -53,9 +53,3 @@ template <typename Type>
 auto move_iter(Type it) { 
   return std::make_move_iterator(it); 
 }
-
-// === Helpers ===
-
-/** @brief True if Type matches any in Types... */
-template <typename Type, typename... Types>
-static constexpr bool is_any_of = (std::is_same_v<std::decay_t<Type>, Types> || ...);

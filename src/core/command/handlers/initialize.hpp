@@ -16,8 +16,10 @@ auto make_initialize() -> CommandHandler {
     .set_flags({})
 
     .set_validate([](Command& command, Shell& shell) -> Str {
+      auto config = shell.scheduler.data.config;
+      
       // Check if the scheduler has already been initialized
-      if (shell.scheduler.data.config.initialized)
+      if (config.getb("initialized"))
         return "Already initialized.";
 
       // Check if the file could not be opened or is empty
@@ -33,18 +35,16 @@ auto make_initialize() -> CommandHandler {
     .set_execute([](Command& command, Shell& shell) {
       auto& storage = shell.storage;
       auto& lines = storage.get<vec<str>>("initialize.cache");
-      auto config = SchedulerConfig();
+      auto config = Config();
 
-      for (auto& line : lines) {
+      for (auto& line: lines) {
         str key, value;
         isstream(line) >> key >> value;
-
-        if (!config.set(key, move(value)))
-          cout << format("[Shell] Unknown config key: {}\n", key);
+        config.set(key, Config::parse(value));
       }
 
-      config.initialized = true;
-      shell.scheduler.set_config(config);
+      config.set("initialized", true);
+      shell.scheduler.set_config(move(config));
 
       cout << BANNER << '\n';
       cout << "[Shell] Scheduler config loaded.\n";

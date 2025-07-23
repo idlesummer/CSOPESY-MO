@@ -15,11 +15,14 @@ auto make_scheduler_start() -> CommandHandler {
     .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
-      if (!shell.scheduler.data.config.initialized)
-        return "[Shell] Please run 'initialize' first.";
+      auto config = shell.scheduler.data.config;
+      
+      // Check if the scheduler has already been initialized
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
 
       if (shell.scheduler.generating)
-        return "[Shell] Dummy process generation already active.";
+        return "Dummy process generation already active.";
 
       return nullopt;
     })
