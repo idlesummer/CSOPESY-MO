@@ -11,10 +11,10 @@ auto make_config() -> CommandHandler {
     .set_desc("Displays the current scheduler configuration.")
     .set_min_args(0)
     .set_max_args(0)
+    .set_disabled(false)
 
     .set_execute([](Command&, Shell& shell) {
       auto& config = shell.scheduler.data.config;
-      cout << "\n";
       cout << "╭──────────────────────── Scheduler Configuration ───────────────────────╮\n";
 
       for (auto& [key, val] : config.all()) {
