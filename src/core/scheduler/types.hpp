@@ -11,7 +11,7 @@ class Config {
   public:
 
   Config():
-    entries (ordered_map<str,any>())
+    entries (ordered_map<str,any>())  // Ordered map (alphabetically) of scheduler configs
   {
     set("scheduler", "fcfs"s);
     set("num-cpu", 1u);
@@ -24,28 +24,10 @@ class Config {
   }
 
   /** @brief Sets the value of a configuration key. */
-  void set(const str& key, any value) {
-    entries[key] = move(value);
-  }
-
-  /** @brief Gets the value of a configuration key with expected type. */
-  template <typename Type>
-  auto get(const str& key) -> Type {
-    if (!entries.contains(key))
-      throw runtime_error(format("Missing config key '{}'", key));
-
-    try {
-      return cast<Type>(entries.at(key));
-
-    } catch (bad_any_cast& e) {
-      throw runtime_error(format("Config key '{}' has wrong type: {}", key, e.what()));
-    }
-  }
+  void set(const str& key, any value) { entries[key] = move(value); }
 
   /** @brief Returns true if key exists. */
-  auto has(const str& key) const -> bool {
-    return entries.contains(key);
-  }
+  auto has(const str& key) const -> bool { return entries.contains(key); }
 
   // ------ Getters ------
   
@@ -83,4 +65,20 @@ class Config {
 
   // ------ Member variables ------
   ordered_map<str,any> entries;
+
+  // ------ Internal helpers ------
+
+  /** @brief Gets the value of a configuration key with expected type. */
+  template <typename Type>
+  auto get(const str& key) -> Type {
+    if (!entries.contains(key))
+      throw runtime_error(format("Missing config key '{}'", key));
+
+    try {
+      return cast<Type>(entries.at(key));
+
+    } catch (bad_any_cast& e) {
+      throw runtime_error(format("Config key '{}' has wrong type: {}", key, e.what()));
+    }
+  }
 };
