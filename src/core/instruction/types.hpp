@@ -75,5 +75,7 @@ class Signature {
   // ------ Internal Helpers ------
   
   /** @brief Adds a generic argument of given type and optional bounds. */
-  auto add(str type, uint min=0, uint max=0) -> Signature& { return args.emplace_back(move(type), min, max), *this; }
+  auto add(str type, uint min=0, uint max=0) -> Signature& { 
+    return args.emplace_back(move(type), min, max), *this; 
+  }
 };
