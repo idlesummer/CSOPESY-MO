@@ -30,7 +30,7 @@ auto make_report_util() -> CommandHandler {
       auto& finished = data.finished_pids;
 
       auto log = ofstream("csopesylog.txt");
-      auto separator = "─────────────────────────────────────────────\n";
+      auto separator = "────────────────────────────────────────────────────────────\n";
 
       cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;

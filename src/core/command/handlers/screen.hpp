@@ -44,7 +44,7 @@ auto make_screen() -> CommandHandler {
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
         cout << format("Cores used: {} / {}\n\n", busy, size);
-        cout << "\033[38;5;33m─────────────────────────────────────────────\033[0m\n";
+        cout << "\033[38;5;33m────────────────────────────────────────────────────────────\033[0m\n";
         cout << "Running processes:\n";
 
         for (uint pid : cores.get_running_pids()) {
@@ -72,7 +72,7 @@ auto make_screen() -> CommandHandler {
           );
         }
 
-        cout << "\033[38;5;33m─────────────────────────────────────────────\033[0m\n";
+        cout << "\033[38;5;33m────────────────────────────────────────────────────────────\033[0m\n";
       }
 
       // === -s: Spawn and switch to new process screen
