@@ -31,6 +31,7 @@ auto make_rr_strategy() -> SchedulerStrategy {
 
     .on_preempt([](SchedulerData& data) -> Core::func {
       auto quantum = data.config.getu("quantum-cycles");
+      
       return [quantum](Core& core) -> bool {
         return core.job_ticks >= quantum;
       };

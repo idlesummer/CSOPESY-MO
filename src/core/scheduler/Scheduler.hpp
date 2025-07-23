@@ -40,7 +40,7 @@ class Scheduler {
     // Release finished or preempted cores
     release_processes();
 
-    // TODO: Clean/update paging info  
+    /** TODO: Clean/update paging info. */ 
     // memory.tick(data);
 
     // Tick sleeping processes
