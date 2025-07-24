@@ -10,7 +10,6 @@ auto make_report_util() -> CommandHandler {
     .set_desc("Generates a CPU unitilization report.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       if (!shell.screen.is_main())

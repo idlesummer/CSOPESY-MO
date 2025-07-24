@@ -12,7 +12,6 @@ auto make_scheduler_start() -> CommandHandler {
     .set_desc("Starts periodic dummy process generation every 'batch_process_freq' ticks.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;

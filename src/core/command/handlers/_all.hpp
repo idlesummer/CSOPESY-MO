@@ -13,6 +13,7 @@
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
 #include "test.hpp"
+#include "text.hpp"
 
   
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -29,5 +30,6 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_stop(),
     make_screen(),
     make_test(),
+    make_text(),
   };
 }

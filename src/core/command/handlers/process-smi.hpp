@@ -12,7 +12,6 @@ auto make_process_smi() -> CommandHandler {
     .set_desc("Shows the current process status, logs, and info.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
 
     .set_validate([](Command& command, Shell& shell) -> Str {
       if (shell.screen.is_main())

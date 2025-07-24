@@ -11,7 +11,6 @@ auto make_util() -> CommandHandler {
     .set_desc("Generates a report of running and Finished processes to csopesylog.txt")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
 
     .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.screen.is_main())

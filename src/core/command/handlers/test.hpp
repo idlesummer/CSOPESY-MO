@@ -13,7 +13,7 @@ auto make_test() -> CommandHandler {
     .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({{ "-r", false }})
+    .add_flag({ "-r", false })
 
     .set_execute([](Command& command, Shell& shell) {
       auto& interpreter = InstructionInterpreter::get();

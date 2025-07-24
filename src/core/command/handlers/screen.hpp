@@ -12,7 +12,9 @@ auto make_screen() -> CommandHandler {
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
+    .add_flag({ "-s", true })
+    .add_flag({ "-r", true })
+    .add_flag({ "-ls", false })
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");

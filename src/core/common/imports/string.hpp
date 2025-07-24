@@ -28,8 +28,8 @@ using isstream = std::istringstream;
 using osstream = std::ostringstream;
 
 // === Formatting & Parsing ===
-using std::format;
 using std::errc;
+using std::format;
 using std::from_chars;
 
 // === Constants ===

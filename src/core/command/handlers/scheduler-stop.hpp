@@ -10,7 +10,6 @@ auto make_scheduler_stop() -> CommandHandler {
     .set_desc("Stops generating dummy processes.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;

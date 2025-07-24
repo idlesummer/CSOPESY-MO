@@ -24,7 +24,7 @@ class CommandHandler {
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
-  auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
+  auto add_flag(const Flag& value) -> CommandHandler& { return flags.push_back(value), *this; }
   auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }

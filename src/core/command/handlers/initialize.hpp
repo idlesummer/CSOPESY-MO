@@ -13,7 +13,6 @@ auto make_initialize() -> CommandHandler {
     .set_desc("Initializes the processor configuration of the application.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     .set_disabled(false)
 
     .set_validate([](Command& command, Shell& shell) -> Str {

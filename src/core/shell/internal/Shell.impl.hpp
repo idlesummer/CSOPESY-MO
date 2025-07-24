@@ -2,6 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/common/constants/banner.hpp"
 #include "core/common/utility/Ansi.hpp"
+#include "core/common/utility/Text.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
@@ -79,12 +80,8 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    // Initialize terminal settings
-    Ansi::enable();
-    enable_unicode();
-    
-    // Initialize command handlers
-    register_commands();
+    Text::enable();       // Prepare terminal settings for output
+    register_commands();  // Initialize command handlers
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */
