@@ -820,7 +820,7 @@ auto make_screen() -> CommandHandler {
         if (process_exists(name))
           return void(cout << format("Process '{}' already exists\n", name));
 
-        scheduler.enqueue_process(name);
+        scheduler.generate_process(name);
         cout << format("\nWaiting for process creation: {}", name);
         auto created = false;
 
@@ -3229,7 +3229,7 @@ class Scheduler {
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
   /** Adds a user-named process to the pending generation vec<str>. */
-  void enqueue_process(str name) { names.push_back(move(name)); }
+  void generate_process(str name) { names.push_back(move(name)); }
 
   /** Enables or disables automatic process generation each tick. */
   void generate(bool flag) { generating = flag; }

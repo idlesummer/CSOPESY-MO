@@ -87,7 +87,7 @@ auto make_screen() -> CommandHandler {
         if (process_exists(name))
           return void(cout << format("Process '{}' already exists\n", name));
 
-        scheduler.enqueue_process(name);
+        scheduler.generate_process(name);
         cout << format("\nWaiting for process creation: {}", name);
         auto created = false;
 

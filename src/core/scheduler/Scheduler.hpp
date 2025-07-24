@@ -18,14 +18,14 @@ class Scheduler {
   public:
 
   Scheduler():
-    names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
-    ticks      (0),                    // Global tick counter
+    names      (vec<str>()),            // Deferred generation list for user-inserted process table
+    ticks      (0),                     // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
-    data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
+    data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
   /** Adds a user-named process to the pending generation vec<str>. */
-  void enqueue_process(str name) { names.push_back(move(name)); }
+  void generate_process(str name) { names.push_back(move(name)); }
 
   /** Enables or disables automatic process generation each tick. */
   void generate(bool flag) { generating = flag; }
@@ -44,7 +44,7 @@ class Scheduler {
       /** TODO: Clean/update paging info. */ 
       // memory.tick(data);
       
-      // Tick sleeping processes
+      // Tick sleeping processes in the waiting queue
       tick_sleeping_processes();
 
       // Assign new processes to idle cores
@@ -64,7 +64,7 @@ class Scheduler {
 
     // Create the preempt handler from the factory method
     auto preempt_handler = strategy.get_preempt_handler(data);
-    
+
     // Inject in each core the preemption handler from strategy
     if (preempt_handler != nullptr)
       for (auto& ref: data.cores.get_all())                       
@@ -127,19 +127,20 @@ class Scheduler {
     }
   }
 
+  /** @brief Steps processes in wqueue. Returns processes to the ready queue once they're not sleeping. */
   void tick_sleeping_processes() {
     auto& wqueue = data.wqueue;
     for (auto it = wqueue.begin(); it != wqueue.end(); ) {
       auto& process = data.get_process(*it);
-      process.step();             // decrement sleep_ticks
+      process.step();           // decrement sleep_ticks
 
       if (!process.data.control.sleeping()) {
-        data.rqueue.push(*it);    // ready again
-        it = wqueue.erase(it);    // remove from wqueue
+        data.rqueue.push(*it);  // ready again
+        it = wqueue.erase(it);  // remove from wqueue
         continue;
       }
 
-      ++it;                       // still sleeping
+      ++it;                     // still sleeping
     }
   }
 };
