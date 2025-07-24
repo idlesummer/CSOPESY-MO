@@ -1,8 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/utility/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
-#include "core/common/utility/EventEmitter.hpp"
+#include "core/common/utility/Ansi.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
