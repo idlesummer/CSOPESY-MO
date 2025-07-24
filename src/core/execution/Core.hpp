@@ -42,7 +42,9 @@ class Core {
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
       while (active) {
-        tick();
+        with_locked([&] {
+          tick();
+        });
         sleep_for(1ms);
       }
     });
@@ -88,17 +90,23 @@ class Core {
     if (job == nullptr) return; // If no process is assigned to this core, skip the tick
     if (can_release) return;    // Prevent ticking the process if it's already marked for release
 
-    auto& process = *job;       // Get the process from the process pointer
-    process.step();             // Execute one instruction from the process script
-    ++job_ticks;                // Track how long this process is running on this core
+    try {
+      auto& process = *job;       // Get the process from the process pointer
+      process.step();             // Execute one instruction from the process script
+      ++job_ticks;
 
-    // If the process has finished all its instructions, mark for release
-    if (process.data.program.finished())
-      can_release = true;
+      // If the process has finished all its instructions, mark for release
+      if (job->data.program.finished())
+        can_release = true;
 
-    // If preemption is defined and it says to preempt, mark for release
-    if (preempt != nullptr && preempt(*this))
-      can_release = true;
+      // If the process has finished all its instructions, mark for release
+      if (preempt && preempt(*this))
+        can_release = true;
+
+    } catch (exception& e) {
+      cerr << format("[Core {}] tick(): Exception: {}\n", id, e.what());
+      throw;
+    }
   }
 
   /** @brief Signals the core to stop and joins the thread cleanly. */

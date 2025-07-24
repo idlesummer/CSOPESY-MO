@@ -33,31 +33,12 @@ Please write in clear sections and simple language for onboarding a new develope
 ------------------------------
 
 #include "core/common/imports/_all.hpp"
-#include "core/common/utility/EventEmitter.hpp"
 #include "core/shell/Shell.hpp"
 
+
 int main() {
-  auto running = atomic_bool(true); // Global run flag for main loop
-  auto global  = EventEmitter();    // Central event system
-  auto shell   = Shell(global);     // Main shell interface
-
-  // Listen for shutdown event to stop main loop
-  global.on("shutdown", [&] {
-    cout << "[Shell] Shutting down...";
-    sleep_for(200ms);
-    running = false;
-  });
-
-  shell.start();  // Launch shell thread
-
-  // === Main simulation loop ===
-  while (running) {
-    global.emit("tick");  // Broadcast system tick
-    global.dispatch();    // Run all queued listeners
-    sleep_for(100ms);     // Simulated tick rate
-  }
-  
-  shell.stop(); // Join shell thread (cleanup)
+  auto shell = Shell(); // Main shell interface
+  shell.start();        // Launch shell thread
 }
 
 ------------------------------
@@ -106,6 +87,7 @@ class CommandHandler {
     min_args (0u),          // Minimum number of required arguments
     max_args (UINT_MAX),    // Maximum number of allowed arguments
     flags    (vec<Flag>()), // Valid flags for this command
+    disabled (true),        // Commands are disabled by default
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
 
@@ -115,6 +97,7 @@ class CommandHandler {
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
   auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
+  auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
     
@@ -125,6 +108,7 @@ class CommandHandler {
   uint min_args;                
   uint max_args;              
   vec<Flag> flags;                       
+  bool disabled;
   func<optional<str>(Command&,Shell&)> validate; 
   func<void(Command&,Shell&)> execute;
 };
@@ -177,6 +161,10 @@ class CommandInterpreter {
       return void(cout << format("[Shell] Unknown command: {}\n", command.name));
 
     auto& handler = it->second;
+
+    // Check if command is disabled
+    if (handler.disabled)
+      return void(cout << "[Shell] This command is unavailable.\n");
 
     // Check for unknown/misused flags
     if (invalid_flags(command, handler))
@@ -315,7 +303,8 @@ auto make_cls() -> CommandHandler {
     .set_desc("Clear screen contents.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
+    .set_disabled(false)
+
     .set_execute([](Command&, Shell&) {
       system("cls");
     });
@@ -340,19 +329,27 @@ auto make_config() -> CommandHandler {
     .set_desc("Displays the current scheduler configuration.")
     .set_min_args(0)
     .set_max_args(0)
+    .set_disabled(false)
 
     .set_execute([](Command&, Shell& shell) {
       auto& config = shell.scheduler.data.config;
-      cout << "\n";
       cout << "â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Scheduler Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®\n";
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Scheduler", config.scheduler);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "CPU Cores", config.num_cpu);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Quantum Cycles", config.quantum_cycles);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Batch Process Freq", config.batch_process_freq);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Min Instructions", config.min_ins);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Max Instructions", config.max_ins);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Delays Per Exec", config.delays_per_exec);
-      cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", "Initialized", config.initialized ? "Yes" : "No");
+
+      for (auto& [key, val]: config.all()) {
+        auto display = ""s;
+
+        if (val.type() == typeid(str))
+          display = format("\"{}\"", cast<str>(val));
+        else if (val.type() == typeid(uint))
+          display = to_string(cast<uint>(val));
+        else if (val.type() == typeid(bool))
+          display = cast<bool>(val) ? "true" : "false";
+        else
+          display = "<unsupported>";
+
+        cout << format("â”‚ {:<22} â”‚ {:<45} â”‚\n", key, display);
+      }
+
       cout << "â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯\n";
     });
 }
@@ -409,8 +406,10 @@ auto make_echo() -> CommandHandler {
     .set_min_args(1)
     .set_max_args(UINT_MAX)
     .set_flags({})
+    .set_disabled(false)
+
     .set_execute([](Command& command, Shell&) {
-      for (auto& arg : command.args)
+      for (auto& arg: command.args)
         cout << arg << ' ';
       cout << '\n';
     });
@@ -434,18 +433,14 @@ auto make_exit() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     .set_flags({})
+    .set_disabled(false)
 
     .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
-
-      if (screen.is_main()) {
-        shell.set_active(false);
-        shell.emit("shutdown");
-
-      } else {
+      if (screen.is_main())
+        shell.stop();
+      else
         screen.switch_to_main();
-        shell.emit("switched_to_main");
-      }
     });
 }
 
@@ -470,10 +465,13 @@ auto make_initialize() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     .set_flags({})
+    .set_disabled(false)
 
     .set_validate([](Command& command, Shell& shell) -> Str {
+      auto config = shell.scheduler.data.config;
+      
       // Check if the scheduler has already been initialized
-      if (shell.scheduler.data.config.initialized)
+      if (config.getb("initialized"))
         return "Already initialized.";
 
       // Check if the file could not be opened or is empty
@@ -489,22 +487,25 @@ auto make_initialize() -> CommandHandler {
     .set_execute([](Command& command, Shell& shell) {
       auto& storage = shell.storage;
       auto& lines = storage.get<vec<str>>("initialize.cache");
-      auto config = SchedulerConfig();
+      auto config = Config();
 
-      for (auto& line : lines) {
+      for (auto& line: lines) {
         str key, value;
         isstream(line) >> key >> value;
-
-        if (!config.set(key, move(value)))
-          cout << format("[Shell] Unknown config key: {}\n", key);
+        config.set(key, Config::parse(value));
       }
 
-      config.initialized = true;
-      shell.scheduler.set_config(config);
+      config.set("initialized", true);
+      shell.scheduler.set_config(move(config));
 
-      cout << BANNER << '\n';
+      system("cls");
+      cout << format("{}\n", BANNER);
       cout << "[Shell] Scheduler config loaded.\n";
       storage.remove("initialize.cache");
+
+      // Enable other commands
+      for (auto& [name, handler]: shell.interpreter.handlers)
+        handler.set_disabled(false);
     });
 }
 
@@ -554,11 +555,11 @@ auto make_process_smi() -> CommandHandler {
       cout << format("ID: {}\n", process.data.core_id);
 
       cout << "Logs:\n";
-      for (auto& log : process.data.logs)
-        cout << log << '\n';
+      for (auto& log: process.data.logs)
+        cout << format("{}\n", log);
 
-      cout << "Current instruction line: " << program.ip << '\n';
-      cout << "Lines of code: " << program.script.size() << "\n\n";
+      cout << format("Current instruction line: {}\n", program.ip);
+      cout << format("Lines of code: {}\n\n", program.script.size());
 
       shell.storage.remove("process-smi.pid");
     });
@@ -587,7 +588,8 @@ auto make_report_util() -> CommandHandler {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
-      if (!shell.scheduler.data.config.initialized)
+      auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
 
       return nullopt;
@@ -600,9 +602,9 @@ auto make_report_util() -> CommandHandler {
       auto& finished = data.finished_pids;
 
       auto log = ofstream("csopesylog.txt");
-      auto separator = "---------------------------------------------\n";
+      auto separator = "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n";
 
-      cout << "\033[38;5;33m" << separator << "\033[0m";
+      cout << format("\033[38;5;33m{}\033[0m", separator);
       log << separator;
 
       cout << "Running processes:\n";
@@ -668,11 +670,14 @@ auto make_scheduler_start() -> CommandHandler {
     .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
-      if (!shell.scheduler.data.config.initialized)
-        return "[Shell] Please run 'initialize' first.";
+      auto config = shell.scheduler.data.config;
+      
+      // Check if the scheduler has already been initialized
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
 
       if (shell.scheduler.generating)
-        return "[Shell] Dummy process generation already active.";
+        return "Dummy process generation already active.";
 
       return nullopt;
     })
@@ -703,11 +708,14 @@ auto make_scheduler_stop() -> CommandHandler {
     .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
-      if (!shell.scheduler.data.config.initialized)
-        return "[Shell] Please run 'initialize' first.";
+      auto config = shell.scheduler.data.config;
+      
+      // Check if the scheduler has already been initialized
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
 
       if (!shell.scheduler.generating)
-        return "[Shell] Dummy process generation is not running.";
+        return "Dummy process generation is not running.";
 
       return nullopt;
     })
@@ -769,7 +777,7 @@ auto make_screen() -> CommandHandler {
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
         cout << format("Cores used: {} / {}\n\n", busy, size);
-        cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+        cout << "\033[38;5;33mâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\033[0m\n";
         cout << "Running processes:\n";
 
         for (uint pid : cores.get_running_pids()) {
@@ -797,7 +805,7 @@ auto make_screen() -> CommandHandler {
           );
         }
 
-        cout << "\033[38;5;33m---------------------------------------------\033[0m\n";
+        cout << "\033[38;5;33mâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\033[0m\n";
       }
 
       // === -s: Spawn and switch to new process screen
@@ -915,7 +923,6 @@ auto make_test() -> CommandHandler {
       }
 
       // 2. Access process
-      system("cls");
       auto& process = storage.get<Process>("test.process");
       auto& program = process.data.program;
 
@@ -1155,7 +1162,7 @@ using std::chrono_literals::operator""ns;
 using std::chrono_literals::operator""s;
 
 /** Returns a formatted timestamp string using current local time. */
-auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="(%m/%d/%Y %I:%M:%S%p)") -> std::string {
+auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="%m/%d/%Y %I:%M:%S%p") -> std::string {
   auto time = Clock::to_time_t(tp.value_or(Clock::now()));
   auto time_struct = TimeStruct();
   localtime_s(&time_struct, &time);
@@ -1352,6 +1359,7 @@ decltype(auto) with_unlocked(Func&& fn) {
 #include <optional>
 #include <ranges>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 using std::runtime_error;
@@ -1381,9 +1389,9 @@ using std::nullopt;
 // === STL Utility Aliases ===
 using std::ranges::all_of;
 using std::ranges::any_of;
+using std::ranges::count_if;
 using std::ranges::find_if;
 using std::ranges::none_of;
-using std::ranges::count_if;
 using std::any_cast;
 using std::cref;
 using std::erase_if;
@@ -1403,20 +1411,28 @@ auto move_iter(Type it) {
 ------------------------------
 
 #pragma once
-#ifndef NOMINMAX
-  #define NOMINMAX
-#endif
-#include <windows.h> // Doesn't define min/max since NOMINMAX is set
-#include <algorithm> // Redefines std::min/std::max
 
+#if defined(_WIN32)
+  #ifndef NOMINMAX
+    #define NOMINMAX
+  #endif
+  #include <windows.h>
+  void enable_unicode() {
+    SetConsoleOutputCP(CP_UTF8);
+  }
+#else
+  #include <locale>
+  #include <iostream>
+  void enable_unicode() {
+    std::ios_base::sync_with_stdio(false);
+    std::setlocale(LC_ALL, "");
+    std::wcout.imbue(std::locale(""));
+  }
+#endif
+
+#include <algorithm>
 using std::min;
 using std::max;
-
-
-void enable_unicode() {
-  SetConsoleOutputCP(CP_UTF8);
-}
-
 
 ------------------------------
  FILE:  pointers.hpp
@@ -1447,7 +1463,7 @@ using sptr = std::shared_ptr<Type>;
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
-#include <Random>
+#include <random>
 #include <stdexcept>
 #include "casts.hpp"
 #include "containers.hpp"
@@ -1547,10 +1563,21 @@ using std::from_chars;
 constexpr auto NPOS = string::npos;
 
 // === Validation ===
-inline bool is_num(const std::string& s) {
+
+/** @brief Returns true if the string consists only of digit characters (0â€“9). */
+auto is_digits(const std::string& s) -> bool {
   return !s.empty() && std::ranges::all_of(s, [](char c) {
     return std::isdigit(static_cast<unsigned char>(c));
   });
+}
+
+// === Case conversions ===
+
+/** @brief Returns a lowercase copy of the given string. */
+auto lowercase(str raw) -> str {
+  for (char& c: raw)
+    c = tolower(c);
+  return raw;
 }
 
 ------------------------------
@@ -2118,10 +2145,10 @@ struct Instruction {
   str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
   vec<str> args;      ///< List of string arguments
 
-/**
- * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
- * Set dynamically to allow skipping. A value of 0 means unset.
- */
+  /**
+   * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
+   * Set dynamically to allow skipping. A value of 0 means unset.
+   */
   mutable uint exit = 0;
 };
 
@@ -2401,7 +2428,9 @@ class Signature {
   // ------ Internal Helpers ------
   
   /** @brief Adds a generic argument of given type and optional bounds. */
-  auto add(str type, uint min=0, uint max=0) -> Signature& { return args.emplace_back(move(type), min, max), *this; }
+  auto add(str type, uint min=0, uint max=0) -> Signature& { 
+    return args.emplace_back(move(type), min, max), *this; 
+  }
 };
 
 ------------------------------
@@ -2492,7 +2521,7 @@ auto make_endfor() -> InstructionHandler {
 
       // Decrement loop count; jump back if more iterations remain
       if (--frame.ctr > 0)
-        return void(program.set_ip(frame.ip+1));
+        return void(program.set_ip(frame.ip));
 
       context.pop();
     });
@@ -2514,15 +2543,18 @@ auto make_endfor() -> InstructionHandler {
 auto make_for() -> InstructionHandler {
   
   // === Skips ahead to the matching ENDFOR. ===
-  auto skip_block = [](auto& program, auto& inst) {
+  auto skip_block = [](auto& program, auto& inst) { 
+
+    cout << "Before: inst.exit = " << inst.exit << "\n";
     
     // Use cached exit if available
     if (inst.exit != 0)
       return void(program.set_ip(inst.exit));
-    
+      
     auto& script = program.script;
     uint start = program.ip;
     uint depth = 1;
+
 
     // Otherwise, scan ahead to find the matching ENDFOR
     for (uint i = start+1; i < script.size(); ++i) {
@@ -2534,6 +2566,7 @@ auto make_for() -> InstructionHandler {
       if (depth == 0) {
         inst.exit = i + 1;
         program.set_ip(inst.exit);
+        cout << "After: inst.exit = " << inst.exit << "\n";
         return;
       }
     }
@@ -3203,7 +3236,7 @@ class Scheduler {
 
   /** @brief Executes the active strategy logic and increments the tick count. */
   void tick() {
-    if (!data.config.initialized) return;
+    if (!data.config.getb("initialized")) return;
 
     // Generate batch processes
     generate_processes();
@@ -3211,7 +3244,7 @@ class Scheduler {
     // Release finished or preempted cores
     release_processes();
 
-    // TODO: Clean/update paging info  
+    /** TODO: Clean/update paging info. */ 
     // memory.tick(data);
 
     // Tick sleeping processes
@@ -3223,16 +3256,19 @@ class Scheduler {
   }
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
-  void set_config(SchedulerConfig config) {
-    strategy = get_scheduler_strategy(config.scheduler, config); 
-    data.cores.resize(config.num_cpu);                            
+  void set_config(Config config) {
+    strategy = get_scheduler_strategy(config.gets("scheduler"));
+    data.cores.resize(config.getu("num-cpu"));                        
+
+    // Create the preempt handler from the factory method
+    auto preempt_handler = strategy.get_preempt_handler(data);
     
     // Inject in each core the preemption handler from strategy
-    if (strategy.preempt_handler != nullptr)         
+    if (preempt_handler != nullptr)
       for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(strategy.preempt_handler);
+        ref.get().set_preempt(preempt_handler);
 
-    data.config = move(config);                                   
+    data.config = move(config); // Must come last                               
   }
 
   // ------ Member variables ------
@@ -3249,7 +3285,7 @@ class Scheduler {
 
   /** @brief Helper that checks if the current tick matches the process generation interval. */
   auto interval_has_elapsed() -> bool {
-    uint freq = data.config.batch_process_freq;
+    uint freq = data.config.getu("batch-process-freq");
     return freq > 0 && (ticks % freq == 0);
   }
 
@@ -3257,7 +3293,10 @@ class Scheduler {
   void generate_processes() {
     auto make_process = [&](uint pid, str name="") {
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto size  = Rand::num(data.config.min_ins, data.config.max_ins);
+      auto min = data.config.getu("min-ins");
+      auto max = data.config.getu("max-ins");
+      auto size = Rand::num(min, max);
+
       data.add_process(Process(pid, move(pname), size));
       data.rqueue.push(pid);
     };
@@ -3304,64 +3343,6 @@ class Scheduler {
 };
 
 ------------------------------
- FILE:  SchedulerConfig.hpp
- PATH:  core\scheduler\SchedulerConfig.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
-
-
-/**
- * @brief Dynamic scheduler configuration using key-value string pairs.
- * 
- * Allows easy iteration, modification, and serialization of scheduler settings.
- */
-class SchedulerConfig {
-  public:
-
-  SchedulerConfig():
-    entries (ordered_map<str,str>())
-  {
-    entries["scheduler"] = "fcfs";
-    entries["num-cpu"] = "1";
-    entries["quantum-cycles"] = "1";
-    entries["batch-process-freq"] = "1";
-    entries["min-ins"] = "1";
-    entries["max-ins"] = "1";
-    entries["delays-per-exec"] = "0";
-    entries["initialized"] = "false";
-  }
-
-  /** @brief Sets the value of a configuration key. */
-  auto set(const str& key, const str& value) -> bool {
-    if (!entries.contains(key)) return false;
-    entries[key] = value;
-    return true;
-  }
-
-  /** @brief Retrieves the string value for a given key. */
-  auto get(const str& key) -> str {
-    auto it = entries.find(key);
-    return it != entries.end() ? it->second : "";
-  }
-
-  /** @brief Retrieves the string value for a given key as a uint. */
-  auto get_uint(const str& key) -> uint {
-    return stoul(get(key));
-  }
-
-  /** @brief Retrieves the string value for a given key as bool. */
-  auto get_bool(const str& key) -> bool {
-    auto v = get(key);
-    return v == "1" || v == "true";
-  }
-
-  // ------ Member variables ------
-  ordered_map<str,str> entries;
-};
-
-------------------------------
  FILE:  SchedulerData.hpp
  PATH:  core\scheduler\SchedulerData.hpp
 ------------------------------
@@ -3383,12 +3364,12 @@ class SchedulerData {
   public:
   
   SchedulerData():
+    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
-    wqueue        (list<uint>()),              // Ready queue of processes waiting to be scheduled
-    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    wqueue        (list<uint>()),               // Ready queue of processes waiting to be scheduled
     next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
-    config        (SchedulerConfig()),          // Runtime configuration settings
+    config        (Config()),          // Runtime configuration settings
     cores         (CoreManager()) {}            // Owned instance of scheduler core manager
 
   /** @brief Returns a unique, incrementing process ID. */
@@ -3418,13 +3399,13 @@ class SchedulerData {
 
   // ------ Member variables ------
 
+  map<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  map<uint, uptr<Process>> proc_table;
-  SchedulerConfig config;             
+  Config config;             
   CoreManager cores;                  
-  atomic_uint next_pid = 1;           
+  atomic_uint next_pid;           
 
   // ------ Internal logic ------
 
@@ -3463,26 +3444,28 @@ class SchedulerData {
 class SchedulerStrategy {
   public:
 
-  using PreemptHandler = Core::func;
+  using PreemptFactory = func<Core::func(SchedulerData&)>;
   using TickHandler = func<void(SchedulerData&)>;
 
   SchedulerStrategy():
     name            (""s),                // Strategy identifier (e.g., "fcfs", "rr")
-    config          (SchedulerConfig()),  // Strategy-specific configuration
     tick_handler    (nullptr),            // Main strategy logic executed each tick
-    preempt_handler (nullptr) {}          // Core-level preemption policy (optional)
+    preempt_factory (nullptr) {}          // Core-level preemption policy (optional)
 
   /** @brief Sets the strategy name. */
   auto set_name(str n) -> SchedulerStrategy& { return name = n, *this; }
-
-  /** @brief Sets the configuration for this strategy. */
-  auto set_config(SchedulerConfig c) -> SchedulerStrategy& { return config = move(c), *this; }
 
   /** @brief Sets the main logic to run on each tick. */
   auto on_tick(TickHandler t) -> SchedulerStrategy& { return tick_handler = move(t), *this; }
 
   /** @brief Sets the per-core preemption policy. */
-  auto on_preempt(PreemptHandler p) -> SchedulerStrategy& { return preempt_handler = move(p), *this; }
+  auto on_preempt(PreemptFactory f) -> SchedulerStrategy& { return preempt_factory = move(f), *this;}
+
+  /** @brief Returns a Core-level preemption lambda bound to current SchedulerData. */
+  auto get_preempt_handler(SchedulerData& data) -> Core::func {
+    if (!preempt_factory) return nullptr;
+    return preempt_factory(data);
+  }
 
   // === Execution ===
 
@@ -3496,9 +3479,8 @@ class SchedulerStrategy {
   // ------ Member variables ------
 
   str name;              
-  SchedulerConfig config;         
   TickHandler tick_handler;       
-  PreemptHandler preempt_handler;
+  PreemptFactory preempt_factory;
 };
 
 ------------------------------
@@ -3509,25 +3491,85 @@ class SchedulerStrategy {
 #pragma once
 #include "core/common/imports/_all.hpp"
 
-struct SchedulerConfig {
-  uint num_cpu = 1;
-  str  scheduler = "fcfs";
-  uint quantum_cycles = 1;
-  uint batch_process_freq = 1;
-  uint min_ins = 1;
-  uint max_ins = 1;
-  uint delays_per_exec = 0;
-  bool initialized = false;
 
-  bool set(const str& key, str value) {
-    if (key == "scheduler")          return scheduler = move(value), true;
-    if (key == "num-cpu")            return num_cpu = stoul(value), true;
-    if (key == "quantum-cycles")     return quantum_cycles = stoul(value), true;
-    if (key == "batch-process-freq") return batch_process_freq = stoul(value), true;
-    if (key == "min-ins")            return min_ins = stoul(value), true;
-    if (key == "max-ins")            return max_ins = stoul(value), true;
-    if (key == "delays-per-exec")    return delays_per_exec = stoul(value), true;
-    return false;
+/**
+ * @brief Dynamic scheduler configuration using key-value pairs with std::any.
+ * 
+ * Supports storing any type but only str, uint, and bool are officially supported.
+ */
+class Config {
+  public:
+
+  Config():
+    entries (ordered_map<str,any>())  // Ordered map (alphabetically) of scheduler configs
+  {
+    set("scheduler", "fcfs"s);
+    set("num-cpu", 1u);
+    set("quantum-cycles", 1u);
+    set("batch-process-freq", 1u);
+    set("min-ins", 1u);
+    set("max-ins", 1u);
+    set("delays-per-exec", 0u);
+    set("initialized", false);
+  }
+
+  /** @brief Sets the value of a configuration key. */
+  void set(const str& key, any value) { entries[key] = move(value); }
+
+  /** @brief Returns true if key exists. */
+  auto has(const str& key) const -> bool { return entries.contains(key); }
+
+  // ------ Getters ------
+  
+  auto all() -> ordered_map<str,any>& { return entries; }
+
+  /** @brief Retrieves the value of a key as a string. */
+  auto gets(const str& key) -> str { return get<str>(key); }
+
+  /** @brief Retrieves the value of a key as an unsigned integer. */
+  auto getu(const str& key) -> uint { return get<uint>(key); }
+  
+  /** @brief Retrieves the value of a key as a boolean. */
+  auto getb(const str& key) -> bool { return get<bool>(key); }
+
+  // ------ Static Helpers ------
+
+  /** @brief Parses a raw string into a typed value (bool, uint, or str). */
+  static auto parse(const str& raw) -> any {
+    // Lowercase copy for comparison
+    auto lower = lowercase(raw);
+
+    // Check if it's a boolean
+    if (lower == "true")  return true;
+    if (lower == "false") return false;
+
+    // Check if it's a number (digits only)
+    if (is_digits(raw))
+      return cast<uint>(stoul(raw));
+
+    // Default to string
+    return raw;
+  }
+
+  private:
+
+  // ------ Member variables ------
+  ordered_map<str,any> entries;
+
+  // ------ Internal helpers ------
+
+  /** @brief Gets the value of a configuration key with expected type. */
+  template <typename Type>
+  auto get(const str& key) -> Type {
+    if (!entries.contains(key))
+      throw runtime_error(format("Missing config key '{}'", key));
+
+    try {
+      return cast<Type>(entries.at(key));
+
+    } catch (bad_any_cast& e) {
+      throw runtime_error(format("Config key '{}' has wrong type: {}", key, e.what()));
+    }
   }
 };
 
@@ -3549,12 +3591,11 @@ struct SchedulerConfig {
  * - Lazy: cores pull from the queue only when idle
  * - Immediate-arrival: proc_table are enqueued as soon as they arrive
  */
-auto make_fcfs_strategy(SchedulerConfig& config) -> SchedulerStrategy {
+auto make_fcfs_strategy() -> SchedulerStrategy {
 
   // Standard, Lazy, Non-Preemptive, Immediate-Arrival FCFS
   return SchedulerStrategy()
     .set_name("fcfs")
-    .set_config(config)
 
     .on_tick([](SchedulerData& data) {;
       for (auto& ref: data.cores.get_idle()) {
@@ -3590,11 +3631,10 @@ auto make_fcfs_strategy(SchedulerConfig& config) -> SchedulerStrategy {
  * - Preemptive: proc_table are interrupted after a time quantum.
  * - Immediate arrival: proc_table are placed into the ready queue directly.
  */
-auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
+auto make_rr_strategy() -> SchedulerStrategy {
   return SchedulerStrategy()
     .set_name("rr")
-    .set_config(config)
-    
+
     .on_tick([](SchedulerData& data) {
       for (auto& ref: data.cores.get_idle()) {
     
@@ -3608,8 +3648,12 @@ auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
       }
     })
 
-    .on_preempt([quantum=config.quantum_cycles](Core& core) {
-      return core.job_ticks >= quantum;  
+    .on_preempt([](SchedulerData& data) -> Core::func {
+      auto quantum = data.config.getu("quantum-cycles");
+      
+      return [quantum](Core& core) -> bool {
+        return core.job_ticks >= quantum;
+      };
     });
 }
 
@@ -3620,14 +3664,13 @@ auto make_rr_strategy(SchedulerConfig& config) -> SchedulerStrategy {
 
 #pragma once
 #include "core/scheduler/SchedulerStrategy.hpp"
-#include "core/scheduler/types.hpp"
 #include "fcfs.hpp"
 #include "rr.hpp"
 
 
-auto get_scheduler_strategy(str& name, SchedulerConfig& config) -> SchedulerStrategy {
-  if (name == "fcfs") return make_fcfs_strategy(config);
-  if (name == "rr")   return make_rr_strategy(config);
+auto get_scheduler_strategy(const str& name) -> SchedulerStrategy {
+  if (name == "fcfs") return make_fcfs_strategy();
+  if (name == "rr")   return make_rr_strategy();
   throw runtime_error(format("Unknown strategy name: {}", name));
 }
 
@@ -3638,25 +3681,16 @@ auto get_scheduler_strategy(str& name, SchedulerConfig& config) -> SchedulerStra
 
 #include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
 #include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
+#include "core/common/utility/EventEmitter.hpp"
 
   
 /**
- * @brief Shell constructor with command registration.
+ * @brief Populates the CommandInterpreter with all available commands.
  * 
  * Defined separately so the Shell class is fully known before
- * including handlers that use Shell&. This constructor populates
- * the CommandInterpreter with all available commands.
+ * including handlers that use Shell&.
  */
-Shell::Shell(EventEmitter& emitter): 
-    global      (emitter),                    // Reference to the global EventEmitter
-    interpreter (CommandInterpreter::get()),  // Instance of the command interpreter
-    thread      (),                           // Shell thread (starts later in start())
-    active      (atomic_bool{true}),          // Atomic flag to control shell lifecycle
-    scheduler   (Scheduler()),                // Owned scheduler instance
-    storage     (ShellStorage()),             // Storage for dynamic shell/session data
-    screen      (storage)                     // Owned instance of shell screen manager
-{  
-  // Register all command handlers
+void Shell::register_commands() {
   for (auto handler: get_command_handlers())
     interpreter.register_command(move(handler));
 }
@@ -3765,70 +3799,105 @@ class ShellStorage {
 #include "core/shell/ShellScreen.hpp"
 
 
+/** @brief Interactive shell managing CLI, events, and system ticks. */
 class Shell {  
   public:
 
-    /** @see See Shell.hpp for implementation. */
-    Shell(EventEmitter& emitter);
+  Shell(): 
+    interpreter   (CommandInterpreter::get()),  // Instance of the command interpreter
+    shell_thread  (),                           // Shell thread (starts later in start())
+    system_thread (),                           // Shell thread (starts later in start())
+    shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
+    scheduler     (Scheduler()),                // Owned scheduler instance
+    storage       (ShellStorage()),             // Storage for dynamic shell/session data
+    screen        (storage) {}                  // Owned instance of shell screen manager
 
-    /** @brief Starts the shell loop in a separate thread and hooks into global ticks. */
-    void start() {
-      // system("cls");
-      Ansi::enable();
-      enable_unicode();
+  /** @brief Starts shell and system threads and blocks until shutdown. */
+  void start() {
+    initialize();
+    system("cls");
+    cout << '\n'; // Leave line 1 blank
 
-      // Starts the tick handler that runs the scheduler.
-      global.on("tick", [&] { 
-        with_locked([&] { scheduler.tick(); }); // Makes scheduler.tick() does not conflict with shell commands
-      });
+    // Start shell (input) and system (scheduler) threads
+    shell_thread  = Thread([&] { 
+      while (shell_active)  
+        tick_shell(); 
+    });
+
+    system_thread = Thread([&] { 
+      while (system_active) 
+        tick_system(); 
+    });
+
+    // Wait until both threads finish (safe from main thread)
+    if (shell_thread.joinable())  shell_thread.join();
+    if (system_thread.joinable()) system_thread.join();
+    system("cls");
+  }
+
+  /** @brief Triggers shutdown. Must be called inside shell thread only. */
+  void stop(bool silent=false) {
+    if (!shell_active && !system_active)
+      return;
+
+    if (!silent)
+      cout << "[Shell] Shutting down...\n" << flush;
+
+    shell_active = false;
+    system_active = false;
+    sleep_for(300ms);       // Optional pause for effect
+  }
+
+  // ------ Member variables ------
+
+  CommandInterpreter& interpreter;    
+  Thread shell_thread;
+  Thread system_thread;
+  atomic_bool shell_active;
+  atomic_bool system_active;
+  Scheduler scheduler; 
+  ShellStorage storage;
+  ShellScreen screen;
+
+  // ------ Internal helpers ------
+  private:
+
+  /** @brief Populates the CommandInterpreter with all available commands (See impl in Shell.hpp). */
+  void register_commands();
+
+  /** @brief Initializes terminal and registers all event listeners. */
+  void initialize() {
+
+    // Initialize terminal settings
+    Ansi::enable();
+    enable_unicode();
     
-      // Start CLI in a separate thread
-      thread = Thread([&] {
-        cout << '\n';   // Lets make it a convention that line 1 is empty.
-        while (active) 
-          tick();
+    // Initialize command handlers
+    register_commands();
+  }
+
+  /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */
+  void tick_shell() {
+    cout << ">>> " << flush;
+    if (str input; getline(cin, input)) {
+      with_locked([&]{
+        interpreter.execute(move(input), *this);  // Executes commands
+        cout << '\n';
       });
+
+    } else {
+      cout << "[Shell] Input stream closed.\n" << flush;
+      stop(true);
     }
+  }
 
-    /** @brief Stops the shell and joins the thread. Safe to call multiple times. */
-    void stop() {
-      active = false;
-      if (thread.joinable()) 
-        thread.join();
+  /** @brief Executes one scheduler tick. Called repeatedly by system thread. */
+  void tick_system() {
+    with_locked([&] {
+      scheduler.tick();
+    });
 
-      system("cls");
-    }
-
-    /** @brief Executes a single shell tick (input + command dispatch). */
-    void tick() {
-      cout << ">>> " << flush;
-
-      if (str input; getline(cin, input)) {
-        with_locked([&]{
-          interpreter.execute(move(input), *this);
-          cout << '\n';
-        });
-
-      } else {
-        cout << "\n[Shell] Input stream closed.\n";
-        active = false;
-      }
-    }
-
-    /** @brief Signals the shell to stop from within the shell thread. */
-    void set_active(bool flag) { active = flag; }
-
-    /** @brief Emits an event using the global EventEmitter. */
-    void emit(str name, any data={}) { global.emit(move(name), move(data)); }
-
-
-    // ------ Member variables ------
-
-    EventEmitter& global;
-    CommandInterpreter& interpreter;    
-    Thread thread;
-    atomic_bool active;
-    Scheduler scheduler; 
-    ShellStorage storage;
-    ShellScreen screen;
+    sleep_for(100ms);   // Tick interval
+  }
 };

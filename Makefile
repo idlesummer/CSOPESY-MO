@@ -4,7 +4,7 @@
 
 # === Compiler and Flags ===
 CXX := g++
-CXXFLAGS := -std=c++20 -I src/
+CXXFLAGS := -std=c++20 -g -I src/
 
 # === Targets ===
 TARGET := main

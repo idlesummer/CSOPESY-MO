@@ -26,7 +26,7 @@ auto make_endfor() -> InstructionHandler {
 
       // Decrement loop count; jump back if more iterations remain
       if (--frame.ctr > 0)
-        return void(program.set_ip(frame.ip+1));
+        return void(program.set_ip(frame.ip));
 
       context.pop();
     });

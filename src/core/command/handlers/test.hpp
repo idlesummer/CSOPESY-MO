@@ -28,14 +28,13 @@ auto make_test() -> CommandHandler {
 
       // 1. Spawn process if not already present
       if (!storage.has("test.process")) {
-        auto process = Process(999, "test.process", 10);
+        auto process = Process(0, "test.process", 10);
         storage.set("test.process", move(process));
         cout << "[loop-test] Process created.\n";
         return;
       }
 
       // 2. Access process
-      system("cls");
       auto& process = storage.get<Process>("test.process");
       auto& program = process.data.program;
 

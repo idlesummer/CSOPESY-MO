@@ -3,6 +3,7 @@
 #include <any>
 #include <cctype>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -15,6 +16,7 @@ using std::runtime_error;
 
 // === Type Aliases ===
 using std::any;
+using std::exception;
 using std::function;
 using std::optional;
 using byte = uint8_t;

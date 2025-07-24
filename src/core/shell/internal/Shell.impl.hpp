@@ -16,7 +16,6 @@ class Shell {
   public:
 
   Shell(): 
-    global        (EventEmitter()),             // Reference to the global EventEmitter
     interpreter   (CommandInterpreter::get()),  // Instance of the command interpreter
     shell_thread  (),                           // Shell thread (starts later in start())
     system_thread (),                           // Shell thread (starts later in start())
@@ -32,8 +31,16 @@ class Shell {
     system("cls");
     cout << '\n'; // Leave line 1 blank
 
-    shell_thread  = Thread([&] { while (shell_active)  run_shell_tick(); });
-    system_thread = Thread([&] { while (system_active) run_system_tick(); });
+    // Start shell (input) and system (scheduler) threads
+    shell_thread  = Thread([&] { 
+      while (shell_active)  
+        tick_shell(); 
+    });
+
+    system_thread = Thread([&] { 
+      while (system_active) 
+        tick_system(); 
+    });
 
     // Wait until both threads finish (safe from main thread)
     if (shell_thread.joinable())  shell_thread.join();
@@ -54,14 +61,8 @@ class Shell {
     sleep_for(300ms);       // Optional pause for effect
   }
 
-  /** @brief Emits a named event with optional payload. */
-  void emit(str name, any data={}) { 
-    global.emit(move(name), move(data)); 
-  }
-
   // ------ Member variables ------
 
-  EventEmitter global;
   CommandInterpreter& interpreter;    
   Thread shell_thread;
   Thread system_thread;
@@ -79,28 +80,20 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-
     // Initialize terminal settings
     Ansi::enable();
     enable_unicode();
     
     // Initialize command handlers
     register_commands();
-    
-    // Register commands; System ticks go to scheduler
-    global.on("tick", [&] {
-      with_locked([&] {
-        scheduler.tick();
-      });
-    });
   }
 
-  /** @brief Runs the interactive shell input loop. Reads input and executes commands*/
-  void run_shell_tick() {
+  /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */
+  void tick_shell() {
     cout << ">>> " << flush;
     if (str input; getline(cin, input)) {
       with_locked([&]{
-        interpreter.execute(move(input), *this);
+        interpreter.execute(move(input), *this);  // Executes commands
         cout << '\n';
       });
 
@@ -110,12 +103,12 @@ class Shell {
     }
   }
 
-  /** @brief Runs the system tick loop dispatching "tick" events. */
-  void run_system_tick() {
-    while (system_active) {
-      global.emit("tick");
-      global.dispatch();
-      sleep_for(100ms);   // Tick interval
-    }
+  /** @brief Executes one scheduler tick. Called repeatedly by system thread. */
+  void tick_system() {
+    with_locked([&] {
+      scheduler.tick();
+    });
+
+    sleep_for(100ms);   // Tick interval
   }
 };

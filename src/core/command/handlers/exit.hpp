@@ -15,13 +15,9 @@ auto make_exit() -> CommandHandler {
 
     .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
-
-      if (screen.is_main()) {
+      if (screen.is_main())
         shell.stop();
-
-      } else {
+      else
         screen.switch_to_main();
-        shell.emit("switched_to_main");
-      }
     });
 }

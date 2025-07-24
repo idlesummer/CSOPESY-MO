@@ -34,21 +34,27 @@ class Scheduler {
   void tick() {
     if (!data.config.getb("initialized")) return;
 
-    // Generate batch processes
-    generate_processes();
+    try {
+      // Generate batch processes
+      generate_processes();
 
-    // Release finished or preempted cores
-    release_processes();
-
-    /** TODO: Clean/update paging info. */ 
-    // memory.tick(data);
-
-    // Tick sleeping processes
-    tick_sleeping_processes();
+      // Release finished or preempted cores
+      release_processes();
       
-    // Assign new processes to idle cores
-    strategy.tick(data);
-    ++ticks;
+      /** TODO: Clean/update paging info. */ 
+      // memory.tick(data);
+      
+      // Tick sleeping processes
+      tick_sleeping_processes();
+
+      // Assign new processes to idle cores
+      strategy.tick(data);
+      ++ticks;
+
+    } catch (exception& e) {
+      cerr << format("[Scheduler] tick(): Exception: {}\n", e.what());
+      throw;
+    }
   }
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
