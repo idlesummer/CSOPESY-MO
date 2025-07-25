@@ -184,8 +184,5 @@ class Text {
   str raw;
   TextColor color;
   TextStyle style;
-  TextAlign align;
-
-  // ------ Internal helpers ------
-  
+  TextAlign align;  
 };
