@@ -13,7 +13,7 @@ class ShellBanner {
     auto gradient = make_gradient(coral, mint, lines.size());
     
     auto out = osstream();
-    out << '\n';
+    out << "\n\n";
     for (uint i = 0; i < lines.size(); ++i) {
       int code = rgb_to_ansi256(gradient[i]);
       out << Text(lines[i])[format("fg{}+pc", code)] << '\n';
