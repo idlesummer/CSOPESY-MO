@@ -28,6 +28,7 @@ class ShellBanner {
 
   // ------ Internal helpers ------
 
+  static inline const auto names = "Dicayanan | Maramag | Maunahan | Villaver"s;
   static inline const auto lines = vec<str>{
     "  ██╗  ██████╗ ███████╗  ██████╗  ██████╗  ███████╗ ███████╗ ██╗   ██╗ ██╗  ",
     " ██╔╝ ██╔════╝ ██╔════╝ ██╔═══██╗ ██╔══██╗ ██╔════╝ ██╔════╝ ╚██╗ ██╔╝ ╚██╗ ",
@@ -36,8 +37,6 @@ class ShellBanner {
     " ╚██╗ ╚██████╗ ███████║ ╚██████╔╝ ██║      ███████╗ ███████║    ██║    ██╔╝ ",
     "  ╚═╝  ╚═════╝ ╚══════╝  ╚═════╝  ╚═╝      ╚══════╝ ╚══════╝    ╚═╝    ╚═╝  ",
   };
-
-  static inline const auto names = "Dicayanan | Maramag | Maunahan | Villaver"s;
 
   /** @brief Computes N evenly spaced vec<int> values between two endpoints. */
   auto make_gradient(vec<int>& from, vec<int>& to, uint steps) -> vec<vec<int>> {
