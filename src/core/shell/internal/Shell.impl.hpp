@@ -22,7 +22,7 @@ class Shell {
     shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     scheduler     (Scheduler()),                // Owned scheduler instance
-    banner        (),                           // For printing the shell banner
+    banner        (ShellBanner()),              // For printing the shell banner
     storage       (ShellStorage()),             // Storage for dynamic shell/session data
     screen        (storage) {}                  // Owned instance of shell screen manager
 
