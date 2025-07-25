@@ -1,12 +1,12 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/constants/banner.hpp"
 #include "core/common/utility/Ansi.hpp"
 #include "core/common/utility/Text.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
 // Shell-specific includes
+#include "core/shell/ShellBanner.hpp"
 #include "core/shell/ShellStorage.hpp"
 #include "core/shell/ShellScreen.hpp"
 
@@ -22,6 +22,7 @@ class Shell {
     shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     scheduler     (Scheduler()),                // Owned scheduler instance
+    banner        (),                           // For printing the shell banner
     storage       (ShellStorage()),             // Storage for dynamic shell/session data
     screen        (storage) {}                  // Owned instance of shell screen manager
 
@@ -69,6 +70,7 @@ class Shell {
   atomic_bool shell_active;
   atomic_bool system_active;
   Scheduler scheduler; 
+  ShellBanner banner;
   ShellStorage storage;
   ShellScreen screen;
 

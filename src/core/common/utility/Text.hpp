@@ -2,146 +2,190 @@
 #include "core/common/imports/_all.hpp"
 
 
-/**
- * @brief Utility class for styling terminal text using ANSI escape sequences.
- * 
- * Supports method chaining (e.g., `.bold().red().bg(15)`) and string-based
- * DSL parsing via `.use("gr+b")`. ANSI color and Unicode output are enabled
- * through the static `Text::enable()` initializer.
- * 
- * Example usage:
- *   Text::enable(); // Call once during app startup
- *   cout << "Success"_txt.use("gr+b") << '\n';
- *   cout << "Warning"_txt["yl+i"] << '\n';
- */
+/** @brief Handles foreground and background ANSI color codes. */
+class TextColor {
+  public:
+
+  TextColor():
+    fg (-1),   // Default: no foreground color set
+    bg (-1) {} // Default: no background color set
+
+  auto set_fg(uint code) -> TextColor& { fg = code; return *this; }
+  auto set_bg(uint code) -> TextColor& { bg = code; return *this; }
+
+  /** 
+   * @brief Applies ANSI color codes to the input text.
+   * @example 
+   *   TextColor().set_fg(196).set_bg(15).use("Error");
+   *   // → "\033[38;5;196m\033[48;5;15mError\033[0m"
+   */
+  auto to(const str& text) const -> str {
+    auto out = ""s;
+    if (fg >= 0) out += format("\033[38;5;{}m", fg);
+    if (bg >= 0) out += format("\033[48;5;{}m", bg);
+    return format("{}{}\033[0m", out, text);
+  }
+
+  // ------ Member variables -------
+  int fg;
+  int bg;
+};
+
+
+/** @brief Handles bold, italic, underline, reverse styles. */
+class TextStyle {
+  public:
+
+  TextStyle():
+    bold      (false),    // Bold style (ANSI \033[1m)
+    italic    (false),    // Italic style (ANSI \033[3m)
+    underline (false),    // Underline style (ANSI \033[4m)
+    reverse   (false) {}  // Reverse video (ANSI \033[7m)
+
+  auto set_bold() -> TextStyle& { return bold = true, *this; }
+  auto set_italic() -> TextStyle& { return italic = true, *this; }
+  auto set_underline() -> TextStyle& { return underline = true, *this; }
+  auto set_reverse() -> TextStyle& { return reverse = true, *this; }
+
+  /** 
+   * @brief Returns the text with ANSI style codes applied.
+   * @example
+   *   TextStyle().set_bold(true).set_italic(true).to("Hello");
+   *   // → "\033[1m\033[3mHello"
+   */
+  auto to(const str& text) const -> str {
+    auto out = ""s;
+    if (bold)      out += "\033[1m";
+    if (italic)    out += "\033[3m";
+    if (underline) out += "\033[4m";
+    if (reverse)   out += "\033[7m";
+    return out + text;
+  }
+
+  // ------ Member variables -------
+  bool bold;
+  bool italic;
+  bool underline;
+  bool reverse;
+};
+
+
+/** @brief Handles padding and alignment. */
+class TextAlign {
+  public:
+
+  TextAlign():
+    align ('r'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
+    fill  (' ') {}  // Padding fill character (default: space)
+
+  auto set_align(char a) -> TextAlign& { return align = a, *this; }
+  auto set_fill(char f) -> TextAlign& { return fill = f, *this; }
+
+  /** 
+   * @brief Applies alignment using current terminal width.
+   * @example TextAlign().set_align('c').set_fill('.').to("Hello");
+   */
+  auto to(const str& input) const -> str {
+    uint width = get_terminal_width();
+
+    if (width <= len(input))
+      return input;
+
+    uint pad = width - len(input);
+    if (align == 'l')
+      return input + str(pad, fill);
+
+    else if (align == 'c') {
+      uint lpad = pad / 2;
+      uint rpad = pad - lpad;
+      return str(lpad, fill) + input + str(rpad, fill);
+    }
+    
+    return str(pad, fill) + input; // default right
+  }
+
+  // ------ Member variables -------
+  char align;
+  char fill;
+};
+
+
+/** @brief Main class to represent styled, padded terminal text. */
 class Text {
   public:
 
-  Text(str s): 
-    text(move(s)),        // The raw user text to display (e.g., "Hello")
-    prefix(""s),          // ANSI styling prefix (e.g., "\033[31m\033[1m" for red + bold)
-    suffix("\033[0m"s) {} // ANSI reset code to clear styling after the text
+  Text(const str& s): 
+    raw(s),     // Original input text
+    color(),    // Handles foreground and background colors
+    style(),    // Handles text styles (bold, italic, etc.)
+    align() {}  // Handles alignment and padding
 
-  
-  /** @brief Enables ANSI escape sequences and Unicode output. */
+  /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    #if defined(_WIN32)
-      auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
-      auto mode = DWORD(0);
-      if (GetConsoleMode(handle, &mode)) {
-        mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-        SetConsoleMode(handle, mode);
-      }
-    #endif
-
-    enable_unicode(); // Defined in platforms.hpp
+    enable_unicode();
   }
 
-  /**
-   * @brief Applies multiple styles using a mini-DSL string.
-   * 
-   * Tokens are delimited by '+'. Each token represents a style 
-   * (bold, underline) or color (red, bg15, etc.). Tokens can appear
-   * in any order.
-   * 
-   * Supported style tokens:
-   *   - b     → bold
-   *   - i     → italic
-   *   - u     → underline
-   *   - rev   → reverse video
-   * 
-   * Supported color tokens:
-   *   - r, gr, yl, bl, mg, cy, wh → standard named colors
-   *   - fgN  → 256-color foreground (e.g., fg123)
-   *   - bgN  → 256-color background (e.g., bg15)
-   * 
-   * Example:
-   *   Text("Error").use("r+b+bg15");
-   *   "Done"_txt.use("gr+b");
-   */
+  /** @brief Returns the fully formatted output string. */
+  auto get() const -> str {
+    auto padded = align.to(raw);
+    auto styled = style.to(padded);
+    return color.to(styled);
+  }
+
+  /** @brief Applies style/color/padding using a style string. */
   auto use(const str& spec) -> Text& {
-    auto parts = isstream(spec);
+    auto stream = isstream(spec);
     auto token = ""s;
 
-    while (getline(parts, token, '+')) {
-      if (token == "b") bold();
-      else if (token == "i") italic();
-      else if (token == "u") underline();
-      else if (token == "rev") reverse();
+    while (getline(stream, token, '+')) {
+      // Text style tokens
+      if (token == "b") style.set_bold();
+      else if (token == "i") style.set_italic();
+      else if (token == "u") style.set_underline();
+      else if (token == "rev") style.set_reverse();
 
-      else if (token == "r")  red();
-      else if (token == "gr") green();
-      else if (token == "yl") yellow();
-      else if (token == "bl") blue();
-      else if (token == "mg") magenta();
-      else if (token == "cy") cyan();
-      else if (token == "wh") white();
+      // Named foreground colors
+      else if (token == "r")  color.set_fg(196);
+      else if (token == "gr") color.set_fg(46);
+      else if (token == "yl") color.set_fg(226);
+      else if (token == "bl") color.set_fg(27);
+      else if (token == "mg") color.set_fg(201);
+      else if (token == "cy") color.set_fg(51);
+      else if (token == "wh") color.set_fg(15);
 
-      else if (token.starts_with("fg")) fg(stoul(token.substr(2)));
-      else if (token.starts_with("bg")) bg(stoul(token.substr(2)));
+      // 256-color support
+      else if (token.starts_with("fg")) color.set_fg(stoul(token.substr(2)));
+      else if (token.starts_with("bg")) color.set_bg(stoul(token.substr(2)));
+
+      else if (token == "pl") align.set_align('l');
+      else if (token == "pc") align.set_align('c');
+      else if (token == "pr") align.set_align('r');
+      else if (token.starts_with("pf") && token.length() == 3)
+        align.set_fill(token[2]);
     }
 
     return *this;
   }
 
-  /** @brief Returns the fully rendered string with ANSI styling. */
-  auto get() const -> str {
-    return prefix + text + suffix;
-  }
-
-  // === Chainable styles ===
-  auto bold()      -> Text& { prefix += "\033[1m"; return *this; }
-  auto italic()    -> Text& { prefix += "\033[3m"; return *this; }
-  auto underline() -> Text& { prefix += "\033[4m"; return *this; }
-  auto reverse()   -> Text& { prefix += "\033[7m"; return *this; }
-
-  auto fg(uint code) -> Text& {
-    prefix += format("\033[38;5;{}m", code);
-    return *this;
-  }
-
-  auto bg(uint code) -> Text& {
-    prefix += format("\033[48;5;{}m", code);
-    return *this;
-  }
-
-  // === Named colors (foreground)
-  auto red()     -> Text& { return fg(196); }  // bright red in 256-color
-  auto green()   -> Text& { return fg(46); }   // bright green
-  auto yellow()  -> Text& { return fg(226); }  // bright yellow
-  auto blue()    -> Text& { return fg(27); }   // bright blue
-  auto magenta() -> Text& { return fg(201); }  // bright magenta
-  auto cyan()    -> Text& { return fg(51); }   // bright cyan
-  auto white()   -> Text& { return fg(15); }   // bright white
-
-  // === Bracket operator for cleaner syntax: "text"_txt["r+b"]
-  auto operator[](const str& spec) const -> Text {
+  /** @brief Alternate way to apply DSL: Text("x")["gr+b+p10c"] */
+  auto operator[](const str& spec) -> Text {
     auto copy = *this;
     return copy.use(spec);
   }
 
-  // === Output stream support
+  /** @brief Enables usage with std::ostream (e.g. `cout << text`) */
   friend auto operator<<(ostream& out, const Text& t) -> ostream& {
     return out << t.get();
   }
 
+  private:
+
   // ------ Member variables ------
-  str text;
-  str prefix;
-  str suffix;
+  str raw;
+  TextColor color;
+  TextStyle style;
+  TextAlign align;
+
+  // ------ Internal helpers ------
+  
 };
-
-
-// === Text literals ===
-
-// Base literal
-auto operator"" _txt(const char* s, size_t) -> Text { return Text(s); }
-
-// === Color-coded literals (useful for quick stylings) ===
-auto operator"" _r(const char* s, size_t)   -> Text { return Text(s).red(); }
-auto operator"" _gr(const char* s, size_t)  -> Text { return Text(s).green(); }
-auto operator"" _yl(const char* s, size_t)  -> Text { return Text(s).yellow(); }
-auto operator"" _bl(const char* s, size_t)  -> Text { return Text(s).blue(); }
-auto operator"" _mg(const char* s, size_t)  -> Text { return Text(s).magenta(); }
-auto operator"" _cy(const char* s, size_t)  -> Text { return Text(s).cyan(); }
-auto operator"" _wh(const char* s, size_t)  -> Text { return Text(s).white(); }

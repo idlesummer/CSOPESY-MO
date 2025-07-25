@@ -1,6 +1,5 @@
 #pragma once
 #include "core/shell/ShellStorage.hpp"
-#include "core/common/constants/banner.hpp"
 
 
 class ShellScreen {  
@@ -14,10 +13,7 @@ class ShellScreen {
   }
 
   /** Switch to a screen by ID. Use "main" or "" for the main screen. */
-  void switch_to(uint id) {
-    storage.set("screen.id", id);
-    if (is_main()) cout << BANNER << '\n';
-  }
+  void switch_to(uint id) { storage.set("screen.id", id); }
 
   /** Switch to the main screen (empty ID). */
   void switch_to_main() { switch_to(0); }

@@ -96,7 +96,7 @@ class CommandHandler {
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
-  auto set_flags(const vec<Flag>& value) -> CommandHandler& { return flags = value, *this; }
+  auto add_flag(const Flag& value) -> CommandHandler& { return flags.push_back(value), *this; }
   auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
@@ -394,6 +394,7 @@ auto make_demo() -> CommandHandler {
 ------------------------------
 
 #pragma once
+#include "core/common/utility/Text.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
@@ -405,13 +406,15 @@ auto make_echo() -> CommandHandler {
     .set_desc("Print arguments.")
     .set_min_args(1)
     .set_max_args(UINT_MAX)
-    .set_flags({})
     .set_disabled(false)
 
     .set_execute([](Command& command, Shell&) {
+      auto out = osstream();
+
       for (auto& arg: command.args)
-        cout << arg << ' ';
-      cout << '\n';
+        out << arg << ' ';
+
+      cout << Text(out.str())["gr"]<< '\n';
     });
 }
 
@@ -432,7 +435,6 @@ auto make_exit() -> CommandHandler {
     .set_desc("Exit shell.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     .set_disabled(false)
 
     .set_execute([](Command&, Shell& shell) {
@@ -464,7 +466,6 @@ auto make_initialize() -> CommandHandler {
     .set_desc("Initializes the processor configuration of the application.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     .set_disabled(false)
 
     .set_validate([](Command& command, Shell& shell) -> Str {
@@ -528,7 +529,6 @@ auto make_process_smi() -> CommandHandler {
     .set_desc("Shows the current process status, logs, and info.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
 
     .set_validate([](Command& command, Shell& shell) -> Str {
       if (shell.screen.is_main())
@@ -582,7 +582,6 @@ auto make_report_util() -> CommandHandler {
     .set_desc("Generates a CPU unitilization report.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       if (!shell.screen.is_main())
@@ -667,7 +666,6 @@ auto make_scheduler_start() -> CommandHandler {
     .set_desc("Starts periodic dummy process generation every 'batch_process_freq' ticks.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;
@@ -705,7 +703,6 @@ auto make_scheduler_stop() -> CommandHandler {
     .set_desc("Stops generating dummy processes.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;
@@ -745,7 +742,9 @@ auto make_screen() -> CommandHandler {
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({{"-s", true}, {"-r", true}, {"-ls", false}})
+    .add_flag({ "-s", true })
+    .add_flag({ "-r", true })
+    .add_flag({ "-ls", false })
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
@@ -901,7 +900,7 @@ auto make_test() -> CommandHandler {
     .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({{ "-r", false }})
+    .add_flag({ "-r", false })
 
     .set_execute([](Command& command, Shell& shell) {
       auto& interpreter = InstructionInterpreter::get();
@@ -916,7 +915,7 @@ auto make_test() -> CommandHandler {
 
       // 1. Spawn process if not already present
       if (!storage.has("test.process")) {
-        auto process = Process(999, "test.process", 10);
+        auto process = Process(0, "test.process", 10);
         storage.set("test.process", move(process));
         cout << "[loop-test] Process created.\n";
         return;
@@ -945,6 +944,44 @@ auto make_test() -> CommandHandler {
 }
 
 ------------------------------
+ FILE:  text.hpp
+ PATH:  core\command\handlers\text.hpp
+------------------------------
+
+#pragma once
+#include "core/common/utility/Text.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+
+auto make_text() -> CommandHandler {
+  return CommandHandler()
+    .set_name("text")
+    .set_desc("Print arguments.")
+    .set_min_args(1)
+    .set_max_args(UINT_MAX)
+    .add_flag({ "-s", true })  // expects a value like: -s gr+b
+    .set_disabled(false)
+
+    .set_execute([](Command& command, Shell&) {
+      auto style = "fg245"s;    // Default: soft gray
+      if (command.flags.contains("-s"))
+        style = command.flags.at("-s");
+
+      auto out = osstream();
+      for (auto& arg: command.args)
+        out << arg << ' ';
+
+      auto msg = out.str();
+      if (!msg.empty())
+        msg.pop_back();
+
+      cout << Text(msg)[style] << '\n';
+    });
+}
+
+------------------------------
  FILE:  util.hpp
  PATH:  core\command\handlers\util.hpp
 ------------------------------
@@ -962,7 +999,6 @@ auto make_util() -> CommandHandler {
     .set_desc("Generates a report of running and Finished processes to csopesylog.txt")
     .set_min_args(0)
     .set_max_args(0)
-    .set_flags({})
 
     .set_validate([](Command&, Shell& shell) -> Str {
       if (!shell.screen.is_main())
@@ -1042,6 +1078,7 @@ auto make_util() -> CommandHandler {
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
 #include "test.hpp"
+#include "text.hpp"
 
   
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -1058,6 +1095,7 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_stop(),
     make_screen(),
     make_test(),
+    make_text(),
   };
 }
 
@@ -1070,17 +1108,14 @@ auto get_command_handlers() -> vec<CommandHandler> {
 #include <string>
 
 inline const std::string BANNER = R"(
-         .dP                                                                        Yb    
-       .dP    .ooooo.   .oooo.o  .ooooo.  oo.ooooo.   .ooooo.   .oooo.o oooo    ooo  `Yb  
-      dP     d88' `"Y8 d88(  "8 d88' `88b  888' `88b d88' `88b d88(  "8  `88.  .8'     `Yb
-      Yb     888       `"Y88b.  888   888  888   888 888ooo888 `"Y88b.    `88..8'      .dP
-       `Yb   888   .o8 o.  )88b 888   888  888   888 888    .o o.  )88b    `888'     .dP  
-         `Yb `Y8bod8P' 8""888P' `Y8bod8P'  888bod8P' `Y8bod8P' 8""888P'     .8'     dP    
-                                           888                          .o..P'            
-                                          o888o                         `Y8P'             
+  â–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—   â–ˆâ–ˆâ•— â–ˆâ–ˆâ•—  
+ â–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â•šâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â• â•šâ–ˆâ–ˆâ•— 
+â–ˆâ–ˆâ•”â•  â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•   â•šâ–ˆâ–ˆâ•—
+â•šâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘      â•šâ•â•â•â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â•  â–ˆâ–ˆâ•”â•â•â•   â•šâ•â•â•â•â–ˆâ–ˆâ•‘   â•šâ–ˆâ–ˆâ•”â•    â–ˆâ–ˆâ•”â•
+ â•šâ–ˆâ–ˆâ•— â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•”â• 
+  â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â•â•  â•šâ•â•â•â•â•â•  â•šâ•â•      â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•    â•šâ•â•    â•šâ•â•
 
-                          Like a Real OS, But Not Written in Assembly!        
-                              Dicayanan|Maramag|Maunahan|Villaver                         
+                    Dicayanan|Maramag|Maunahan|Villaver                         
 )";
 
 ------------------------------
@@ -1354,6 +1389,7 @@ decltype(auto) with_unlocked(Func&& fn) {
 #include <any>
 #include <cctype>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -1366,6 +1402,7 @@ using std::runtime_error;
 
 // === Type Aliases ===
 using std::any;
+using std::exception;
 using std::function;
 using std::optional;
 using byte = uint8_t;
@@ -1412,24 +1449,54 @@ auto move_iter(Type it) {
 
 #pragma once
 
+// === Platform-specific includes ===
 #if defined(_WIN32)
   #ifndef NOMINMAX
     #define NOMINMAX
   #endif
   #include <windows.h>
-  void enable_unicode() {
-    SetConsoleOutputCP(CP_UTF8);
-  }
 #else
+  #include <sys/ioctl.h>
+  #include <unistd.h>
   #include <locale>
   #include <iostream>
-  void enable_unicode() {
+#endif
+
+// === Terminal Unicode and ANSI support ===
+inline void enable_unicode() {
+  #if defined(_WIN32)
+    // Enable ANSI escape sequences on Windows 10+
+    auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    auto mode = DWORD(0);
+    if (GetConsoleMode(handle, &mode)) {
+      mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+      SetConsoleMode(handle, mode);
+    }
+
+    // Enable UTF-8 codepage
+    SetConsoleOutputCP(CP_UTF8);
+  #else
     std::ios_base::sync_with_stdio(false);
     std::setlocale(LC_ALL, "");
     std::wcout.imbue(std::locale(""));
-  }
-#endif
+  #endif
+}
 
+// === Terminal width detection ===
+inline auto get_terminal_width() -> uint {
+  #if defined(_WIN32)
+    auto csbi = CONSOLE_SCREEN_BUFFER_INFO{};
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+      return csbi.srWindow.Right - csbi.srWindow.Left + 1;
+  #else
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
+      return w.ws_col;
+  #endif
+  return 80; // Fallback default
+}
+
+// === Common utilities ===
 #include <algorithm>
 using std::min;
 using std::max;
@@ -1555,8 +1622,8 @@ using isstream = std::istringstream;
 using osstream = std::ostringstream;
 
 // === Formatting & Parsing ===
-using std::format;
 using std::errc;
+using std::format;
 using std::from_chars;
 
 // === Constants ===
@@ -1888,6 +1955,200 @@ class EventEmitter {
 };
 
 ------------------------------
+ FILE:  Text.hpp
+ PATH:  core\common\utility\Text.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+
+/** @brief Handles foreground and background ANSI color codes. */
+class TextColor {
+  public:
+
+  TextColor():
+    fg (-1),   // Default: no foreground color set
+    bg (-1) {} // Default: no background color set
+
+  auto set_fg(uint code) -> TextColor& { fg = code; return *this; }
+  auto set_bg(uint code) -> TextColor& { bg = code; return *this; }
+
+  /** 
+   * @brief Applies ANSI color codes to the input text.
+   * @example 
+   *   TextColor().set_fg(196).set_bg(15).use("Error");
+   *   // â†’ "\033[38;5;196m\033[48;5;15mError\033[0m"
+   */
+  auto to(const str& text) const -> str {
+    auto out = ""s;
+    if (fg >= 0) out += format("\033[38;5;{}m", fg);
+    if (bg >= 0) out += format("\033[48;5;{}m", bg);
+    return format("{}{}\033[0m", out, text);
+  }
+
+  // ------ Member variables -------
+  int fg;
+  int bg;
+};
+
+
+/** @brief Handles bold, italic, underline, reverse styles. */
+class TextStyle {
+  public:
+
+  TextStyle():
+    bold      (false),    // Bold style (ANSI \033[1m)
+    italic    (false),    // Italic style (ANSI \033[3m)
+    underline (false),    // Underline style (ANSI \033[4m)
+    reverse   (false) {}  // Reverse video (ANSI \033[7m)
+
+  auto set_bold() -> TextStyle& { return bold = true, *this; }
+  auto set_italic() -> TextStyle& { return italic = true, *this; }
+  auto set_underline() -> TextStyle& { return underline = true, *this; }
+  auto set_reverse() -> TextStyle& { return reverse = true, *this; }
+
+  /** 
+   * @brief Returns the text with ANSI style codes applied.
+   * @example
+   *   TextStyle().set_bold(true).set_italic(true).to("Hello");
+   *   // â†’ "\033[1m\033[3mHello"
+   */
+  auto to(const str& text) const -> str {
+    auto out = ""s;
+    if (bold)      out += "\033[1m";
+    if (italic)    out += "\033[3m";
+    if (underline) out += "\033[4m";
+    if (reverse)   out += "\033[7m";
+    return out + text;
+  }
+
+  // ------ Member variables -------
+  bool bold;
+  bool italic;
+  bool underline;
+  bool reverse;
+};
+
+
+/** @brief Handles padding and alignment. */
+class TextAlign {
+  public:
+
+  TextAlign():
+    align ('r'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
+    fill  (' ') {}  // Padding fill character (default: space)
+
+  auto set_align(char a) -> TextAlign& { return align = a, *this; }
+  auto set_fill(char f) -> TextAlign& { return fill = f, *this; }
+
+  /** 
+   * @brief Applies alignment using current terminal width.
+   * @example TextAlign().set_align('c').set_fill('.').to("Hello");
+   */
+  auto to(const str& input) const -> str {
+    uint width = get_terminal_width();
+
+    if (width <= input.length()) 
+      return input;
+
+    uint pad = width - input.length();
+    if (align == 'l')
+      return input + str(pad, fill);
+
+    else if (align == 'c') {
+      uint lpad = pad / 2;
+      uint rpad = pad - lpad;
+      return str(lpad, fill) + input + str(rpad, fill);
+    }
+    
+    return str(pad, fill) + input; // default right
+  }
+
+  // ------ Member variables -------
+  char align;
+  char fill;
+};
+
+
+/** @brief Main class to represent styled, padded terminal text. */
+class Text {
+  public:
+
+  Text(const str& s): 
+    raw(s),     // Original input text
+    color(),    // Handles foreground and background colors
+    style(),    // Handles text styles (bold, italic, etc.)
+    align() {}  // Handles alignment and padding
+
+  /** @brief Enables ANSI and Unicode output (once at startup). */
+  static void enable() {
+    enable_unicode();
+  }
+
+  /** @brief Returns the fully formatted output string. */
+  auto get() const -> str {
+    auto padded = align.to(raw);
+    auto styled = style.to(padded);
+    return color.to(styled);
+  }
+
+  /** @brief Applies style/color/padding using a style string. */
+  auto use(const str& spec) -> Text& {
+    auto stream = isstream(spec);
+    auto token = ""s;
+
+    while (getline(stream, token, '+')) {
+      // Text style tokens
+      if (token == "b") style.set_bold();
+      else if (token == "i") style.set_italic();
+      else if (token == "u") style.set_underline();
+      else if (token == "rev") style.set_reverse();
+
+      // Named foreground colors
+      else if (token == "r")  color.set_fg(196);
+      else if (token == "gr") color.set_fg(46);
+      else if (token == "yl") color.set_fg(226);
+      else if (token == "bl") color.set_fg(27);
+      else if (token == "mg") color.set_fg(201);
+      else if (token == "cy") color.set_fg(51);
+      else if (token == "wh") color.set_fg(15);
+
+      // 256-color support
+      else if (token.starts_with("fg")) color.set_fg(stoul(token.substr(2)));
+      else if (token.starts_with("bg")) color.set_bg(stoul(token.substr(2)));
+
+      else if (token == "pl") align.set_align('l');
+      else if (token == "pc") align.set_align('c');
+      else if (token == "pr") align.set_align('r');
+      else if (token.starts_with("pf") && token.length() == 3)
+        align.set_fill(token[2]);
+    }
+
+    return *this;
+  }
+
+  /** @brief Alternate way to apply DSL: Text("x")["gr+b+p10c"] */
+  auto operator[](const str& spec) -> Text {
+    auto copy = *this;
+    return copy.use(spec);
+  }
+
+  /** @brief Enables usage with std::ostream (e.g. `cout << text`) */
+  friend auto operator<<(ostream& out, const Text& t) -> ostream& {
+    return out << t.get();
+  }
+
+  private:
+
+  // ------ Member variables ------
+  str raw;
+  TextColor color;
+  TextStyle style;
+  TextAlign align;
+};
+
+------------------------------
  FILE:  Core.hpp
  PATH:  core\execution\Core.hpp
 ------------------------------
@@ -1936,7 +2197,9 @@ class Core {
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
       while (active) {
-        tick();
+        with_locked([&] {
+          tick();
+        });
         sleep_for(1ms);
       }
     });
@@ -1982,17 +2245,23 @@ class Core {
     if (job == nullptr) return; // If no process is assigned to this core, skip the tick
     if (can_release) return;    // Prevent ticking the process if it's already marked for release
 
-    auto& process = *job;       // Get the process from the process pointer
-    process.step();             // Execute one instruction from the process script
-    ++job_ticks;                // Track how long this process is running on this core
+    try {
+      auto& process = *job;       // Get the process from the process pointer
+      process.step();             // Execute one instruction from the process script
+      ++job_ticks;
 
-    // If the process has finished all its instructions, mark for release
-    if (process.data.program.finished())
-      can_release = true;
+      // If the process has finished all its instructions, mark for release
+      if (job->data.program.finished())
+        can_release = true;
 
-    // If preemption is defined and it says to preempt, mark for release
-    if (preempt != nullptr && preempt(*this))
-      can_release = true;
+      // If the process has finished all its instructions, mark for release
+      if (preempt && preempt(*this))
+        can_release = true;
+
+    } catch (exception& e) {
+      cerr << format("[Core {}] tick(): Exception: {}\n", id, e.what());
+      throw;
+    }
   }
 
   /** @brief Signals the core to stop and joins the thread cleanly. */
@@ -3222,10 +3491,10 @@ class Scheduler {
   public:
 
   Scheduler():
-    names      (vec<str>()),            // Deferred generation vec<str> for user-inserted proc_table
-    ticks      (0),                    // Global tick counter
+    names      (vec<str>()),            // Deferred generation list for user-inserted process table
+    ticks      (0),                     // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
-    data       (SchedulerData()),       // Internal state (cores, proc_table, vec<str>)
+    data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
   /** Adds a user-named process to the pending generation vec<str>. */
@@ -3238,21 +3507,27 @@ class Scheduler {
   void tick() {
     if (!data.config.getb("initialized")) return;
 
-    // Generate batch processes
-    generate_processes();
+    try {
+      // Generate batch processes
+      generate_processes();
 
-    // Release finished or preempted cores
-    release_processes();
-
-    /** TODO: Clean/update paging info. */ 
-    // memory.tick(data);
-
-    // Tick sleeping processes
-    tick_sleeping_processes();
+      // Release finished or preempted cores
+      release_processes();
       
-    // Assign new processes to idle cores
-    strategy.tick(data);
-    ++ticks;
+      /** TODO: Clean/update paging info. */ 
+      // memory.tick(data);
+      
+      // Tick sleeping processes in the waiting queue
+      tick_sleeping_processes();
+
+      // Assign new processes to idle cores
+      strategy.tick(data);
+      ++ticks;
+
+    } catch (exception& e) {
+      cerr << format("[Scheduler] tick(): Exception: {}\n", e.what());
+      throw;
+    }
   }
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
@@ -3262,7 +3537,7 @@ class Scheduler {
 
     // Create the preempt handler from the factory method
     auto preempt_handler = strategy.get_preempt_handler(data);
-    
+
     // Inject in each core the preemption handler from strategy
     if (preempt_handler != nullptr)
       for (auto& ref: data.cores.get_all())                       
@@ -3325,19 +3600,20 @@ class Scheduler {
     }
   }
 
+  /** @brief Steps processes in wqueue. Returns processes to the ready queue once they're not sleeping. */
   void tick_sleeping_processes() {
     auto& wqueue = data.wqueue;
     for (auto it = wqueue.begin(); it != wqueue.end(); ) {
       auto& process = data.get_process(*it);
-      process.step();             // decrement sleep_ticks
+      process.step();           // decrement sleep_ticks
 
       if (!process.data.control.sleeping()) {
-        data.rqueue.push(*it);    // ready again
-        it = wqueue.erase(it);    // remove from wqueue
+        data.rqueue.push(*it);  // ready again
+        it = wqueue.erase(it);  // remove from wqueue
         continue;
       }
 
-      ++it;                       // still sleeping
+      ++it;                     // still sleeping
     }
   }
 };
@@ -3788,9 +4064,9 @@ class ShellStorage {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/utility/Ansi.hpp"
 #include "core/common/constants/banner.hpp"
-#include "core/common/utility/EventEmitter.hpp"
+#include "core/common/utility/Ansi.hpp"
+#include "core/common/utility/Text.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
@@ -3868,13 +4144,8 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-
-    // Initialize terminal settings
-    Ansi::enable();
-    enable_unicode();
-    
-    // Initialize command handlers
-    register_commands();
+    Text::enable();       // Prepare terminal settings for output
+    register_commands();  // Initialize command handlers
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */

@@ -23,6 +23,10 @@ auto make_text() -> CommandHandler {
       for (auto& arg: command.args)
         out << arg << ' ';
 
-      cout << Text(out.str())[style] << '\n';
+      auto msg = out.str();
+      if (!msg.empty())
+        msg.pop_back();
+
+      cout << Text(msg)[style] << '\n';
     });
 }

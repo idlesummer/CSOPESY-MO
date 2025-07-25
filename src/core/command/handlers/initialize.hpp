@@ -1,6 +1,5 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/constants/banner.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
@@ -47,7 +46,7 @@ auto make_initialize() -> CommandHandler {
       shell.scheduler.set_config(move(config));
 
       system("cls");
-      cout << format("{}\n", BANNER);
+      cout << shell.banner.get();
       cout << "[Shell] Scheduler config loaded.\n";
       storage.remove("initialize.cache");
 

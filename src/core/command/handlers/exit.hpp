@@ -15,8 +15,9 @@ auto make_exit() -> CommandHandler {
     .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
       if (screen.is_main())
-        shell.stop();
-      else
-        screen.switch_to_main();
+        return void(shell.stop());
+
+      screen.switch_to_main();
+      cout << shell.banner.get();
     });
 }
