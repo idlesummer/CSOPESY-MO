@@ -57,6 +57,11 @@ class CoreManager {
   /** @brief Returns a list of references to all busy (non-idle) cores. */
   auto get_busy() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
   
+  /** @brief Returns the number of currently busy (non-idle) cores. */
+  auto get_busy_size() -> uint {
+    return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
+  }
+
   /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
   auto get_releasable() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
@@ -74,11 +79,6 @@ class CoreManager {
   vec<uptr<Core>> cores;
 
   // ------ Helper Methods ------
-
-  /** @brief Returns the number of currently busy (non-idle) cores. */
-  auto get_busy_size() -> uint {
-    return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
-  }
 
   /** @brief Returns references to cores that satisfy the given filter condition. */
   template <typename Func = bool(*)(uptr<Core>&)>
