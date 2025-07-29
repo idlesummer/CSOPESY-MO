@@ -150,7 +150,7 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-          for (const std::string& arg : command.args) {
+          for (const str& arg : command.args) {
             cout << format("{}", arg);
           }
       }
