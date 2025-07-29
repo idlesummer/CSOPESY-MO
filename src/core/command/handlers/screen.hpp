@@ -117,8 +117,9 @@ auto make_screen() -> CommandHandler {
           auto& process = data.get_process(pid);
           cout << render_line(process, "Finished");
         }
-
+        
         cout << Text("─", line_width)[blue];
+        cout << '\n';
       }
 
       // === -s: Spawn and switch to new process screen
