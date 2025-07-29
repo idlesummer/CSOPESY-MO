@@ -11,7 +11,7 @@ class Arg {
     min  (min),         // Minimum value (for "uint" type)
     max  (max) {}       // Maximum value (for "uint" type)
   
-  // ------ Member variables ------
+  // ------ Instance variables ------
   str type; 
   uint min; 
   uint max; 
@@ -65,7 +65,7 @@ class Signature {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<Arg> args;
 
   // ------ Constants ------

@@ -3,6 +3,7 @@
 #include <list>
 #include <map>
 #include <queue>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -15,6 +16,7 @@ using std::make_pair;
 using std::out_of_range;
 using std::pair;
 using std::queue;
+using std::tuple;
 using std::unordered_map;
 using std::unordered_set;
 using std::vector;

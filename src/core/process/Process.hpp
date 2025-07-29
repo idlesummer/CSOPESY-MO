@@ -7,6 +7,8 @@
 
 class Process {
   public:  
+  // ------ Class variables ------
+  inline static auto& interpreter = InstructionInterpreter::get();
 
   /** @brief Creates a process with a random instruction script. */
   Process(uint pid, str name, uint size): 
@@ -17,9 +19,6 @@ class Process {
         move(interpreter.generate_script(size))
       )
     ) {}
-  
-  /** @brief Appends a log message (e.g. from PRINT instruction). */
-  void log(str line) { data.log(move(line)); }
 
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
@@ -39,7 +38,6 @@ class Process {
     return false;
   }
 
-  // ------ Member variables ------
-  inline static auto& interpreter = InstructionInterpreter::get();
+  // ------ Instance variables ------
   ProcessData data;
 };

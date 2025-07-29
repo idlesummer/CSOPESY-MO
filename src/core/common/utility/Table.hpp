@@ -67,7 +67,7 @@ class Table {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   
   uint width;       
   vec<str> rows;    

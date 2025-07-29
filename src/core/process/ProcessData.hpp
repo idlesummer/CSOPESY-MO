@@ -31,7 +31,7 @@ class ProcessData {
   /** @brief Append a log message (used for PRINT instructions) */
   void log(str line) { logs.push_back(move(line)); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   uint id;            
   str name;          
   vec<str> logs;         

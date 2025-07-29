@@ -26,7 +26,7 @@ class TextColor {
     return format("{}{}\033[0m", out, text);
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   int fg;
   int bg;
 };
@@ -62,7 +62,7 @@ class TextStyle {
     return out + text;
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   bool bold;
   bool italic;
   bool underline;
@@ -104,7 +104,7 @@ class TextAlign {
       return input; // default left
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   char align;
   char fill;
 };
@@ -180,7 +180,7 @@ class Text {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   str raw;
   TextColor color;

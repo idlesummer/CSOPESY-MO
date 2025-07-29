@@ -24,6 +24,6 @@ class ProcessControl {
   /** @brief Advances sleep state by one tick, if sleeping. */
   void tick() { if (sleep_ticks > 0) --sleep_ticks; }
   
-  // ------ Member variables ------
+  // ------ Instance variables ------
   uint sleep_ticks;
 };

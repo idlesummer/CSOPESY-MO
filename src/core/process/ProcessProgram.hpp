@@ -61,7 +61,7 @@ class ProcessProgram {
     return out.str();
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   Instruction::Script script;
   ContextStack context;

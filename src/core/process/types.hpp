@@ -48,6 +48,6 @@ class ContextStack {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<ContextFrame> stack;
 };

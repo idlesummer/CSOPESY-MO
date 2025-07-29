@@ -30,6 +30,6 @@ class ProcessMemory {
     return symbol_table;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   map<str,uint> symbol_table;
 };

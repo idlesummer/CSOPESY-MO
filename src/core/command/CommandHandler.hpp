@@ -29,7 +29,7 @@ class CommandHandler {
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
     
-  // ------- Member variables -------
+  // ------- Instance variables -------
   
   str name;                        
   str desc;                        

@@ -62,7 +62,7 @@ class Shell {
     sleep_for(300ms);       // Optional pause for effect
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   CommandInterpreter& interpreter;    
   Thread shell_thread;

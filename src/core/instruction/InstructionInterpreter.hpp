@@ -85,7 +85,7 @@ class InstructionInterpreter {
     return script;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   map<str,InstructionHandler> handlers;           
   vec<ref<InstructionHandler>> all_handlers;      

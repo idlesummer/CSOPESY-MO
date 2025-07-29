@@ -27,6 +27,6 @@ class ShellScreen {
   /** True if current screen is the main screen. */
   auto is_main() -> bool { return get_id() == 0; }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   ShellStorage& storage;
 };

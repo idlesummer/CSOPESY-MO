@@ -63,7 +63,7 @@ class CommandInterpreter {
     handler.execute(command, shell);
   }
 
-  // ------- Member variables -------
+  // ------- Instance variables -------
   
   map<str,CommandHandler> handlers; 
 
@@ -74,6 +74,7 @@ class CommandInterpreter {
   /** @brief Returns true if any flag is invalid or misused. */
   static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
     // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
+    return false;
     return any_of(command.flags, [&](auto& flag) {
       return none_of(handler.flags, [&](Flag& f) {
         return f.name == flag.first && f.has_arg == !flag.second.empty();

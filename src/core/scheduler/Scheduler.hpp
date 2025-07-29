@@ -19,7 +19,7 @@ class Scheduler {
 
   Scheduler():
     names      (vec<str>()),            // Deferred generation list for user-inserted process table
-    ticks      (0),                     // Global tick counter
+    ticks      (0u),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
@@ -73,7 +73,7 @@ class Scheduler {
     data.config = move(config); // Must come last                               
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   vec<str> names;                
   uint ticks;             

@@ -75,7 +75,7 @@ class CoreManager {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<uptr<Core>> cores;
 
   // ------ Helper Methods ------

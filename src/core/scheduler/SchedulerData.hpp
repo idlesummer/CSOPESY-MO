@@ -48,7 +48,7 @@ class SchedulerData {
   /** @brief Returns the vec<uint> of running process IDs. */
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   map<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
