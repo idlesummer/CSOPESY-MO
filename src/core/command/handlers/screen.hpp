@@ -11,7 +11,7 @@ auto make_screen() -> CommandHandler {
     .set_name("screen")
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
-    .set_max_args(3)
+    .set_max_args(UINT_MAX)
     .add_flag({ "-s", true })
     .add_flag({ "-r", true })
     .add_flag({ "-ls", false })
