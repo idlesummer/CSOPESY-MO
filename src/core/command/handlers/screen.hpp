@@ -176,7 +176,8 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-        cout << "Hello world!\n";
+        for (auto& arg: command.args)
+          cout << format("{}\n", arg);
       }
     });
 }
