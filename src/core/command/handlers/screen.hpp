@@ -15,7 +15,7 @@ auto make_screen() -> CommandHandler {
     .add_flag({ "-s", true })
     .add_flag({ "-r", true })
     .add_flag({ "-ls", false })
-    .add_flag({ "-c", false})
+
 
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
