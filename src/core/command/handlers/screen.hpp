@@ -15,16 +15,15 @@ auto make_screen() -> CommandHandler {
     .add_flag({ "-s", true })
     .add_flag({ "-r", true })
     .add_flag({ "-ls", false })
-    .add_flag({ "-c", true})
+    .add_flag({ "-c", false})
 
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
-      auto has_c = command.flags.contains("-c");
 
-      if (has_s + has_ls + has_r + has_c > 1)
-        return "You must use only one of -s, -r, -c , or -ls.";
+      if (has_s + has_ls + has_r > 1)
+        return "You must use only one of -s, -r, or -ls.";
 
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
@@ -151,7 +150,9 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-        cout << format("Inputs: {}\n", command);
+          for (const std::string& arg : command.args) {
+            cout << format("{}", arg);
+          }
       }
     });
 }
