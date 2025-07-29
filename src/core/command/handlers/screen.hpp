@@ -65,10 +65,10 @@ auto make_screen() -> CommandHandler {
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
     .set_max_args(UINT_MAX)
-    .add_flag({ "-s", true })
-    .add_flag({ "-r", true })
-    .add_flag({ "-ls", false })
-    .add_flag({ "-c", false })
+    .add_flag("-s")
+    .add_flag("-r")
+    .add_flag("-ls")
+    .add_flag("-c")
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
@@ -123,13 +123,16 @@ auto make_screen() -> CommandHandler {
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        auto& name = command.flags.at("-s");
+        auto& name = command.args[0];
+
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
 
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
         scheduler.generate_process(name);
-        cout << format("\nWaiting for process creation: {}", name);
+        cout << format("Waiting for process creation: {}", name);
 
         // Wait until process queues
         if (!process_queued(name, scheduler))
@@ -154,7 +157,11 @@ auto make_screen() -> CommandHandler {
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        auto& name = command.flags.at("-r");
+        
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
+
+        auto& name = command.args[0];
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
@@ -176,8 +183,15 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-        for (auto& arg: command.args)
-          cout << format("{}\n", arg);
+        /** 
+         * Hi Raine! Here's the new changes:
+         * 
+         * @c command.input  -- raw input (without the command name)
+         * @c command.tokens -- list of all args and flags in order of the input
+         * @c command.flags  -- set of tokens with a dash `-` at the beginning
+         * @c command.args   -- list of arguments
+         * 
+         */ 
       }
     });
 }

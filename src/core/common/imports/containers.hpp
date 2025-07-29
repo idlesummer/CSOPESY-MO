@@ -5,7 +5,7 @@
 #include <queue>
 #include <tuple>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -16,17 +16,14 @@ using std::make_pair;
 using std::out_of_range;
 using std::pair;
 using std::queue;
+using std::set;
 using std::tuple;
 using std::unordered_map;
-using std::unordered_set;
 using std::vector;
 
 // === Aliases ===
 template <typename Type>
 using vec = vector<Type>;
-
-template <typename Type>
-using set = unordered_set<Type>;
 
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;

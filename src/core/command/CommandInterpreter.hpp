@@ -28,7 +28,7 @@ class CommandInterpreter {
   }
 
   /** @brief Executes a command in the shell context. */ 
-  void execute(const str& line, Shell& shell) {
+  void execute(str& line, Shell& shell) {
 
     // Parse the command line into a Command (name, args, flags)
     auto command = CommandParser::parse(line);  
@@ -71,14 +71,10 @@ class CommandInterpreter {
 
   private:
 
-  /** @brief Returns true if any flag is invalid or misused. */
+  /** @brief Returns true if any flag doesn't exist. */
   static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
-    // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
-    return false;
-    return any_of(command.flags, [&](auto& flag) {
-      return none_of(handler.flags, [&](Flag& f) {
-        return f.name == flag.first && f.has_arg == !flag.second.empty();
-      });
+    return any_of(command.flags, [&](const str& flag) {
+      return !handler.flags.contains(flag);
     });
   }
 
@@ -89,7 +85,7 @@ class CommandInterpreter {
   }
 
   /** Runs the handler's custom validator and returns an optional error message. */
-  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
+  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> optional<str> {
     if (!handler.validate) return nullopt;
     if (auto err = handler.validate(command, shell))
       return err->empty() ? "CommandHandler disabled or invalid." : *err;

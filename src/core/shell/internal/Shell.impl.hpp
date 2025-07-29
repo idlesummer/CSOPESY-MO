@@ -91,7 +91,7 @@ class Shell {
     cout << ">>> " << flush;
     if (str input; getline(cin, input)) {
       with_locked([&]{
-        interpreter.execute(move(input), *this);  // Executes commands
+        interpreter.execute(input, *this);  // Executes commands
         cout << '\n';
       });
 
