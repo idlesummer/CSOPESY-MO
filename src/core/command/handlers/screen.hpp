@@ -152,9 +152,10 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-          for (const str& arg : command.args) {
-            cout << format("{}", arg);
-          }
+          // for (const str& arg : command.args) {
+          //   cout << format("{}", arg);
+          // }
+          cout << format("Hello World");
       }
     });
 }
