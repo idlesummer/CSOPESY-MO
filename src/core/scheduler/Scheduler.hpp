@@ -66,9 +66,13 @@ class Scheduler {
     auto preempt_handler = strategy.get_preempt_handler(data);
 
     // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr)
-      for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(preempt_handler);
+    if (preempt_handler != nullptr) {
+      for (auto& ref: data.cores.get_all()) {
+        auto& core = ref.get();
+        core.delay = config.getu("delays-per-exec");
+        core.set_preempt(preempt_handler);
+      }
+    }
 
     data.config = move(config); // Must come last                               
   }

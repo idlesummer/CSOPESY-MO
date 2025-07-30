@@ -32,7 +32,8 @@ class Core {
   /** @brief Constructs a core with the given ID and starts the thread. */
   Core(uint id=0): 
     id          (id),                 // Core ID
-    job_ticks   (0),                  // Number of ticks the current process has been running
+    job_ticks   (0u),                 // Number of ticks the current process has been running
+    delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
     preempt     (nullptr),            // Optional strategy-injected logic
@@ -41,11 +42,14 @@ class Core {
   { 
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
+      auto counter = 0u;
+
       while (active) {
-        with_locked([&] {
-          tick();
-        });
-        sleep_for(1ms);
+        if (counter-- == 0) {
+          with_locked([&] { tick(); });
+          counter = delay;
+        }
+        sleep_for(1ms);  // always happens
       }
     });
   }
@@ -75,6 +79,7 @@ class Core {
 
   uint id;                      
   uint job_ticks;       
+  uint delay;       
   bool can_release;   
   Process* job; 
   func preempt;    
