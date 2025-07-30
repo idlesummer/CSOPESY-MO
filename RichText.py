@@ -108,40 +108,38 @@ class RichText:
         return f"\033[{';'.join(codes)}m" if codes else ''
     
     def render(self):
-        output = ""
+        out = ""
         index = 0
         text = self.text.replace("\\[", self.PLACE_LB).replace("\\]", self.PLACE_RB)
 
-        while index < len(text):
-            match = self.TAG_PATTERN.search(text, index)
-            if not match:
-                output += text[index:]
-                break
-
+        while match := self.TAG_PATTERN.search(text, index):
             start, end = match.span()
-            output += text[index:start]
+            out += text[index:start]
+
             is_closing = match.group(1) == '/'
-            tag_content = match.group(2).strip()
+            tag = match.group(2).strip()
 
             if is_closing:
-                if tag_content == "":
+                if tag == "":
                     self.stack.reset()
-                    output += self.ANSI_RESET
+                    out += self.ANSI_RESET
                 else:
-                    resolved = self.ALIASES.get(tag_content, tag_content)
-                    self.stack.pop(resolved)
-                    output += self.ANSI_RESET + self.to_ansi(self.stack.get_styles())
+                    tag = self.ALIASES.get(tag, tag)
+                    self.stack.pop(tag)
+                    out += self.ANSI_RESET + self.to_ansi(self.stack.get_styles())
             else:
-                styles = self.parse(tag_content)
+                styles = self.parse(tag)
                 self.stack.push(styles)
-                output += self.to_ansi(styles)
+                out += self.to_ansi(styles)
 
             index = end
 
-        output = output.replace(self.PLACE_LB, "[").replace(self.PLACE_RB, "]")
-        output += self.ANSI_RESET
-        self.visual_size = len(self.strip_ansi(output))
-        return output
+        out += text[index:]  # Append remaining raw text
+        out = out.replace(self.PLACE_LB, "[").replace(self.PLACE_RB, "]")
+        out += self.ANSI_RESET
+        self.visual_size = len(self.strip_ansi(out))
+        return out
+
     
     def __str__(self):
         return self.out
