@@ -14,11 +14,6 @@ auto make_echo() -> CommandHandler {
     .set_disabled(false)
 
     .set_execute([](Command& command, Shell&) {
-      auto out = osstream();
-
-      for (auto& arg: command.args)
-        out << arg << ' ';
-
-      cout << Text(out.str())["gr"]<< '\n';
+      cout << Text(command.input)["gr"]<< '\n';
     });
 }

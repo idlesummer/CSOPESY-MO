@@ -11,13 +11,13 @@ auto make_text() -> CommandHandler {
     .set_desc("Print arguments.")
     .set_min_args(1)
     .set_max_args(UINT_MAX)
-    .add_flag({ "-s", true })  // expects a value like: -s gr+b
+    .add_flag({ "-s", true })   // expects a value like: -s gr+b
     .set_disabled(false)
 
     .set_execute([](Command& command, Shell&) {
       auto style = "fg245"s;    // Default: soft gray
       if (command.flags.contains("-s"))
-        style = command.flags.at("-s");
+        style = command.args[0];
 
       auto out = osstream();
       for (auto& arg: command.args)

@@ -33,6 +33,6 @@ class ShellStorage {
   /** Remove a key from storage. */
   void remove(const str& key) { storage.erase(key); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   map<str,any> storage;
 };

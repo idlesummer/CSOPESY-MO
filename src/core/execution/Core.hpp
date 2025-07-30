@@ -71,7 +71,7 @@ class Core {
   /** @brief Injects a preemption handler (optional). */
   void set_preempt(func handler) { preempt = handler; }     
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   uint id;                      
   uint job_ticks;       

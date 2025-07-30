@@ -1,24 +1,75 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/Table.hpp"
+#include "core/common/utility/Text.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/scheduler/SchedulerData.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 
+/**
+──────────────────────────────────────────────────────────
+Running processes:
+  p04        (07/26/2025 03:49:47AM)  Core: 1   7 / 11
+  p09        (07/26/2025 03:49:48AM)  Core: 2   6 / 10
+  p05        (07/26/2025 03:49:47AM)  Core: 3   5 / 11
+  p02        (07/26/2025 03:49:47AM)  Core: 4   4 / 7
+
+Finished processes:
+  p01        (07/26/2025 03:49:47AM)   Finished      1 / 1
+  p06        (07/26/2025 03:49:47AM)   Finished      4 / 4
+  p03        (07/26/2025 03:49:47AM)   Finished      5 / 5
+  p07        (07/26/2025 03:49:47AM)   Finished      6 / 6
+  p08        (07/26/2025 03:49:47AM)   Finished      3 / 3
+  p10        (07/26/2025 03:49:48AM)   Finished      5 / 5
+──────────────────────────────────────────────────────────
+ */
+
 
 auto make_screen() -> CommandHandler {
+
+  auto render_line = [](auto& process, auto state) -> str {
+    auto& program = process.data.program;
+    auto ip = program.ip;
+    auto size = program.size();
+    auto time = timestamp(process.data.stime);
+
+    return format("  {:<10} {}   {}   {}\n",
+      process.data.name,
+      Text(format("({})", time))["fg33+pl"].get(),
+      state,
+      Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get()
+    );
+  };
+
+  auto process_exists = [](auto& name, auto& scheduler) -> bool {
+    auto& data = scheduler.data;
+    return data.has_process(name);
+  };
+
+  auto process_queued = [](auto& name, auto& scheduler) -> bool {
+    for (uint i = 0; i < 30; ++i) {
+      if (scheduler.data.has_process(name))
+        return true;
+
+      with_unlocked([&] { 
+        sleep_for(200ms); 
+      });
+    }
+    
+    return false;
+  };
+
   return CommandHandler()
     .set_name("screen")
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
     .set_max_args(UINT_MAX)
-    .add_flag({ "-s", true })
-    .add_flag({ "-r", true })
-    .add_flag({ "-ls", false })
-    .add_flag({ "-c", false })
+    .add_flag("-s")
+    .add_flag("-r")
+    .add_flag("-ls")
+    .add_flag("-c")
     
-
-
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
@@ -40,87 +91,64 @@ auto make_screen() -> CommandHandler {
       // === -ls: List screen info
       if (command.flags.contains("-ls")) {
         auto& data = scheduler.data;
-        auto& config = data.config;
         auto& cores = data.cores;
 
         auto size = cores.size();
         auto busy = cores.get_busy().size();
-        float cpu_util = cores.get_usage() * 100;
+        auto cpu_util = cores.get_usage() * 100.0f;
+
+        // Formatting
+        auto line_width = 58u;
+        auto blue = "fg33"s;
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
         cout << format("Cores used: {} / {}\n\n", busy, size);
-        cout << "\033[38;5;33m──────────────────────────────────────────────────────────\033[0m\n";
+        cout << Text("─", line_width)[blue] << '\n';
         cout << "Running processes:\n";
 
-        for (uint pid : cores.get_running_pids()) {
+        for (auto pid: cores.get_running_pids()) {
           auto& process = data.get_process(pid);
-          cout << format(
-            "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
-            process.data.name,
-            timestamp(process.data.stime),
-            process.data.core_id,
-            process.data.program.ip,
-            process.data.program.size()
-          );
+          auto core_id = process.data.core_id;
+          cout << render_line(process, format("Core: {:<2}", core_id));
         }
 
         cout << "\nFinished processes:\n";
-
-        for (uint pid : data.finished_pids) {
+        for (auto pid: data.finished_pids) {
           auto& process = data.get_process(pid);
-          cout << format(
-            "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
-            process.data.name,
-            timestamp(process.data.stime),
-            process.data.program.ip,
-            process.data.program.size()
-          );
+          cout << render_line(process, "Finished");
         }
-
-        cout << "\033[38;5;33m──────────────────────────────────────────────────────────\033[0m\n";
+        
+        cout << Text("─", line_width)[blue];
+        cout << '\n';
       }
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        const str& name = command.flags.at("-s");
+        auto& name = command.args[0];
 
-        auto process_exists = [&](const str& name) -> bool {
-          auto& data = scheduler.data;
-          return data.has_process(name);
-        };
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
 
-        if (process_exists(name))
+        if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
         scheduler.generate_process(name);
-        cout << format("\nWaiting for process creation: {}", name);
-        auto created = false;
+        cout << format("Waiting for process creation: {}", name);
 
-        for (uint i = 0; i < 30; ++i) {
-          if (scheduler.data.has_process(name)) {
-            created = true;
-            break;
-          }
-
-          with_unlocked([&] {
-            sleep_for(200ms);
-          });
-        }
-
-        if (!created)
+        // Wait until process queues
+        if (!process_queued(name, scheduler))
           return void(cout << "\nTimed out.\n");
 
-        auto& data = scheduler.data;
-        auto& process = data.get_process(name);
-        uint pid = process.data.id;
+        auto& process = scheduler.data.get_process(name);
+        auto pid = process.data.id;
 
         screen.switch_to(pid);
-        cout << "\n";
+        cout << '\n';
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (auto& log : process.data.logs)
+        for (auto& log: process.data.logs)
           cout << format("  {}\n", log);
 
         auto& program = process.data.program;
@@ -130,14 +158,18 @@ auto make_screen() -> CommandHandler {
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        auto& name = command.flags.at("-r");
+        
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
+
+        auto& name = command.args[0];
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
           return void(cout << format("Process <{}> not found.\n", name));
 
         auto& process = data.get_process(name);
-        uint pid = process.data.id;
+        auto pid = process.data.id;
 
         screen.switch_to(pid);
         cout << format("Process name: {}\n", process.data.name);
@@ -152,10 +184,15 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-          // for (const str& arg : command.args) {
-          //   cout << format("{}", arg);
-          // }
-          cout << format("Hello World");
+        /** 
+         * Hi Raine! Here's the new changes:
+         * 
+         * @c command.input  -- raw input (without the command name)
+         * @c command.tokens -- list of all args and flags in order of the input
+         * @c command.flags  -- set of tokens with a dash `-` at the beginning
+         * @c command.args   -- list of arguments
+         * 
+         */ 
       }
     });
 }

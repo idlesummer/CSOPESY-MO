@@ -36,7 +36,7 @@ Please write in clear sections and simple language for onboarding a new develope
 #include "core/shell/Shell.hpp"
 
 
-int main() {
+int main() { 
   auto shell = Shell(); // Main shell interface
   shell.start();        // Launch shell thread
 }
@@ -59,7 +59,7 @@ class Command {
     args  (vec<str>()),       // Positional arguments for the command
     flags (map<str,str>()) {} // Map of flags and their associated values (if any)
 
-  // ------- Member variables -------
+  // ------- Instance variables -------
   str name;    
   vec<str> args;    
   map<str,str> flags;   
@@ -101,7 +101,7 @@ class CommandHandler {
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
     
-  // ------- Member variables -------
+  // ------- Instance variables -------
   
   str name;                        
   str desc;                        
@@ -183,7 +183,7 @@ class CommandInterpreter {
     handler.execute(command, shell);
   }
 
-  // ------- Member variables -------
+  // ------- Instance variables -------
   
   map<str,CommandHandler> handlers; 
 
@@ -440,9 +440,10 @@ auto make_exit() -> CommandHandler {
     .set_execute([](Command&, Shell& shell) {
       auto& screen = shell.screen;
       if (screen.is_main())
-        shell.stop();
-      else
-        screen.switch_to_main();
+        return void(shell.stop());
+
+      screen.switch_to_main();
+      cout << shell.banner.get();
     });
 }
 
@@ -453,7 +454,6 @@ auto make_exit() -> CommandHandler {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/constants/banner.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
@@ -500,7 +500,7 @@ auto make_initialize() -> CommandHandler {
       shell.scheduler.set_config(move(config));
 
       system("cls");
-      cout << format("{}\n", BANNER);
+      cout << shell.banner.get();
       cout << "[Shell] Scheduler config loaded.\n";
       storage.remove("initialize.cache");
 
@@ -730,13 +730,66 @@ auto make_scheduler_stop() -> CommandHandler {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/Table.hpp"
+#include "core/common/utility/Text.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/scheduler/SchedulerData.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 
+/**
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Running processes:
+  p04        (07/26/2025 03:49:47AM)  Core: 1   7 / 11
+  p09        (07/26/2025 03:49:48AM)  Core: 2   6 / 10
+  p05        (07/26/2025 03:49:47AM)  Core: 3   5 / 11
+  p02        (07/26/2025 03:49:47AM)  Core: 4   4 / 7
+
+Finished processes:
+  p01        (07/26/2025 03:49:47AM)   Finished      1 / 1
+  p06        (07/26/2025 03:49:47AM)   Finished      4 / 4
+  p03        (07/26/2025 03:49:47AM)   Finished      5 / 5
+  p07        (07/26/2025 03:49:47AM)   Finished      6 / 6
+  p08        (07/26/2025 03:49:47AM)   Finished      3 / 3
+  p10        (07/26/2025 03:49:48AM)   Finished      5 / 5
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ */
+
 
 auto make_screen() -> CommandHandler {
+
+  auto render_line = [](auto& process, auto state) -> str {
+    auto& program = process.data.program;
+    auto ip = program.ip;
+    auto size = program.size();
+    auto time = timestamp(process.data.stime);
+
+    return format("  {:<10} {}   {}   {}\n",
+      process.data.name,
+      Text(format("({})", time))["fg33+pl"].get(),
+      state,
+      Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get()
+    );
+  };
+
+  auto process_exists = [](auto& name, auto& scheduler) -> bool {
+    auto& data = scheduler.data;
+    return data.has_process(name);
+  };
+
+  auto process_queued = [](auto& name, auto& scheduler) -> bool {
+    for (uint i = 0; i < 30; ++i) {
+      if (scheduler.data.has_process(name))
+        return true;
+
+      with_unlocked([&] { 
+        sleep_for(200ms); 
+      });
+    }
+    
+    return false;
+  };
+
   return CommandHandler()
     .set_name("screen")
     .set_desc("Creates and switches through existing screens.")
@@ -767,87 +820,60 @@ auto make_screen() -> CommandHandler {
       // === -ls: List screen info
       if (command.flags.contains("-ls")) {
         auto& data = scheduler.data;
-        auto& config = data.config;
         auto& cores = data.cores;
 
         auto size = cores.size();
         auto busy = cores.get_busy().size();
-        float cpu_util = cores.get_usage() * 100;
+        auto cpu_util = cores.get_usage() * 100.0f;
+
+        // Formatting
+        auto line_width = 58u;
+        auto blue = "fg33"s;
 
         cout << format("CPU Utilization: {:.2f}%\n", cpu_util);
         cout << format("Cores used: {} / {}\n\n", busy, size);
-        cout << "\033[38;5;33mâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\033[0m\n";
+        cout << Text("â”€", line_width)[blue] << '\n';
         cout << "Running processes:\n";
 
-        for (uint pid : cores.get_running_pids()) {
+        for (auto pid: cores.get_running_pids()) {
           auto& process = data.get_process(pid);
-          cout << format(
-            "  {:<10} \033[36m({})\033[0m  Core: {:<2}  \033[38;5;208m{} / {}\033[0m\n",
-            process.data.name,
-            timestamp(process.data.stime),
-            process.data.core_id,
-            process.data.program.ip,
-            process.data.program.size()
-          );
+          auto core_id = process.data.core_id;
+          cout << render_line(process, format("Core: {:<2}", core_id));
         }
 
         cout << "\nFinished processes:\n";
-
-        for (uint pid : data.finished_pids) {
+        for (auto pid: data.finished_pids) {
           auto& process = data.get_process(pid);
-          cout << format(
-            "  {:<10} \033[36m({})\033[0m  Finished      \033[38;5;208m{} / {}\033[0m\n",
-            process.data.name,
-            timestamp(process.data.stime),
-            process.data.program.ip,
-            process.data.program.size()
-          );
+          cout << render_line(process, "Finished");
         }
 
-        cout << "\033[38;5;33mâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\033[0m\n";
+        cout << Text("â”€", line_width)[blue];
       }
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        const str& name = command.flags.at("-s");
+        auto& name = command.flags.at("-s");
 
-        auto process_exists = [&](const str& name) -> bool {
-          auto& data = scheduler.data;
-          return data.has_process(name);
-        };
-
-        if (process_exists(name))
+        if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
         scheduler.generate_process(name);
         cout << format("\nWaiting for process creation: {}", name);
-        auto created = false;
 
-        for (uint i = 0; i < 30; ++i) {
-          if (scheduler.data.has_process(name)) {
-            created = true;
-            break;
-          }
-
-          with_unlocked([&] {
-            sleep_for(200ms);
-          });
-        }
-
-        if (!created)
+        // Wait until process queues
+        if (!process_queued(name, scheduler))
           return void(cout << "\nTimed out.\n");
 
-        auto& data = scheduler.data;
-        auto& process = data.get_process(name);
-        uint pid = process.data.id;
+        auto& process = scheduler.data.get_process(name);
+        auto pid = process.data.id;
 
         screen.switch_to(pid);
-        cout << "\n";
+        cout << '\n';
         cout << format("Process name: {}\n", process.data.name);
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (auto& log : process.data.logs)
+        for (auto& log: process.data.logs)
           cout << format("  {}\n", log);
 
         auto& program = process.data.program;
@@ -864,7 +890,7 @@ auto make_screen() -> CommandHandler {
           return void(cout << format("Process <{}> not found.\n", name));
 
         auto& process = data.get_process(name);
-        uint pid = process.data.id;
+        auto pid = process.data.id;
 
         screen.switch_to(pid);
         cout << format("Process name: {}\n", process.data.name);
@@ -1098,25 +1124,6 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_text(),
   };
 }
-
-------------------------------
- FILE:  banner.hpp
- PATH:  core\common\constants\banner.hpp
-------------------------------
-
-#pragma once
-#include <string>
-
-inline const std::string BANNER = R"(
-  â–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—   â–ˆâ–ˆâ•— â–ˆâ–ˆâ•—  
- â–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â•šâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â• â•šâ–ˆâ–ˆâ•— 
-â–ˆâ–ˆâ•”â•  â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•   â•šâ–ˆâ–ˆâ•—
-â•šâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘      â•šâ•â•â•â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â•  â–ˆâ–ˆâ•”â•â•â•   â•šâ•â•â•â•â–ˆâ–ˆâ•‘   â•šâ–ˆâ–ˆâ•”â•    â–ˆâ–ˆâ•”â•
- â•šâ–ˆâ–ˆâ•— â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•”â• 
-  â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â•â•  â•šâ•â•â•â•â•â•  â•šâ•â•      â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•    â•šâ•â•    â•šâ•â•
-
-                    Dicayanan|Maramag|Maunahan|Villaver                         
-)";
 
 ------------------------------
  FILE:  casts.hpp
@@ -1449,7 +1456,14 @@ auto move_iter(Type it) {
 
 #pragma once
 
-// === Platform-specific includes ===
+#include <string>
+#include <iostream>
+#include <algorithm>
+
+using std::min;
+using std::max;
+using std::string;
+
 #if defined(_WIN32)
   #ifndef NOMINMAX
     #define NOMINMAX
@@ -1459,21 +1473,22 @@ auto move_iter(Type it) {
   #include <sys/ioctl.h>
   #include <unistd.h>
   #include <locale>
-  #include <iostream>
+  #include <cwchar>     // wcwidth
+  #include <codecvt>    // std::wstring_convert
 #endif
 
-// === Terminal Unicode and ANSI support ===
-inline void enable_unicode() {
+// === Unicode output ===
+void enable_unicode() {
   #if defined(_WIN32)
-    // Enable ANSI escape sequences on Windows 10+
-    auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    // Enable ANSI escape sequences
+    auto h = GetStdHandle(STD_OUTPUT_HANDLE);
     auto mode = DWORD(0);
-    if (GetConsoleMode(handle, &mode)) {
+    if (GetConsoleMode(h, &mode)) {
       mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-      SetConsoleMode(handle, mode);
+      SetConsoleMode(h, mode);
     }
 
-    // Enable UTF-8 codepage
+    // Enable UTF-8 output
     SetConsoleOutputCP(CP_UTF8);
   #else
     std::ios_base::sync_with_stdio(false);
@@ -1483,7 +1498,7 @@ inline void enable_unicode() {
 }
 
 // === Terminal width detection ===
-inline auto get_terminal_width() -> uint {
+auto get_terminal_width() -> uint32_t {
   #if defined(_WIN32)
     auto csbi = CONSOLE_SCREEN_BUFFER_INFO{};
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
@@ -1493,13 +1508,49 @@ inline auto get_terminal_width() -> uint {
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
       return w.ws_col;
   #endif
-  return 80; // Fallback default
+    return 80; // fallback
 }
 
-// === Common utilities ===
-#include <algorithm>
-using std::min;
-using std::max;
+// === Unicode-aware visual width of a string ===
+auto len(const std::string& utf8) -> int {
+  #if defined(_WIN32)
+    // Convert UTF-8 â†’ UTF-16 wide string
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+    if (wlen <= 0) return 0;
+
+    auto wstr = std::wstring(wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &wstr[0], wlen);
+
+    // Estimate width
+    int width = 0;
+    for (wchar_t wc : wstr) {
+      if (wc == L'\0') break;
+      if (wc < 32 || (wc >= 0x7f && wc <= 0x9f)) continue;
+      width += (wc >= 0x1100 && (
+        wc <= 0x115f ||                   // Hangul Jamo
+        wc == 0x2329 || wc == 0x232a ||   // Angle brackets
+        (wc >= 0x2e80 && wc <= 0xa4cf) || // CJK, Kana, Yi
+        (wc >= 0xac00 && wc <= 0xd7a3) || // Hangul syllables
+        (wc >= 0xf900 && wc <= 0xfaff) || // CJK Compatibility
+        (wc >= 0xfe10 && wc <= 0xfe19) || // Vertical forms
+        (wc >= 0xff01 && wc <= 0xff60) || // Fullwidth ASCII
+        (wc >= 0xffe0 && wc <= 0xffe6)))  // Fullwidth symbols
+        ? 2 : 1;
+    }
+    return width;
+  #else
+    // Use locale-aware wcwidth
+    auto conv = std::wstring_convert<std::codecvt_utf8<wchar_t>>{};
+    auto wstr = conv.from_bytes(utf8);
+
+    int width = 0;
+    for (wchar_t wc : wstr) {
+      int w = wcwidth(wc);
+      width += (w >= 0) ? w : 0;
+    }
+    return width;
+  #endif
+}
 
 ------------------------------
  FILE:  pointers.hpp
@@ -1955,6 +2006,104 @@ class EventEmitter {
 };
 
 ------------------------------
+ FILE:  Table.hpp
+ PATH:  core\common\utility\Table.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/Text.hpp"
+
+
+/** @brief Simple ASCII-style table renderer with box borders and left-aligned rows. */
+class Table {
+  public:
+
+  /** @brief Constructs a table with a specified total width. */
+  Table(uint width): 
+    width (width),        // Total width of the table including borders
+    rows  (vec<str>()) {} // Accumulated rendered rows
+
+  /** @brief Adds the top border using Unicode rounded corners. */
+  auto head() -> Table& {
+    auto line = Text("â”€", width - 2).get();
+    rows.push_back(format("â•­{}â•®", line));
+    return *this;
+  }
+
+  /** @brief Adds a middle horizontal bar with T-shaped corners. */
+  auto bar() -> Table& {
+    auto line = Text("â”€", width - 2).get();
+    rows.push_back(format("â”œ{}â”¤", line));
+    return *this;
+  }
+
+  /** @brief Adds the bottom border using Unicode rounded corners. */
+  auto dbar() -> Table& {
+    auto line = Text("â”€", width - 2).get();
+    rows.push_back(format("â•°{}â•¯", line));
+    return *this;
+  }
+
+  /** @brief Adds a left-aligned row of content, padded and clamped to fit. */
+  auto row(const str& content) -> Table& {
+    auto visual = len(content);
+    auto padded = visual >= width - 4
+      ? content.substr(0, width - 4)
+      : content + str(width - 4 - visual, ' ');
+
+    rows.push_back(format("â”‚ {} â”‚", padded));
+    return *this;
+  }
+
+  /** @brief Inserts one or more blank rows (default: 1 line). */
+  auto gap(uint count = 1) -> Table& {
+    auto empty = str(width - 4, ' ');
+    for (uint i = 0; i < count; ++i)
+      rows.push_back(format("â”‚ {} â”‚", empty));
+    return *this;
+  }
+
+  /** @brief Joins all rows into a single string. */
+  auto get() const -> str {
+    auto out = osstream();
+    for (auto& r : rows) 
+      out << r << '\n';
+    return out.str();
+  }
+
+  /** @brief Prints the table using `cout << table`. */
+  friend auto operator<<(ostream& out, const Table& t) -> ostream& {
+    return out << t.get();
+  }
+
+  private:
+
+  // ------ Instance variables ------
+  
+  uint width;       
+  vec<str> rows;    
+
+  // ------ Internal helpers ------
+  /** @brief Returns visual length of a string, excluding ANSI escape sequences. */
+  auto len(const str& s) -> uint {
+    auto visual = 0u;
+    auto in_ansi = false;
+
+    for (char c: s) {
+      if (c == '\033') { in_ansi = true; continue; }
+      if (in_ansi) {
+        if (c == 'm') in_ansi = false;
+        continue;
+      }
+      ++visual;
+    }
+
+    return visual;
+  }
+};
+
+------------------------------
  FILE:  Text.hpp
  PATH:  core\common\utility\Text.hpp
 ------------------------------
@@ -1987,7 +2136,7 @@ class TextColor {
     return format("{}{}\033[0m", out, text);
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   int fg;
   int bg;
 };
@@ -2023,7 +2172,7 @@ class TextStyle {
     return out + text;
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   bool bold;
   bool italic;
   bool underline;
@@ -2036,7 +2185,7 @@ class TextAlign {
   public:
 
   TextAlign():
-    align ('r'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
+    align ('l'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
     fill  (' ') {}  // Padding fill character (default: space)
 
   auto set_align(char a) -> TextAlign& { return align = a, *this; }
@@ -2049,23 +2198,23 @@ class TextAlign {
   auto to(const str& input) const -> str {
     uint width = get_terminal_width();
 
-    if (width <= input.length()) 
+    if (width <= len(input))
       return input;
 
-    uint pad = width - input.length();
-    if (align == 'l')
-      return input + str(pad, fill);
-
+    uint pad = width - len(input);
+    if (align == 'r')
+      return str(pad, fill) + input; // default right
+      
     else if (align == 'c') {
       uint lpad = pad / 2;
       uint rpad = pad - lpad;
       return str(lpad, fill) + input + str(rpad, fill);
     }
-    
-    return str(pad, fill) + input; // default right
+      
+      return input; // default left
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   char align;
   char fill;
 };
@@ -2075,11 +2224,11 @@ class TextAlign {
 class Text {
   public:
 
-  Text(const str& s): 
-    raw(s),     // Original input text
-    color(),    // Handles foreground and background colors
-    style(),    // Handles text styles (bold, italic, etc.)
-    align() {}  // Handles alignment and padding
+  Text(const str& s, uint count=1): 
+    raw(rep(s, count)), // Original input text
+    color(),            // Handles foreground and background colors
+    style(),            // Handles text styles (bold, italic, etc.)
+    align() {}          // Handles alignment and padding
 
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
@@ -2141,11 +2290,26 @@ class Text {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
+
   str raw;
   TextColor color;
   TextStyle style;
-  TextAlign align;
+  TextAlign align;  
+
+  // ------ Internal helpers ------
+
+  /** @brief Repeats a string `count` times efficiently. */
+  static auto rep(const str& s, uint count) -> str {
+    if (count == 0) return "";
+    if (count == 1) return s;
+
+    auto out = ""s;
+    out.reserve(s.size() * count);
+    for (uint i = 0; i < count; ++i)
+      out += s;
+    return out;
+  }
 };
 
 ------------------------------
@@ -2226,7 +2390,7 @@ class Core {
   /** @brief Injects a preemption handler (optional). */
   void set_preempt(func handler) { preempt = handler; }     
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   uint id;                      
   uint job_ticks;       
@@ -2348,6 +2512,11 @@ class CoreManager {
   /** @brief Returns a list of references to all busy (non-idle) cores. */
   auto get_busy() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle(); }); }
   
+  /** @brief Returns the number of currently busy (non-idle) cores. */
+  auto get_busy_size() -> uint {
+    return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
+  }
+
   /** @brief Returns a list of references to all busy (non-idle) and releasable  cores. */
   auto get_releasable() -> vec<ref<Core>> { return filter_cores([](auto& ptr) { return !ptr->is_idle() && ptr->can_release; }); }
 
@@ -2361,15 +2530,10 @@ class CoreManager {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<uptr<Core>> cores;
 
   // ------ Helper Methods ------
-
-  /** @brief Returns the number of currently busy (non-idle) cores. */
-  auto get_busy_size() -> uint {
-    return count_if(cores, [](auto& ptr) { return ptr != nullptr && !ptr->is_idle(); });
-  }
 
   /** @brief Returns references to cores that satisfy the given filter condition. */
   template <typename Func = bool(*)(uptr<Core>&)>
@@ -2477,7 +2641,7 @@ class InstructionHandler {
     return inst;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   str opcode;                                     
   str open_opcode;                                
@@ -2578,7 +2742,7 @@ class InstructionInterpreter {
     return script;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   map<str,InstructionHandler> handlers;           
   vec<ref<InstructionHandler>> all_handlers;      
@@ -2633,7 +2797,7 @@ class Arg {
     min  (min),         // Minimum value (for "uint" type)
     max  (max) {}       // Maximum value (for "uint" type)
   
-  // ------ Member variables ------
+  // ------ Instance variables ------
   str type; 
   uint min; 
   uint max; 
@@ -2687,7 +2851,7 @@ class Signature {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<Arg> args;
 
   // ------ Constants ------
@@ -3138,6 +3302,9 @@ namespace csopesy::Position {
 class Process {
   public:  
 
+  // ------ Class variables ------
+  inline static auto& interpreter = InstructionInterpreter::get();
+
   /** @brief Creates a process with a random instruction script. */
   Process(uint pid, str name, uint size): 
     data(           // Data container of process
@@ -3169,8 +3336,7 @@ class Process {
     return false;
   }
 
-  // ------ Member variables ------
-  inline static auto& interpreter = InstructionInterpreter::get();
+  // ------ Instance variables ------
   ProcessData data;
 };
 
@@ -3205,7 +3371,7 @@ class ProcessControl {
   /** @brief Advances sleep state by one tick, if sleeping. */
   void tick() { if (sleep_ticks > 0) --sleep_ticks; }
   
-  // ------ Member variables ------
+  // ------ Instance variables ------
   uint sleep_ticks;
 };
 
@@ -3247,7 +3413,7 @@ class ProcessData {
   /** @brief Append a log message (used for PRINT instructions) */
   void log(str line) { logs.push_back(move(line)); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   uint id;            
   str name;          
   vec<str> logs;         
@@ -3295,7 +3461,7 @@ class ProcessMemory {
     return symbol_table;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   map<str,uint> symbol_table;
 };
 
@@ -3367,7 +3533,7 @@ class ProcessProgram {
     return out.str();
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   Instruction::Script script;
   ContextStack context;
@@ -3462,7 +3628,7 @@ class ContextStack {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   vec<ContextFrame> stack;
 };
 
@@ -3492,7 +3658,7 @@ class Scheduler {
 
   Scheduler():
     names      (vec<str>()),            // Deferred generation list for user-inserted process table
-    ticks      (0),                     // Global tick counter
+    ticks      (0u),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
@@ -3546,7 +3712,7 @@ class Scheduler {
     data.config = move(config); // Must come last                               
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   vec<str> names;                
   uint ticks;             
@@ -3673,7 +3839,7 @@ class SchedulerData {
   /** @brief Returns the vec<uint> of running process IDs. */
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   map<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
@@ -3752,7 +3918,7 @@ class SchedulerStrategy {
     tick_handler(data);
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   str name;              
   TickHandler tick_handler;       
@@ -3829,7 +3995,7 @@ class Config {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   ordered_map<str,any> entries;
 
   // ------ Internal helpers ------
@@ -3972,13 +4138,82 @@ void Shell::register_commands() {
 }
 
 ------------------------------
+ FILE:  ShellBanner.hpp
+ PATH:  core\shell\ShellBanner.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/Text.hpp"
+
+/** @brief Renders and styles the shell banner using a vertical gradient. */
+class ShellBanner {
+  public:
+
+  /** @brief Returns the full banner with vertical gradient applied. */
+  auto get() -> str {
+    auto mint = vec<int>{201, 254, 221};
+    auto coral = vec<int>{249, 121, 121};
+    auto gradient = make_gradient(coral, mint, lines.size());
+    
+    auto out = osstream();
+    out << "\n\n";
+    for (uint i = 0; i < lines.size(); ++i) {
+      int code = rgb_to_ansi256(gradient[i]);
+      out << Text(lines[i])[format("fg{}+pc", code)] << '\n';
+    }
+
+    out << '\n';
+    out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
+    return out.str();
+  }
+
+  private:
+
+  // ------ Internal helpers ------
+
+  static inline const auto names = "Dicayanan | Maramag | Maunahan | Villaver"s;
+  static inline const auto lines = vec<str>{
+    "  â–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—   â–ˆâ–ˆâ•— â–ˆâ–ˆâ•—  ",
+    " â–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â•â•â•â• â–ˆâ–ˆâ•”â•â•â•â•â• â•šâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â• â•šâ–ˆâ–ˆâ•— ",
+    "â–ˆâ–ˆâ•”â•  â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•   â•šâ–ˆâ–ˆâ•—",
+    "â•šâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘      â•šâ•â•â•â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â•  â–ˆâ–ˆâ•”â•â•â•   â•šâ•â•â•â•â–ˆâ–ˆâ•‘   â•šâ–ˆâ–ˆâ•”â•    â–ˆâ–ˆâ•”â•",
+    " â•šâ–ˆâ–ˆâ•— â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ•‘      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•‘    â–ˆâ–ˆâ•”â• ",
+    "  â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â•â•  â•šâ•â•â•â•â•â•  â•šâ•â•      â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•    â•šâ•â•    â•šâ•â•  ",
+  };
+
+  /** @brief Computes N evenly spaced vec<int> values between two endpoints. */
+  auto make_gradient(vec<int>& from, vec<int>& to, uint steps) -> vec<vec<int>> {
+    auto result = vec<vec<int>>();
+    result.reserve(steps);
+
+    for (uint i = 0; i < steps; ++i) {
+      float t = (steps == 1) ? 0.f : float(i) / (steps - 1);
+      int r = int(from[0] + (to[0] - from[0]) * t);
+      int g = int(from[1] + (to[1] - from[1]) * t);
+      int b = int(from[2] + (to[2] - from[2]) * t);
+      result.push_back({r, g, b});
+    }
+
+    return result;
+  }
+
+  /** @brief Converts an vec<int> triplet to an ANSI 256-color code. */
+  auto rgb_to_ansi256(vec<int>& rgb) -> int {
+    int r = int(rgb[0] * 5 / 255.0f);
+    int g = int(rgb[1] * 5 / 255.0f);
+    int b = int(rgb[2] * 5 / 255.0f);
+    return 16 + 36 * r + 6 * g + b;
+  }
+};
+
+------------------------------
  FILE:  ShellScreen.hpp
  PATH:  core\shell\ShellScreen.hpp
 ------------------------------
 
 #pragma once
 #include "core/shell/ShellStorage.hpp"
-#include "core/common/constants/banner.hpp"
 
 
 class ShellScreen {  
@@ -3992,10 +4227,7 @@ class ShellScreen {
   }
 
   /** Switch to a screen by ID. Use "main" or "" for the main screen. */
-  void switch_to(uint id) {
-    storage.set("screen.id", id);
-    if (is_main()) cout << BANNER << '\n';
-  }
+  void switch_to(uint id) { storage.set("screen.id", id); }
 
   /** Switch to the main screen (empty ID). */
   void switch_to_main() { switch_to(0); }
@@ -4009,7 +4241,7 @@ class ShellScreen {
   /** True if current screen is the main screen. */
   auto is_main() -> bool { return get_id() == 0; }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   ShellStorage& storage;
 };
 
@@ -4053,7 +4285,7 @@ class ShellStorage {
   /** Remove a key from storage. */
   void remove(const str& key) { storage.erase(key); }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   map<str,any> storage;
 };
 
@@ -4064,13 +4296,13 @@ class ShellStorage {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
-#include "core/common/constants/banner.hpp"
 #include "core/common/utility/Ansi.hpp"
 #include "core/common/utility/Text.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
 // Shell-specific includes
+#include "core/shell/ShellBanner.hpp"
 #include "core/shell/ShellStorage.hpp"
 #include "core/shell/ShellScreen.hpp"
 
@@ -4086,6 +4318,7 @@ class Shell {
     shell_active  (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     system_active (atomic_bool{true}),          // Atomic flag to control shell lifecycle
     scheduler     (Scheduler()),                // Owned scheduler instance
+    banner        (ShellBanner()),              // For printing the shell banner
     storage       (ShellStorage()),             // Storage for dynamic shell/session data
     screen        (storage) {}                  // Owned instance of shell screen manager
 
@@ -4125,7 +4358,7 @@ class Shell {
     sleep_for(300ms);       // Optional pause for effect
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   CommandInterpreter& interpreter;    
   Thread shell_thread;
@@ -4133,6 +4366,7 @@ class Shell {
   atomic_bool shell_active;
   atomic_bool system_active;
   Scheduler scheduler; 
+  ShellBanner banner;
   ShellStorage storage;
   ShellScreen screen;
 

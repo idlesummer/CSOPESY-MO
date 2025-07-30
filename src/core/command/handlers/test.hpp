@@ -7,13 +7,14 @@
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
+
 auto make_test() -> CommandHandler {
   return CommandHandler()
     .set_name("test")
     .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    .add_flag({ "-r", false })
+    .add_flag("-r")
 
     .set_execute([](Command& command, Shell& shell) {
       auto& interpreter = InstructionInterpreter::get();

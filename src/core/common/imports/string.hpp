@@ -15,7 +15,7 @@ using str = std::string;
 using Str = std::optional<string>;
 using std::literals::string_literals::operator""s;
 
-// === Character Utilities ===
+// === Utilities ===
 using std::isalpha;
 using std::isalnum;
 

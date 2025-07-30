@@ -49,7 +49,7 @@ class InstructionHandler {
     return inst;
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   str opcode;                                     
   str open_opcode;                                

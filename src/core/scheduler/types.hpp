@@ -63,7 +63,7 @@ class Config {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
   ordered_map<str,any> entries;
 
   // ------ Internal helpers ------

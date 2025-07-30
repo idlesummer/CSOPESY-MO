@@ -46,7 +46,7 @@ class SchedulerStrategy {
     tick_handler(data);
   }
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
 
   str name;              
   TickHandler tick_handler;       

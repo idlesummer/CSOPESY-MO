@@ -26,7 +26,7 @@ class TextColor {
     return format("{}{}\033[0m", out, text);
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   int fg;
   int bg;
 };
@@ -62,7 +62,7 @@ class TextStyle {
     return out + text;
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   bool bold;
   bool italic;
   bool underline;
@@ -75,7 +75,7 @@ class TextAlign {
   public:
 
   TextAlign():
-    align ('r'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
+    align ('l'),    // Alignment: 'l' = left, 'c' = center, 'r' = right
     fill  (' ') {}  // Padding fill character (default: space)
 
   auto set_align(char a) -> TextAlign& { return align = a, *this; }
@@ -92,19 +92,19 @@ class TextAlign {
       return input;
 
     uint pad = width - len(input);
-    if (align == 'l')
-      return input + str(pad, fill);
-
+    if (align == 'r')
+      return str(pad, fill) + input; // default right
+      
     else if (align == 'c') {
       uint lpad = pad / 2;
       uint rpad = pad - lpad;
       return str(lpad, fill) + input + str(rpad, fill);
     }
-    
-    return str(pad, fill) + input; // default right
+      
+      return input; // default left
   }
 
-  // ------ Member variables -------
+  // ------ Instance variables -------
   char align;
   char fill;
 };
@@ -114,11 +114,11 @@ class TextAlign {
 class Text {
   public:
 
-  Text(const str& s): 
-    raw(s),     // Original input text
-    color(),    // Handles foreground and background colors
-    style(),    // Handles text styles (bold, italic, etc.)
-    align() {}  // Handles alignment and padding
+  Text(const str& s, uint count=1): 
+    raw(rep(s, count)), // Original input text
+    color(),            // Handles foreground and background colors
+    style(),            // Handles text styles (bold, italic, etc.)
+    align() {}          // Handles alignment and padding
 
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
@@ -180,9 +180,24 @@ class Text {
 
   private:
 
-  // ------ Member variables ------
+  // ------ Instance variables ------
+
   str raw;
   TextColor color;
   TextStyle style;
   TextAlign align;  
+
+  // ------ Internal helpers ------
+
+  /** @brief Repeats a string `count` times efficiently. */
+  static auto rep(const str& s, uint count) -> str {
+    if (count == 0) return "";
+    if (count == 1) return s;
+
+    auto out = ""s;
+    out.reserve(s.size() * count);
+    for (uint i = 0; i < count; ++i)
+      out += s;
+    return out;
+  }
 };
