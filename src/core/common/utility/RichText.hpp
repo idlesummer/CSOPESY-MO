@@ -128,14 +128,17 @@ class RichText {
 
   /** @brief Converts a hex color string or named color to an RGB tuple. */
   auto hex_to_rgb(str value) -> tuple<uint,uint,uint> {
-    if (COLORS.contains(value))
-      value = COLORS.at(value);
-
     value.erase(0, 1); // remove leading #
     auto r = stoul(value.substr(0, 2), nullptr, 16);
     auto g = stoul(value.substr(2, 2), nullptr, 16);
     auto b = stoul(value.substr(4, 2), nullptr, 16);
     return { r, g, b };
+  }
+
+  auto is_valid_hex_color(const str& value) -> bool {
+    return value.size() == 7
+      && value[0] == '#'
+      && all_of(value.begin()+1, value.end(), ::isxdigit);
   }
 
   /** @brief Converts a style map to an ANSI escape code string. */
@@ -147,27 +150,22 @@ class RichText {
         codes.push_back(STYLES.at(key));
 
       } else if (key == "fg") {
-        auto [r, g, b] = hex_to_rgb(value);
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+
+        auto [r, g, b] = hex_to_rgb(hex);
         codes.push_back(format("38;2;{};{};{}", r, g, b));
 
       } else if (key == "bg") {
-        auto [r, g, b] = hex_to_rgb(value);
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+        
+        auto [r, g, b] = hex_to_rgb(hex);
         codes.push_back(format("48;2;{};{};{}", r, g, b));
       }
     }
 
     return codes.empty() ? "" : format("\033[{}m", join(codes, ';'));
-  }
-
-  auto join(vec<str>& parts, char delim) -> str {
-    if (parts.empty()) return "";
-
-    auto oss = osstream();
-    oss << parts[0];        // Add first element without delimiter
-
-    for (auto i = 1u; i < parts.size(); ++i)
-      oss << delim << parts[i];
-    return oss.str();
   }
 
   auto resolve_tag(str& tag) -> str {
@@ -226,6 +224,7 @@ class RichText {
         stack.push(parse_to_styles(tag));
         out += to_ansi(stack.get_styles());
       }
+      
 
       index += match.position() + match.length();  // Move index forward to just after the matched tag
     }

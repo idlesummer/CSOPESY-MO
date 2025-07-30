@@ -39,18 +39,18 @@ class InstructionInterpreter {
 
   public:
 
-  /** Returns the global singleton get of the InstructionInterpreter. */
+  /** @brief Returns the global singleton get of the InstructionInterpreter. */
   static auto get() -> InstructionInterpreter& {
     static auto inst = InstructionInterpreter();
     return inst;
   }
 
-  /** Registers a handler by opcode. */
+  /** @brief Registers a handler by opcode. */
   void register_instruction(InstructionHandler handler) {
     handlers[handler.opcode] = move(handler);
   }
 
-  /** Execute an instruction using its handler. */
+  /** @brief Execute an instruction using its handler. */
   void execute(Instruction& inst, ProcessData& proc) {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
@@ -59,22 +59,20 @@ class InstructionInterpreter {
     it->second.execute(inst, proc);
   }
 
-  /**
-   * Generates a random list of up to `size` instructions with proper block closure.
-   * May exceed size due to necessary ENDFOR-like closures.
-   */
+  /** @brief Generates a random list of up to `size` instructions with proper block closure. */
   auto generate_script(uint size, uint max_depth=3) -> Instruction::Script {
     auto script = Instruction::Script();
-    auto stack = vec<ref<InstructionHandler>>();  // Tracks opened control blocks
+    auto stack = vec<ref<InstructionHandler>>();                      // Tracks opened control blocks
+    auto inst_count = [&]() { return script.size() + stack.size(); }; // actual + pending ENDFORS
 
-    while (script.size() < size) {
-      if (should_open(stack, max_depth))          // For opening control instructions
+    while (inst_count() < size) {
+      if (should_open(stack, max_depth) && inst_count()+2 <= size)    // For opening control instructions
         open_control_block(script, stack);
       
-      else if (should_close(stack))               // For closing control instructions
+      else if (should_close(stack))                       // For closing control instructions
         close_control_block(script, stack);
 
-      if (!flat_handlers.empty())                 // For adding flat instructions
+      if (!flat_handlers.empty() && inst_count() < size)  // For adding flat instructions
         script.push_back(Rand::pick(flat_handlers).get().generate());
     }
 
@@ -94,24 +92,24 @@ class InstructionInterpreter {
 
   // ------ Internal helpers ------
 
-  /** Returns true if a control block can be opened (depth-limited, random chance). */
+  /** @brief Returns true if a control block can be opened (depth-limited, random chance). */
   bool should_open(vec<ref<InstructionHandler>>& stack, uint max_depth) { 
     return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
-  /** Returns true if a control block can be closed (if any open, random chance). */
+  /** @brief Returns true if a control block can be closed (if any open, random chance). */
   bool should_close(vec<ref<InstructionHandler>>& stack) { 
     return !stack.empty() && Rand::chance(4); 
   }
 
-  /** Emits a random control-opener instruction and pushes it to the stack. */
+  /** @brief Emits a random control-opener instruction and pushes it to the stack. */
   void open_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
     auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
 
-  /** Emits the matching end-opcode of the current open control block. */
+  /** @brief Emits the matching end-opcode of the current open control block. */
   void close_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
     if (stack.empty())
       throw runtime_error("Attempted to emit ENDFOR with empty control stack!");

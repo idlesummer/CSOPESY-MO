@@ -44,11 +44,22 @@ auto is_digits(const std::string& s) -> bool {
   });
 }
 
-// === Case conversions ===
+// === Utility functions ===
 
 /** @brief Returns a lowercase copy of the given string. */
 auto lowercase(str raw) -> str {
   for (char& c: raw)
     c = tolower(c);
   return raw;
+}
+
+/** @brief Joins a vector of strings using the given delimiter. */
+auto join(vec<str>& args, char delim=' ') -> str {
+  if (!args.empty()) return "";
+  
+  auto oss = osstream();
+  oss << args[0];
+  for (auto i = 1u; i < args.size(); ++i)
+    oss << delim << args[i];
+  return oss.str();
 }
