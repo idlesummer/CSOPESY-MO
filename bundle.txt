@@ -650,6 +650,7 @@ auto make_report_util() -> CommandHandler {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/process/Process.hpp"
@@ -678,7 +679,31 @@ auto make_scheduler_start() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
-      cout << "[Shell] Dummy process generation started.\n";
+      cout << RichText("[Shell] Dummy process generation [fg=green]started[/].\n");
+
+      auto t1 = RichText("Hello [b]World[/b]");
+      auto t2 = RichText("[i]Italic[/i] text");
+      auto t3 = RichText("[u]Underlined[/u] content");
+      auto t4 = RichText("[strike]Struck[/strike] out");
+      auto t5 = RichText("Mix: [b]Bold[/] then [i]Italic[/] and [u]Underline[/]");
+      auto t6 = RichText("Color test: [fg=red]Red[/fg], [fg=#00ff00]Green[/fg]");
+      auto t7 = RichText("Background test: [bg=yellow]Yellow Background[/bg]");
+      auto t8 = RichText("[b fg=blue]Bold Blue [fg=green]Green[/fg] Back to Blue[/b]");
+      auto t9 = RichText("Escaped: \\[b\\]not bold\\[/b\\]");
+      auto t10 = RichText("[b fg=red]Red Bold[/] Normal");
+      auto t11 = RichText("[b]123[/]456");
+
+      cout << "Test 1:  " << t1 << "\n";
+      cout << "Test 2:  " << t2 << "\n";
+      cout << "Test 3:  " << t3 << "\n";
+      cout << "Test 4:  " << t4 << "\n";
+      cout << "Test 5:  " << t5 << "\n";
+      cout << "Test 6:  " << t6 << "\n";
+      cout << "Test 7:  " << t7 << "\n";
+      cout << "Test 8:  " << t8 << "\n";
+      cout << "Test 9:  " << t9 << "\n";
+      cout << "Test 10: " << t10 << "\n";
+      cout << "Test 11: " << t11 << " (size = " << t11.size << ")\n";
     });
 }
 
@@ -688,6 +713,8 @@ auto make_scheduler_start() -> CommandHandler {
 ------------------------------
 
 #pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
@@ -700,7 +727,7 @@ auto make_scheduler_stop() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
       
       // Check if the scheduler has already been initialized
@@ -715,7 +742,7 @@ auto make_scheduler_stop() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(false);
-      cout << "[Shell] Dummy process generation stopped.\n";
+      cout << RichText("[Shell] Dummy process generation [fg=red]stopped[/].\n");
     });
 }
 
@@ -850,11 +877,11 @@ auto make_screen() -> CommandHandler {
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        auto& name = command.args[0];
-
+        
         if (command.args.empty()) 
           return void(cout << "Missing process name.\n");
 
+        auto& name = command.args[0];
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
@@ -2253,7 +2280,6 @@ class RichText {
         stack.push(parse_to_styles(tag));
         out += to_ansi(stack.get_styles());
       }
-      
 
       index += match.position() + match.length();  // Move index forward to just after the matched tag
     }
@@ -4449,6 +4475,12 @@ class ShellBanner {
 
     out << '\n';
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
+
+    // Add onboarding message
+    out << Text("To get started, type 'initialize'.")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
+    out << "  1. Type `demo` to see a sample process in action.\n";
+    out << "  2. Then `exit` to leave the shell.\n\n";
+    out << "  3. Use `help` for more information on commands.\n\n";
     return out.str();
   }
 

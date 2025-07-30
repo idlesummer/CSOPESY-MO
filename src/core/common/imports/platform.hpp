@@ -22,7 +22,7 @@ using std::string;
 #endif
 
 // === Unicode output ===
-void enable_unicode() {
+void initialize_terminal() {
   #if defined(_WIN32)
     // Enable ANSI escape sequences
     auto h = GetStdHandle(STD_OUTPUT_HANDLE);

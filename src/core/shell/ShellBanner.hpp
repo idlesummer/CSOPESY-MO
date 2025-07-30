@@ -25,8 +25,8 @@ class ShellBanner {
     // Add onboarding message
     out << Text("To get started, type 'initialize'.")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
     out << "  1. Type `demo` to see a sample process in action.\n";
-    out << "  2. Then `exit` to leave the shell.\n\n";
-    out << "  3. Use `help` for more information on commands.\n";
+    out << "  2. Then `exit` to leave the shell.\n";
+    out << "  3. Use `help` for more information on commands.\n\n";
     return out.str();
   }
 

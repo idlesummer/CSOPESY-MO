@@ -55,7 +55,7 @@ auto lowercase(str raw) -> str {
 
 /** @brief Joins a vector of strings using the given delimiter. */
 auto join(vec<str>& args, char delim=' ') -> str {
-  if (!args.empty()) return "";
+  if (args.empty()) return "";
   
   auto oss = osstream();
   oss << args[0];
@@ -63,3 +63,11 @@ auto join(vec<str>& args, char delim=' ') -> str {
     oss << delim << args[i];
   return oss.str();
 }
+
+/** @brief Returns a copy of the string with leading and trailing whitespace removed. */
+auto trim(const str& s) -> str {
+  auto start = s.find_first_not_of(" \t\n\r");
+  if (start == NPOS) return "";  // all whitespace
+  auto end = s.find_last_not_of(" \t\n\r");
+  return s.substr(start, end - start + 1);
+};

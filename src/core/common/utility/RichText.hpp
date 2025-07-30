@@ -50,7 +50,7 @@ class RichText {
   public:
 
   // ------ Class variables ------
-  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]+?)\])");
+  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]*?)\])");
   static inline auto ESC_LB      = regex(R"(\\\[)");
   static inline auto ESC_RB      = regex(R"(\\\])");
   static inline auto PLACE_LB    = "\x01";
@@ -101,7 +101,7 @@ class RichText {
   
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Streams the rendered text to an output stream (e.g., std::cout). */
@@ -146,7 +146,7 @@ class RichText {
     auto codes = vec<str>();
 
     for (auto& [key, value]: styles) {
-      if (STYLES.count(key)) {
+      if (STYLES.contains(key)) {
         codes.push_back(STYLES.at(key));
 
       } else if (key == "fg") {
@@ -182,7 +182,7 @@ class RichText {
       
       if (eq == NPOS) {
         auto key = resolve_tag(token);
-        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": ""})
+        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
         continue;
       }
 
@@ -208,7 +208,7 @@ class RichText {
       out += text.substr(index, match.position());  // Add all plain text before the tag
 
       auto is_closing = match[1].str() == "/";
-      auto tag = match[2].str();  // raw tag content
+      auto tag = trim(match[2].str());  // raw tag content
 
       if (is_closing) {           // Handle [/], which resets all styles
         if (tag.empty()) {                          
@@ -224,7 +224,6 @@ class RichText {
         stack.push(parse_to_styles(tag));
         out += to_ansi(stack.get_styles());
       }
-      
 
       index += match.position() + match.length();  // Move index forward to just after the matched tag
     }

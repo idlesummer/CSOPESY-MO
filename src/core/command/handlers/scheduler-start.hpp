@@ -1,5 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/process/Process.hpp"
@@ -28,6 +29,6 @@ auto make_scheduler_start() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
-      cout << "[Shell] Dummy process generation started.\n";
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
     });
 }
