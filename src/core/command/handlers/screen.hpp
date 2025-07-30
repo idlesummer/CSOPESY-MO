@@ -124,11 +124,11 @@ auto make_screen() -> CommandHandler {
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        auto& name = command.args[0];
-
+        
         if (command.args.empty()) 
           return void(cout << "Missing process name.\n");
 
+        auto& name = command.args[0];
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 

@@ -50,19 +50,30 @@ int main() {
 #include "core/common/imports/_all.hpp"
 
 
-/** @brief Represents a parsed command-line input. */
+/** 
+ * @brief Represents a parsed command-line input.
+ * 
+ * A Command encapsulates all components of a parsed input string,
+ * including the command name, original argument input (excluding the command),
+ * tokenized parts, positional arguments, and named flags.
+ */
 class Command {
   public:
 
   Command():
-    name  (""s),              // The command name (e.g., "screen", "exit")
-    args  (vec<str>()),       // Positional arguments for the command
-    flags (map<str,str>()) {} // Map of flags and their associated values (if any)
+    name   (""s),           // The command name (e.g., "screen", "exit")
+    input  (""s),           // Original input string after the command name
+    tokens (vec<str>()),    // All space-delimited tokens after the command name
+    args   (vec<str>()),    // Positional arguments for the command
+    flags  (set<str>()) {}  // Set of flags (automatically deduplicated)
 
   // ------- Instance variables -------
-  str name;    
-  vec<str> args;    
-  map<str,str> flags;   
+
+  str name;
+  str input;
+  vec<str> tokens;
+  vec<str> args;
+  set<str> flags;
 };
 
 ------------------------------
@@ -73,7 +84,6 @@ class Command {
 #pragma once 
 #include "core/common/imports/_all.hpp"
 #include "Command.hpp"
-#include "types.hpp"
 
 
 /** Represents a single command entry in the interpreter. */
@@ -86,7 +96,7 @@ class CommandHandler {
     desc     (""s),         // Description for help or documentation
     min_args (0u),          // Minimum number of required arguments
     max_args (UINT_MAX),    // Maximum number of allowed arguments
-    flags    (vec<Flag>()), // Valid flags for this command
+    flags    (set<str>()),  // Valid flags for this command
     disabled (true),        // Commands are disabled by default
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
@@ -96,7 +106,7 @@ class CommandHandler {
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
-  auto add_flag(const Flag& value) -> CommandHandler& { return flags.push_back(value), *this; }
+  auto add_flag(str value) -> CommandHandler& { return flags.insert(move(value)), *this; }
   auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
@@ -107,7 +117,7 @@ class CommandHandler {
   str desc;                        
   uint min_args;                
   uint max_args;              
-  vec<Flag> flags;                       
+  set<str> flags;                       
   bool disabled;
   func<optional<str>(Command&,Shell&)> validate; 
   func<void(Command&,Shell&)> execute;
@@ -148,7 +158,7 @@ class CommandInterpreter {
   }
 
   /** @brief Executes a command in the shell context. */ 
-  void execute(const str& line, Shell& shell) {
+  void execute(str& line, Shell& shell) {
 
     // Parse the command line into a Command (name, args, flags)
     auto command = CommandParser::parse(line);  
@@ -191,13 +201,10 @@ class CommandInterpreter {
 
   private:
 
-  /** @brief Returns true if any flag is invalid or misused. */
+  /** @brief Returns true if any flag doesn't exist. */
   static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
-    // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
-    return any_of(command.flags, [&](auto& flag) {
-      return none_of(handler.flags, [&](Flag& f) {
-        return f.name == flag.first && f.has_arg == !flag.second.empty();
-      });
+    return any_of(command.flags, [&](const str& flag) {
+      return !handler.flags.contains(flag);
     });
   }
 
@@ -208,7 +215,7 @@ class CommandInterpreter {
   }
 
   /** Runs the handler's custom validator and returns an optional error message. */
-  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
+  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> optional<str> {
     if (!handler.validate) return nullopt;
     if (auto err = handler.validate(command, shell))
       return err->empty() ? "CommandHandler disabled or invalid." : *err;
@@ -227,62 +234,52 @@ class CommandInterpreter {
 
 
 /**
- * @class Parser
+ * @class CommandParser
  * @brief Utility class for tokenizing and parsing command lines.
  */
 class CommandParser {
   public:
 
-  /** @brief A helper that parses a handler line string into a Handler Command object. */
-  static auto parse(const str& line) -> Command {
+  /** @brief Parses a line into a Command object (name, args, flags, etc.). */
+  static auto parse(str& line) -> Command {
     auto tokens = tokenize(line);
     if (tokens.empty()) return {};
 
     auto cmd = Command();
-    cmd.name = move(tokens[0]);
+    cmd.name = tokens[0];
 
-    for (uint i=1; i < tokens.size(); ++i) {
-      str token = move(tokens[i]);
-      if (token[0] != '-') {
-        cmd.args.emplace_back(move(token));
-        continue;
-      }
-      bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
-      cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+    for (auto i = 1u; i < tokens.size(); ++i) {
+      auto& token = tokens[i];
+
+      if (token.empty()) continue;  // skip empty tokens just in case
+      cmd.tokens.push_back(token);  // store all meaningful tokens after name
+
+      if (token[0] == '-')
+        cmd.flags.insert(token);
+      else
+        cmd.args.push_back(token);
     }
 
+    // Save input string (everything after the command name)
+    auto pos = line.find_first_not_of(' ', cmd.name.size());
+    cmd.input = (pos != NPOS) ? line.substr(pos) : "";
     return cmd;
   }
 
   // ------ Internal logic ------
 
   private:
-  
-  /** @brief A helper that splits a string into whitespace-separated tokens. */
-  static auto tokenize(const str& line) -> vec<str> {
+
+  /** @brief Splits a line into space-delimited tokens. */
+  static auto tokenize(str& line) -> vec<str> {
     if (line.empty()) return {};
     auto stream = isstream(line);
-    auto tokens = vec<str>(); 
+    auto tokens = vec<str>();
 
     for (str token; stream >> token; )
-      tokens.emplace_back(move(token));
+      tokens.push_back(move(token));
     return tokens;
   }
-};
-
-------------------------------
- FILE:  types.hpp
- PATH:  core\command\types.hpp
-------------------------------
-
-#pragma once 
-#include "core/common/imports/_all.hpp"
-
-
-/** @brief Contains the flag name and whether it requires an argument. */
-struct Flag {
-  str name = "";        // Flag name (e.g., "-s", "-r", "-ls")
-  bool has_arg = false; // Whether the flag requires an argument
 };
 
 ------------------------------
@@ -394,7 +391,7 @@ auto make_demo() -> CommandHandler {
 ------------------------------
 
 #pragma once
-#include "core/common/utility/Text.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
@@ -404,17 +401,16 @@ auto make_echo() -> CommandHandler {
   return CommandHandler()
     .set_name("echo")
     .set_desc("Print arguments.")
+    .add_flag("--rich")
     .set_min_args(1)
     .set_max_args(UINT_MAX)
     .set_disabled(false)
 
     .set_execute([](Command& command, Shell&) {
-      auto out = osstream();
-
-      for (auto& arg: command.args)
-        out << arg << ' ';
-
-      cout << Text(out.str())["gr"]<< '\n';
+      if (!command.flags.contains("--rich"))
+        cout << RichText(join(command.args)) << '\n';
+      else 
+        cout << join(command.args) << '\n';
     });
 }
 
@@ -794,10 +790,11 @@ auto make_screen() -> CommandHandler {
     .set_name("screen")
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
-    .set_max_args(0)
-    .add_flag({ "-s", true })
-    .add_flag({ "-r", true })
-    .add_flag({ "-ls", false })
+    .set_max_args(UINT_MAX)
+    .add_flag("-s")
+    .add_flag("-r")
+    .add_flag("-ls")
+    .add_flag("-c")
     
     .set_validate([](Command& command, Shell& shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
@@ -846,19 +843,23 @@ auto make_screen() -> CommandHandler {
           auto& process = data.get_process(pid);
           cout << render_line(process, "Finished");
         }
-
+        
         cout << Text("â”€", line_width)[blue];
+        cout << '\n';
       }
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        auto& name = command.flags.at("-s");
+        auto& name = command.args[0];
+
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
 
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
         scheduler.generate_process(name);
-        cout << format("\nWaiting for process creation: {}", name);
+        cout << format("Waiting for process creation: {}", name);
 
         // Wait until process queues
         if (!process_queued(name, scheduler))
@@ -883,7 +884,11 @@ auto make_screen() -> CommandHandler {
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        auto& name = command.flags.at("-r");
+        
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
+
+        auto& name = command.args[0];
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
@@ -903,6 +908,18 @@ auto make_screen() -> CommandHandler {
         cout << format("Current instruction line: {}\n", process.data.program.ip);
         cout << format("Lines of code: {}\n", process.data.program.size());
       }
+
+      else if (command.flags.contains("-c")) {
+        /** 
+         * Hi Raine! Here's the new changes:
+         * 
+         * @c command.input  -- raw input (without the command name)
+         * @c command.tokens -- list of all args and flags in order of the input
+         * @c command.flags  -- set of tokens with a dash `-` at the beginning
+         * @c command.args   -- list of arguments
+         * 
+         */ 
+      }
     });
 }
 
@@ -920,13 +937,14 @@ auto make_screen() -> CommandHandler {
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
+
 auto make_test() -> CommandHandler {
   return CommandHandler()
     .set_name("test")
     .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    .add_flag({ "-r", false })
+    .add_flag("-r")
 
     .set_execute([](Command& command, Shell& shell) {
       auto& interpreter = InstructionInterpreter::get();
@@ -966,44 +984,6 @@ auto make_test() -> CommandHandler {
       const bool done = process.step();
       cout << "[loop-test] Process stepped.\n";
       cout << (done ? "Finished." : "Still running.") << '\n';
-    });
-}
-
-------------------------------
- FILE:  text.hpp
- PATH:  core\command\handlers\text.hpp
-------------------------------
-
-#pragma once
-#include "core/common/utility/Text.hpp"
-#include "core/shell/internal/Shell.impl.hpp"
-#include "core/command/Command.hpp"
-#include "core/command/CommandHandler.hpp"
-
-
-auto make_text() -> CommandHandler {
-  return CommandHandler()
-    .set_name("text")
-    .set_desc("Print arguments.")
-    .set_min_args(1)
-    .set_max_args(UINT_MAX)
-    .add_flag({ "-s", true })  // expects a value like: -s gr+b
-    .set_disabled(false)
-
-    .set_execute([](Command& command, Shell&) {
-      auto style = "fg245"s;    // Default: soft gray
-      if (command.flags.contains("-s"))
-        style = command.flags.at("-s");
-
-      auto out = osstream();
-      for (auto& arg: command.args)
-        out << arg << ' ';
-
-      auto msg = out.str();
-      if (!msg.empty())
-        msg.pop_back();
-
-      cout << Text(msg)[style] << '\n';
     });
 }
 
@@ -1104,9 +1084,8 @@ auto make_util() -> CommandHandler {
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
 #include "test.hpp"
-#include "text.hpp"
 
-  
+
 auto get_command_handlers() -> vec<CommandHandler> {
   return {
     make_cls(),
@@ -1121,7 +1100,6 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_stop(),
     make_screen(),
     make_test(),
-    make_text(),
   };
 }
 
@@ -1224,8 +1202,9 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="%m/%
 #include <list>
 #include <map>
 #include <queue>
+#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -1236,16 +1215,14 @@ using std::make_pair;
 using std::out_of_range;
 using std::pair;
 using std::queue;
+using std::set;
+using std::tuple;
 using std::unordered_map;
-using std::unordered_set;
 using std::vector;
 
 // === Aliases ===
 template <typename Type>
 using vec = vector<Type>;
-
-template <typename Type>
-using set = unordered_set<Type>;
 
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
@@ -1336,6 +1313,31 @@ auto read_lines(const std::string& path) -> std::vector<std::string> {
 }
 
 ------------------------------
+ FILE:  iterator.hpp
+ PATH:  core\common\imports\iterator.hpp
+------------------------------
+
+#pragma once
+#include <iterator>   // for std::next
+#include <ranges>     // for ranges algorithms
+#include <algorithm>  // for std::replace, std::erase_if
+
+// Iterator utilities
+using std::next;
+
+// Range-based algorithms
+using std::ranges::all_of;
+using std::ranges::any_of;
+using std::ranges::count_if;
+using std::ranges::find_if;
+using std::ranges::none_of;
+using std::ranges::replace_if;
+
+// STL container utility
+using std::erase_if;
+using std::replace;
+
+------------------------------
  FILE:  locks.hpp
  PATH:  core\common\imports\locks.hpp
 ------------------------------
@@ -1400,7 +1402,6 @@ decltype(auto) with_unlocked(Func&& fn) {
 #include <functional>
 #include <limits>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -1431,23 +1432,12 @@ using Ref = optional<ref<Type>>;
 using std::nullopt;
 
 // === STL Utility Aliases ===
-using std::ranges::all_of;
-using std::ranges::any_of;
-using std::ranges::count_if;
-using std::ranges::find_if;
-using std::ranges::none_of;
 using std::any_cast;
 using std::cref;
 using std::erase_if;
 using std::move;
 using std::forward;
 using std::swap;
-
-// Iterators
-template <typename Type>
-auto move_iter(Type it) { 
-  return std::make_move_iterator(it); 
-}
 
 ------------------------------
  FILE:  platform.hpp
@@ -1639,6 +1629,20 @@ public:
 };
 
 ------------------------------
+ FILE:  regex.hpp
+ PATH:  core\common\imports\regex.hpp
+------------------------------
+
+#pragma once
+#include <regex>
+
+
+using std::regex;
+using std::smatch;
+using std::regex_search;
+using std::regex_replace;
+
+------------------------------
  FILE:  string.hpp
  PATH:  core\common\imports\string.hpp
 ------------------------------
@@ -1660,7 +1664,7 @@ using str = std::string;
 using Str = std::optional<string>;
 using std::literals::string_literals::operator""s;
 
-// === Character Utilities ===
+// === Utilities ===
 using std::isalpha;
 using std::isalnum;
 
@@ -1689,13 +1693,24 @@ auto is_digits(const std::string& s) -> bool {
   });
 }
 
-// === Case conversions ===
+// === Utility functions ===
 
 /** @brief Returns a lowercase copy of the given string. */
 auto lowercase(str raw) -> str {
   for (char& c: raw)
     c = tolower(c);
   return raw;
+}
+
+/** @brief Joins a vector of strings using the given delimiter. */
+auto join(vec<str>& args, char delim=' ') -> str {
+  if (!args.empty()) return "";
+  
+  auto oss = osstream();
+  oss << args[0];
+  for (auto i = 1u; i < args.size(); ++i)
+    oss << delim << args[i];
+  return oss.str();
 }
 
 ------------------------------
@@ -1771,10 +1786,12 @@ inline constexpr Context with;
 #include "conventions.hpp"
 #include "helpers.hpp"
 #include "io.hpp"
+#include "iterator.hpp"
 #include "misc.hpp"
 #include "platform.hpp"
 #include "pointers.hpp"
 #include "random.hpp"
+#include "regex.hpp"
 #include "string.hpp"
 #include "thread.hpp"
 
@@ -2004,6 +2021,285 @@ class EventEmitter {
     return id;
   }
 };
+
+------------------------------
+ FILE:  RichText.hpp
+ PATH:  core\common\utility\RichText.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+
+class StyleStack {
+  public:
+
+  StyleStack():
+    stack(vec<pair<str,str>>()) {}  // Start with an empty list of style layers
+
+  /** @brief Add all styles (as separate layers) to the stack. */
+  void push(map<str,str> styles) {
+    for (auto& [key, val]: styles)
+      stack.emplace_back(move(key), move(val));
+  }
+
+  /** @brief Remove the most recent layer containing a given style tag. */
+  void pop(str tag) {
+    for (auto rit = stack.rbegin(); rit != stack.rend(); ++rit) {
+      if (rit->first != tag)
+        continue;
+
+      auto it = next(rit).base();  // convert to forward iterator
+      stack.erase(it);
+      break;
+    }
+  }
+
+  /** @brief Clear all styles from the stack. */
+  void reset() { 
+    stack.clear(); 
+    stack.shrink_to_fit();
+  }
+
+  /** @brief Combine all active styles into one map. */
+  auto get_styles() -> map<str,str> {
+    auto result = map<str,str>();
+
+    for (auto& [key, val]: stack)
+      result[key] = val;
+    return result;
+  }
+
+  // ------ Instance variables ------
+  vec<pair<str, str>> stack;
+};
+
+
+class RichText {
+  public:
+
+  // ------ Class variables ------
+  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]+?)\])");
+  static inline auto ESC_LB      = regex(R"(\\\[)");
+  static inline auto ESC_RB      = regex(R"(\\\])");
+  static inline auto PLACE_LB    = "\x01";
+  static inline auto PLACE_RB    = "\x02";
+  static inline auto ANSI_RESET  = "\033[0m";
+
+  static inline auto STYLES = map<str,str>{
+    {"bold",      "1"}, 
+    {"dim",       "2"}, 
+    {"italic",    "3"},
+    {"underline", "4"}, 
+    {"strike",    "9"},
+  };
+
+  static inline auto COLORS = map<str,str>{
+    {"black",     "#000000"}, 
+    {"red",       "#ff0000"}, 
+    {"green",     "#00ff00"},
+    {"yellow",    "#ffff00"}, 
+    {"blue",      "#0000ff"}, 
+    {"magenta",   "#ff00ff"},
+    {"cyan",      "#00ffff"}, 
+    {"white",     "#ffffff"}, 
+    {"gray",      "#808080"},
+    {"lightgray", "#cccccc"}, 
+    {"darkred",   "#880000"},
+    {"darkgreen", "#008800"}, 
+    {"darkblue",  "#000088"},
+  };
+
+  static inline auto ALIASES = map<str,str>{
+    {"b", "bold"}, 
+    {"i", "italic"}, 
+    {"u", "underline"},
+    {"s", "strike"}, 
+    {"d", "dim"},
+  };
+
+  RichText(str input):
+    raw   (move(input)),  // Store the raw input string with markup tags
+    text  (""s),          // Initialize rendered ANSI-formatted text (to be set by render())
+    size  (0u),           // Number of visible characters (excluding ANSI codes)
+    stack (StyleStack())  // Initialize the style stack for nested formatting
+  {
+    text = render();                // Immediately render text
+    size = strip_ansi(text).size(); // Only count visible characters
+  }
+  
+  /** @brief Enables ANSI and Unicode output (once at startup). */
+  static void enable() {
+    enable_unicode();
+  }
+
+  /** @brief Streams the rendered text to an output stream (e.g., std::cout). */
+  friend ostream& operator<<(ostream& os, const RichText& rt) {
+    return os << rt.text;
+  }
+
+  // ------ Instance variables ------
+  
+  str raw;
+  str text;
+  uint size;
+  StyleStack stack;
+
+  // ------ Internal helpers ------
+
+  private:
+
+  /** @brief Removes ANSI escape codes from the given string. */
+  auto strip_ansi(str& text) -> str {
+    static auto ansi_re = regex(R"(\x1B\[[0-9;]*m)");
+    return regex_replace(text, ansi_re, "");
+  }
+
+  /** @brief Converts a hex color string or named color to an RGB tuple. */
+  auto hex_to_rgb(str value) -> tuple<uint,uint,uint> {
+    value.erase(0, 1); // remove leading #
+    auto r = stoul(value.substr(0, 2), nullptr, 16);
+    auto g = stoul(value.substr(2, 2), nullptr, 16);
+    auto b = stoul(value.substr(4, 2), nullptr, 16);
+    return { r, g, b };
+  }
+
+  auto is_valid_hex_color(const str& value) -> bool {
+    return value.size() == 7
+      && value[0] == '#'
+      && all_of(value.begin()+1, value.end(), ::isxdigit);
+  }
+
+  /** @brief Converts a style map to an ANSI escape code string. */
+  auto to_ansi(const map<str,str>& styles) -> str {
+    auto codes = vec<str>();
+
+    for (auto& [key, value]: styles) {
+      if (STYLES.count(key)) {
+        codes.push_back(STYLES.at(key));
+
+      } else if (key == "fg") {
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+
+        auto [r, g, b] = hex_to_rgb(hex);
+        codes.push_back(format("38;2;{};{};{}", r, g, b));
+
+      } else if (key == "bg") {
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+        
+        auto [r, g, b] = hex_to_rgb(hex);
+        codes.push_back(format("48;2;{};{};{}", r, g, b));
+      }
+    }
+
+    return codes.empty() ? "" : format("\033[{}m", join(codes, ';'));
+  }
+
+  auto resolve_tag(str& tag) -> str {
+    return ALIASES.contains(tag) ? ALIASES.at(tag) : tag;
+  }
+
+  auto parse_to_styles(str& tag) -> map<str,str> {
+    auto result = map<str,str>();
+    auto stream = isstream(tag);
+    auto token = ""s;
+
+    while (stream >> token) {
+      auto eq = token.find('=');
+      
+      if (eq == NPOS) {
+        auto key = resolve_tag(token);
+        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": ""})
+        continue;
+      }
+
+      auto key = token.substr(0, eq);
+      auto val = token.substr(eq+1);
+      key = resolve_tag(key);
+      result[key] = val;
+    }
+
+    return result;
+  }
+
+  auto render() -> str {
+    auto out = ""s;
+    auto index = 0u;
+
+    // Escape literal brackets (\[ and \]) so they are not parsed as tags
+    auto text = regex_replace(raw, ESC_LB, PLACE_LB);
+    text = regex_replace(text, ESC_RB, PLACE_RB);
+
+    auto match = smatch();
+    while (regex_search(text.cbegin() + index, text.cend(), match, TAG_PATTERN)) {
+      out += text.substr(index, match.position());  // Add all plain text before the tag
+
+      auto is_closing = match[1].str() == "/";
+      auto tag = match[2].str();  // raw tag content
+
+      if (is_closing) {           // Handle [/], which resets all styles
+        if (tag.empty()) {                          
+          stack.reset();
+          out += ANSI_RESET;
+        
+        } else {                  // Handle [/<tag>] - pop specific style
+          stack.pop(resolve_tag(tag));
+          out += ANSI_RESET + to_ansi(stack.get_styles());
+        }
+
+      } else {                    // Handle [tag ...] â€” parse and push new style(s)
+        stack.push(parse_to_styles(tag));
+        out += to_ansi(stack.get_styles());
+      }
+      
+
+      index += match.position() + match.length();  // Move index forward to just after the matched tag
+    }
+
+    // Append remaining raw text and unescape any \[ or \]
+    out += text.substr(index);
+    replace(out.begin(), out.end(), *PLACE_LB, '[');
+    replace(out.begin(), out.end(), *PLACE_RB, ']');
+
+
+    // Only append reset if styling was ever applied
+    if (!stack.get_styles().empty())
+      out += ANSI_RESET;
+
+    stack.reset();  // To free memory once text has been rendered
+    return out;
+  }
+};
+
+
+// int main() {
+//   auto t1 = RichText("Hello [b]World[/b]");
+//   auto t2 = RichText("[i]Italic[/i] text");
+//   auto t3 = RichText("[u]Underlined[/u] content");
+//   auto t4 = RichText("[strike]Struck[/strike] out");
+//   auto t5 = RichText("Mix: [b]Bold[/] then [i]Italic[/] and [u]Underline[/]");
+//   auto t6 = RichText("Color test: [fg=red]Red[/fg], [fg=#00ff00]Green[/fg]");
+//   auto t7 = RichText("Background test: [bg=yellow]Yellow Background[/bg]");
+//   auto t8 = RichText("[b fg=blue]Bold Blue [fg=green]Green[/fg] Back to Blue[/b]");
+//   auto t9 = RichText("Escaped: \\[b\\]not bold\\[/b\\]");
+//   auto t10 = RichText("[b fg=red]Red Bold[/] Normal");
+//   auto t11 = RichText("[b]123[/]456");
+
+//   cout << "Test 1:  " << t1 << "\n";
+//   cout << "Test 2:  " << t2 << "\n";
+//   cout << "Test 3:  " << t3 << "\n";
+//   cout << "Test 4:  " << t4 << "\n";
+//   cout << "Test 5:  " << t5 << "\n";
+//   cout << "Test 6:  " << t6 << "\n";
+//   cout << "Test 7:  " << t7 << "\n";
+//   cout << "Test 8:  " << t8 << "\n";
+//   cout << "Test 9:  " << t9 << "\n";
+//   cout << "Test 10: " << t10 << "\n";
+//   cout << "Test 11: " << t11 << " (size = " << t11.size << ")\n";
+//   return 0;
+// }
 
 ------------------------------
  FILE:  Table.hpp
@@ -2351,7 +2647,8 @@ class Core {
   /** @brief Constructs a core with the given ID and starts the thread. */
   Core(uint id=0): 
     id          (id),                 // Core ID
-    job_ticks   (0),                  // Number of ticks the current process has been running
+    job_ticks   (0u),                 // Number of ticks the current process has been running
+    delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
     preempt     (nullptr),            // Optional strategy-injected logic
@@ -2360,11 +2657,14 @@ class Core {
   { 
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
+      auto counter = 0u;
+
       while (active) {
-        with_locked([&] {
-          tick();
-        });
-        sleep_for(1ms);
+        if (counter-- == 0) {
+          with_locked([&] { tick(); });
+          counter = delay;
+        }
+        sleep_for(1ms);  // always happens
       }
     });
   }
@@ -2394,6 +2694,7 @@ class Core {
 
   uint id;                      
   uint job_ticks;       
+  uint delay;       
   bool can_release;   
   Process* job; 
   func preempt;    
@@ -2573,16 +2874,14 @@ class CoreManager {
 
 /** Represents a single process instruction. */
 struct Instruction {
-  using Script = vec<Instruction>;
-
-  str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
-  vec<str> args;      ///< List of string arguments
+  str opcode;     // Operation name, e.g., `FOR`, `PRINT`, etc.
+  vec<str> args;  // List of string arguments
 
   /**
    * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
    * Set dynamically to allow skipping. A value of 0 means unset.
    */
-  mutable uint exit = 0;
+  uint exit = 0;
 };
 
 ------------------------------
@@ -2631,7 +2930,7 @@ class InstructionHandler {
   /** @brief Returns true if this instruction begins a exit control block (e.g., FOR). */
   auto is_control_exit() -> bool { return !open_opcode.empty(); }
 
-  /** Generates a random instruction based on the signature. */
+  /** @brief Generates a random instruction based on the signature. */
   auto generate() -> Instruction {
     auto inst = Instruction(opcode);
     if (signatures.empty()) return inst;
@@ -2696,18 +2995,18 @@ class InstructionInterpreter {
 
   public:
 
-  /** Returns the global singleton get of the InstructionInterpreter. */
+  /** @brief Returns the global singleton get of the InstructionInterpreter. */
   static auto get() -> InstructionInterpreter& {
     static auto inst = InstructionInterpreter();
     return inst;
   }
 
-  /** Registers a handler by opcode. */
+  /** @brief Registers a handler by opcode. */
   void register_instruction(InstructionHandler handler) {
     handlers[handler.opcode] = move(handler);
   }
 
-  /** Execute an instruction using its handler. */
+  /** @brief Execute an instruction using its handler. */
   void execute(Instruction& inst, ProcessData& proc) {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
@@ -2716,22 +3015,20 @@ class InstructionInterpreter {
     it->second.execute(inst, proc);
   }
 
-  /**
-   * Generates a random list of up to `size` instructions with proper block closure.
-   * May exceed size due to necessary ENDFOR-like closures.
-   */
-  auto generate_script(uint size, uint max_depth=3) -> Instruction::Script {
-    auto script = Instruction::Script();
-    auto stack = vec<ref<InstructionHandler>>();  // Tracks opened control blocks
+  /** @brief Generates a random list of up to `size` instructions with proper block closure. */
+  auto generate_script(uint size, uint max_depth=3) -> vec<Instruction> {
+    auto script = vec<Instruction>();
+    auto stack = vec<ref<InstructionHandler>>();                      // Tracks opened control blocks
+    auto inst_count = [&]() { return script.size() + stack.size(); }; // actual + pending ENDFORS
 
-    while (script.size() < size) {
-      if (should_open(stack, max_depth))          // For opening control instructions
+    while (inst_count() < size) {
+      if (should_open(stack, max_depth) && inst_count()+2 <= size)    // For opening control instructions
         open_control_block(script, stack);
       
-      else if (should_close(stack))               // For closing control instructions
+      else if (should_close(stack))                       // For closing control instructions
         close_control_block(script, stack);
 
-      if (!flat_handlers.empty())                 // For adding flat instructions
+      if (!flat_handlers.empty() && inst_count() < size)  // For adding flat instructions
         script.push_back(Rand::pick(flat_handlers).get().generate());
     }
 
@@ -2751,25 +3048,25 @@ class InstructionInterpreter {
 
   // ------ Internal helpers ------
 
-  /** Returns true if a control block can be opened (depth-limited, random chance). */
+  /** @brief Returns true if a control block can be opened (depth-limited, random chance). */
   bool should_open(vec<ref<InstructionHandler>>& stack, uint max_depth) { 
     return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
-  /** Returns true if a control block can be closed (if any open, random chance). */
+  /** @brief Returns true if a control block can be closed (if any open, random chance). */
   bool should_close(vec<ref<InstructionHandler>>& stack) { 
     return !stack.empty() && Rand::chance(4); 
   }
 
-  /** Emits a random control-opener instruction and pushes it to the stack. */
-  void open_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  /** @brief Emits a random control-opener instruction and pushes it to the stack. */
+  void open_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
 
-  /** Emits the matching end-opcode of the current open control block. */
-  void close_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  /** @brief Emits the matching end-opcode of the current open control block. */
+  void close_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     if (stack.empty())
       throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
     
@@ -2874,26 +3171,23 @@ class Signature {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_add() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "ADD",
-    .signatures = {
-      { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
-      { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
-      { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
-    },
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint lhs = proc.get_memory().get(inst.args[1]);
-      uint rhs = proc.get_memory().resolve(inst.args[2]);
-      proc.get_memory().set(inst.args[0], lhs + rhs);
-    },
-  };
+auto make_add() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("ADD")
+    .add_signature(Signature().Var().Var().Var())
+    .add_signature(Signature().Var().Var().Uint16())
+    .add_signature(Signature().Var().Uint16().Uint16())
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& memory = process.memory;
+      auto lhs = memory.get(inst.args[1]);
+      auto rhs = memory.resolve(inst.args[2]);
+      memory.set(inst.args[0], lhs + rhs);
+    });
 }
 
 ------------------------------
@@ -2907,19 +3201,16 @@ inline InstructionHandler make_add() {
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_declare() {
-  using Param = InstructionParam;
-  using list = vector<str>;
-  return {
-    .opcode = "DECLARE",
-    .signatures = {{ Param::Var(), Param::UInt16() }},
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint value = stoul(inst.args[1]);
-      proc.get_memory().set(inst.args[0], value);
-    },
-  };
+auto make_declare() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("DECLARE")
+    .add_signature(Signature().Var().Uint16())
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto var = inst.args[0];
+      auto value = stoul(inst.args[1]);
+      process.memory.set(var, value);
+    });
 }
-
 
 ------------------------------
  FILE:  endfor.hpp
@@ -2978,19 +3269,16 @@ auto make_for() -> InstructionHandler {
   // === Skips ahead to the matching ENDFOR. ===
   auto skip_block = [](auto& program, auto& inst) { 
 
-    cout << "Before: inst.exit = " << inst.exit << "\n";
-    
     // Use cached exit if available
     if (inst.exit != 0)
       return void(program.set_ip(inst.exit));
       
     auto& script = program.script;
-    uint start = program.ip;
-    uint depth = 1;
-
+    auto start = program.ip;
+    auto depth = 1u;
 
     // Otherwise, scan ahead to find the matching ENDFOR
-    for (uint i = start+1; i < script.size(); ++i) {
+    for (auto i = start+1u; i < script.size(); ++i) {
       auto& opcode = script[i].opcode;
       int delta = (opcode == "FOR") - (opcode == "ENDFOR");
       depth += delta;
@@ -2999,7 +3287,6 @@ auto make_for() -> InstructionHandler {
       if (depth == 0) {
         inst.exit = i + 1;
         program.set_ip(inst.exit);
-        cout << "After: inst.exit = " << inst.exit << "\n";
         return;
       }
     }
@@ -3010,7 +3297,7 @@ auto make_for() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("FOR")
     .set_exit("ENDFOR")
-    .add_signature(Signature().Uint(1, 5))
+    .add_signature(Signature().Uint(1,5))
 
     .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
@@ -3063,27 +3350,27 @@ auto make_print() -> InstructionHandler {
 auto make_sleep() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SLEEP")
-    .add_signature(Signature().Uint(0, 3))
+    .add_signature(Signature().Uint(0,3))
 
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto ticks = stoul(inst.args[0]);
+
+      // Case 0: Skip sleep if duration is zero
+      if (ticks == 0)
+        return;
+
       auto& program = process.program;
       auto& control = process.control;
-      auto& context = program.context;
 
-      // Phase 1: First-time setup
-      if (!context.top_ip_is(program.ip)) {
-        context.push(program.ip);               // Mark SLEEP as active on the context stack
-        control.sleep_for(stoul(inst.args[0])); // Start sleep for given duration (in ticks)
-      }
+      // Case 1: Begin or continue sleeping
+      if (!control.sleeping())
+        control.sleep_for(ticks);
+      else 
+        control.tick();
 
-      // Phase 2: Sleep body
-      if (!control.sleeping())                  // Done sleeping, remove context frame
-        context.pop();        
-
-      else {                                    
-        control.tick();                         // Still sleeping, consume one tick
-        program.set_ip(program.ip);             // Block ip auto-increment by setting manually
-      }
+      // Case 2: Still sleeping
+      if (control.sleeping())
+        program.set_ip(program.ip);  // Block auto-increment
     });
 }
 
@@ -3095,26 +3382,23 @@ auto make_sleep() -> InstructionHandler {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_subtract() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "SUBTRACT",
-    .signatures = {
-      { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
-      { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
-      { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
-    },
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint lhs = proc.get_memory().get(inst.args[1]);
-      uint rhs = proc.get_memory().resolve(inst.args[2]);
-      proc.get_memory().set(inst.args[0], (lhs > rhs) ? (lhs-rhs) : 0);
-    },
-  };
+auto make_subtract() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("SUBTRACT")
+    .add_signature(Signature().Var().Var().Var())
+    .add_signature(Signature().Var().Var().Uint16())
+    .add_signature(Signature().Var().Uint16().Uint16())
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& memory = process.memory;
+      auto lhs = memory.get(inst.args[1]);
+      auto rhs = memory.resolve(inst.args[2]);
+      memory.set(inst.args[0], lhs > rhs ? lhs - rhs : 0);
+    });
 }
 
 ------------------------------
@@ -3124,24 +3408,24 @@ inline InstructionHandler make_subtract() {
 
 #pragma once
 #include "core/instruction/InstructionHandler.hpp"
-// #include "add.hpp"
-// #include "declare.hpp"
+#include "add.hpp"
+#include "declare.hpp"
 #include "endfor.hpp"
 #include "for.hpp"
 #include "print.hpp"
 #include "sleep.hpp"
-// #include "subtract.hpp"
+#include "subtract.hpp"
 
 
 auto get_instruction_handlers() -> vec<InstructionHandler> {
   return {
-    // make_add(),
-    // make_declare(),
+    make_add(),
+    make_declare(),
     make_endfor(),
     make_for(),
     make_print(),
     make_sleep(),
-    // make_subtract(),
+    make_subtract(),
   };
 }
 
@@ -3301,7 +3585,6 @@ namespace csopesy::Position {
 
 class Process {
   public:  
-
   // ------ Class variables ------
   inline static auto& interpreter = InstructionInterpreter::get();
 
@@ -3314,9 +3597,6 @@ class Process {
         move(interpreter.generate_script(size))
       )
     ) {}
-  
-  /** @brief Appends a log message (e.g. from PRINT instruction). */
-  void log(str line) { data.log(move(line)); }
 
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
@@ -3400,7 +3680,7 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, Instruction::Script script): 
+  ProcessData(uint id, str name, vec<Instruction> script): 
     id      (id),                     // Unique process ID
     name    (move(name)),             // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),             // Output logs collected from PRINT instructions
@@ -3485,8 +3765,8 @@ class ProcessProgram {
   public:
 
   /** @brief Loads an instruction script. */
-  ProcessProgram(Instruction::Script script): 
-    script     (Instruction::Script(move(script))),  // Flat list of all program instructions
+  ProcessProgram(vec<Instruction> script): 
+    script     (vec<Instruction>(move(script))),  // Flat list of all program instructions
     context    (ContextStack()),                     // Stack of active loop contexts
     ip_was_set (false),                              // For blocking instruction pointer advancing
     ip         (0) {}                                // Current instruction pointer
@@ -3535,7 +3815,7 @@ class ProcessProgram {
 
   // ------ Instance variables ------
 
-  Instruction::Script script;
+  vec<Instruction> script;
   ContextStack context;
   bool ip_was_set;
   uint ip;
@@ -3705,9 +3985,13 @@ class Scheduler {
     auto preempt_handler = strategy.get_preempt_handler(data);
 
     // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr)
-      for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(preempt_handler);
+    if (preempt_handler != nullptr) {
+      for (auto& ref: data.cores.get_all()) {
+        auto& core = ref.get();
+        core.delay = config.getu("delays-per-exec");
+        core.set_preempt(preempt_handler);
+      }
+    }
 
     data.config = move(config); // Must come last                               
   }
@@ -4387,7 +4671,7 @@ class Shell {
     cout << ">>> " << flush;
     if (str input; getline(cin, input)) {
       with_locked([&]{
-        interpreter.execute(move(input), *this);  // Executes commands
+        interpreter.execute(input, *this);  // Executes commands
         cout << '\n';
       });
 
