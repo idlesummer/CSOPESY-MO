@@ -60,8 +60,8 @@ class InstructionInterpreter {
   }
 
   /** @brief Generates a random list of up to `size` instructions with proper block closure. */
-  auto generate_script(uint size, uint max_depth=3) -> Instruction::Script {
-    auto script = Instruction::Script();
+  auto generate_script(uint size, uint max_depth=3) -> vec<Instruction> {
+    auto script = vec<Instruction>();
     auto stack = vec<ref<InstructionHandler>>();                      // Tracks opened control blocks
     auto inst_count = [&]() { return script.size() + stack.size(); }; // actual + pending ENDFORS
 
@@ -103,14 +103,14 @@ class InstructionInterpreter {
   }
 
   /** @brief Emits a random control-opener instruction and pushes it to the stack. */
-  void open_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  void open_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
 
   /** @brief Emits the matching end-opcode of the current open control block. */
-  void close_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  void close_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     if (stack.empty())
       throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
     

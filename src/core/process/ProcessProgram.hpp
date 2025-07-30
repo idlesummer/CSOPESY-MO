@@ -13,8 +13,8 @@ class ProcessProgram {
   public:
 
   /** @brief Loads an instruction script. */
-  ProcessProgram(Instruction::Script script): 
-    script     (Instruction::Script(move(script))),  // Flat list of all program instructions
+  ProcessProgram(vec<Instruction> script): 
+    script     (vec<Instruction>(move(script))),  // Flat list of all program instructions
     context    (ContextStack()),                     // Stack of active loop contexts
     ip_was_set (false),                              // For blocking instruction pointer advancing
     ip         (0) {}                                // Current instruction pointer
@@ -63,7 +63,7 @@ class ProcessProgram {
 
   // ------ Instance variables ------
 
-  Instruction::Script script;
+  vec<Instruction> script;
   ContextStack context;
   bool ip_was_set;
   uint ip;

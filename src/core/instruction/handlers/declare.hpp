@@ -4,16 +4,13 @@
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_declare() {
-  using Param = InstructionParam;
-  using list = vector<str>;
-  return {
-    .opcode = "DECLARE",
-    .signatures = {{ Param::Var(), Param::UInt16() }},
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint value = stoul(inst.args[1]);
-      proc.get_memory().set(inst.args[0], value);
-    },
-  };
+auto make_declare() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("DECLARE")
+    .add_signature(Signature().Var().Uint16())
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto var = inst.args[0];
+      auto value = stoul(inst.args[1]);
+      process.memory.set(var, value);
+    });
 }
-

@@ -18,7 +18,7 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, Instruction::Script script): 
+  ProcessData(uint id, str name, vec<Instruction> script): 
     id      (id),                     // Unique process ID
     name    (move(name)),             // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),             // Output logs collected from PRINT instructions

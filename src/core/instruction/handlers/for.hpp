@@ -11,19 +11,16 @@ auto make_for() -> InstructionHandler {
   // === Skips ahead to the matching ENDFOR. ===
   auto skip_block = [](auto& program, auto& inst) { 
 
-    cout << "Before: inst.exit = " << inst.exit << "\n";
-    
     // Use cached exit if available
     if (inst.exit != 0)
       return void(program.set_ip(inst.exit));
       
     auto& script = program.script;
-    uint start = program.ip;
-    uint depth = 1;
-
+    auto start = program.ip;
+    auto depth = 1u;
 
     // Otherwise, scan ahead to find the matching ENDFOR
-    for (uint i = start+1; i < script.size(); ++i) {
+    for (auto i = start+1u; i < script.size(); ++i) {
       auto& opcode = script[i].opcode;
       int delta = (opcode == "FOR") - (opcode == "ENDFOR");
       depth += delta;
@@ -32,7 +29,6 @@ auto make_for() -> InstructionHandler {
       if (depth == 0) {
         inst.exit = i + 1;
         program.set_ip(inst.exit);
-        cout << "After: inst.exit = " << inst.exit << "\n";
         return;
       }
     }
@@ -43,7 +39,7 @@ auto make_for() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("FOR")
     .set_exit("ENDFOR")
-    .add_signature(Signature().Uint(1, 5))
+    .add_signature(Signature().Uint(1,5))
 
     .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
