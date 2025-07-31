@@ -81,10 +81,12 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    RichText::enable();   // Prepare terminal settings for output
-    register_commands();  // Initialize command handlers
+    RichText::enable();                 // Prepare terminal settings for output
+    register_commands();                // Initialize command handlers
+    storage.set("initialized", false);  // Set initialized to false (to be changed by initialize command later)
+    
     system("cls");
-    cout << '\n';         // Leave line 1 blank
+    cout << '\n';                       // Leave line 1 blank
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */
