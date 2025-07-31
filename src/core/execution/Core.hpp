@@ -57,6 +57,12 @@ class Core {
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
 
+  /** @brief Initializes core with a given delay and optional preemp handler. */
+  void init(uint ticks, func handler=nullptr) {
+    delay = ticks;
+    preempt = handler;
+  }
+
   /** @brief Called by scheduller to assign a process to this core. */
   void assign(Process& process) { set_job(&process, id); }
 
@@ -101,8 +107,12 @@ class Core {
       if (job->data.program.finished())
         can_release = true;
 
+      // Mark release if process is sleeping
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS
+        can_release = true;
+
       // If the process has finished all its instructions, mark for release
-      if (preempt && preempt(*this))
+      else if (preempt && preempt(*this))
         can_release = true;
 
     } catch (exception& e) {

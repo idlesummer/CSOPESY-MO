@@ -12,7 +12,7 @@
  * - Handles core lifecycle: creation, reset, and safe iteration.
  * 
  * Key Behaviors:
- * - `resize(size)`: Replaces all cores with a new set of N fresh cores.
+ * - `init(size)`: Replaces all cores with a new set of N fresh cores.
  * - `get_busy()` / `get_idle()`: Filters out cores by status for use in scheduling logic.
  * - `get_usage()`: Returns a float utilization ratio (busy / total cores).
  * - `get_running_pids()` and `get_busy_core_ids()`: Extract diagnostic metadata from active cores.
@@ -20,7 +20,7 @@
  * Design Notes:
  * - vec<uptr<Core>> are stored as `uptr<Core>` to ensure clean ownership and destruction.
  * - Always use reference-returning accessors (`vec<ref<Core>>`) instead of raw pointer access.
- * - Guards against null pointers even though `resize()` always populates all slots.
+ * - Guards against null pointers even though `init()` always populates all slots.
  * - Scheduler is the only component expected to use this class directly.
  */
 class CoreManager {
@@ -29,11 +29,11 @@ class CoreManager {
   CoreManager():
     cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
 
-  /** @brief Clears and reinitializes the core list with the specified number of cores */
-  void resize(uint size) {
-    cores.clear();                // Destroys all existing cores
+  /** @brief Clears and initializes the core list with the specified number of cores */
+  void init(uint size) {
+    cores.clear();                // Destroys all existing cores (just in case)
     cores.reserve(size);          // Preallocate to avoid reallocations
-    for (uint i=0; i < size; ++i)
+    for (auto i=0u; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i+1));
   }
 

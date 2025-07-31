@@ -9,7 +9,7 @@ class MemoryManager:
         # Each page maps to a (frame_index, loaded) tuple
         self.page_table = {}
 
-    def reset(self, mem_size, frame_size):
+    def init(self, mem_size, frame_size):
         """Reinitialize memory with a new total size and frame size."""
         self.frame_size = frame_size
         self.total_frames = mem_size // frame_size

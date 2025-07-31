@@ -60,20 +60,17 @@ class Scheduler {
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
     strategy = get_scheduler_strategy(config.gets("scheduler"));
-    data.cores.resize(config.getu("num-cpu"));
+    auto core_size = config.getu("num-cpu");
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto delay = config.getu("delays-per-exec");
+    
+    // Resizes number of cores (destroys old ones if any)
+    data.cores.init(core_size);
 
-    // Create the preempt handler from the factory method
-    auto preempt_handler = strategy.get_preempt_handler(data);
-
-    // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr) {
-      for (auto& ref: data.cores.get_all()) {
-        auto& core = ref.get();
-
-        // Configure cores with the tick delay and the preeption handler
-        core.delay = config.getu("delays-per-exec");
-        core.preempt = preempt_handler;
-      }
+    // Configure cores with the tick delay and preempt handler (if any)
+    for (auto& ref: data.cores.get_all()) {
+      auto& core = ref.get();
+      core.init(delay, preempt_handler);
     }
 
     data.config = move(config); // Must come last                               
@@ -140,13 +137,12 @@ class Scheduler {
       auto& process = data.get_process(*it);
       process.step();           // decrement sleep_ticks
 
-      if (!process.data.control.sleeping()) {
+      if (process.data.control.sleeping())
+        ++it;                   // still sleeping
+      else {
         data.rqueue.push(*it);  // ready again
-        it = wqueue.erase(it);  // remove from wqueue
-        continue;
+        it = wqueue.erase(it);  // remove from wqueue  
       }
-
-      ++it;                     // still sleeping
     }
   }
 };

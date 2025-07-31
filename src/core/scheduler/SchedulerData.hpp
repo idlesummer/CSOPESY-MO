@@ -54,7 +54,7 @@ class SchedulerData {
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  Config config;             
+  Config config;
   CoreManager cores;                  
   atomic_uint next_pid;           
 
