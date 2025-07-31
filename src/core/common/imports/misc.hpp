@@ -30,9 +30,6 @@ using func = std::function<Args...>;
 template <typename Type> 
 using ref = std::reference_wrapper<Type>;
 
-template <typename Type> 
-using Ref = optional<ref<Type>>;
-
 // === Constants ===
 using std::nullopt;
 

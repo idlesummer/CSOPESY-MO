@@ -12,7 +12,6 @@
 // === String Aliases ===
 using std::string;
 using str = std::string;
-using Str = std::optional<string>;
 using std::literals::string_literals::operator""s;
 
 // === Utilities ===
@@ -33,7 +32,7 @@ using std::format;
 using std::from_chars;
 
 // === Constants ===
-constexpr auto NPOS = string::npos;
+constexpr auto npos = string::npos;
 
 // === Validation ===
 
@@ -67,7 +66,7 @@ auto join(vec<str>& args, char delim=' ') -> str {
 /** @brief Returns a copy of the string with leading and trailing whitespace removed. */
 auto trim(const str& s) -> str {
   auto start = s.find_first_not_of(" \t\n\r");
-  if (start == NPOS) return "";  // all whitespace
+  if (start == npos) return "";  // all whitespace
   auto end = s.find_last_not_of(" \t\n\r");
   return s.substr(start, end - start + 1);
 };

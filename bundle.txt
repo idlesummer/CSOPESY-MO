@@ -1,11 +1,6 @@
 ﻿# === GPT System Overview Request ===
 
 You are a senior developer reviewing this project for a new team member.
-
-> Note: This codebase uses the macro #define let auto&& as a syntactic shorthand
-> to mimic dynamic-language style in function parameters. When you see let, 
-> interpret it as uto&&.
-
 Please do the following:
 
 1. **Give an overview** of what this project does and its main components.
@@ -262,7 +257,7 @@ class CommandParser {
 
     // Save input string (everything after the command name)
     auto pos = line.find_first_not_of(' ', cmd.name.size());
-    cmd.input = (pos != NPOS) ? line.substr(pos) : "";
+    cmd.input = (pos != npos) ? line.substr(pos) : "";
     return cmd;
   }
 
@@ -302,8 +297,17 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_execute([](Command&, Shell&) {
+    .set_validate([](Command& command, Shell& shell) -> Str {
+       auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
+
+      return nullopt;
+    })
+
+    .set_execute([](Command&, Shell& shell) {
       system("cls");
+      cout << shell.banner.get();
     });
 }
 
@@ -409,7 +413,7 @@ auto make_demo() -> CommandHandler {
       cout << program.render_script() << '\n';
 
       // 3. Step the process
-      const bool done = process.step();
+      auto done = process.step();
       cout << "[demo] Process stepped.\n";
       cout << (done ? "Finished." : "Still running.") << '\n';
     });
@@ -696,7 +700,7 @@ auto make_scheduler_start() -> CommandHandler {
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;
-      
+
       // Check if the scheduler has already been initialized
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
@@ -706,7 +710,7 @@ auto make_scheduler_start() -> CommandHandler {
 
       return nullopt;
     })
-    
+
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
       cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
@@ -1034,6 +1038,40 @@ auto make_util() -> CommandHandler {
 }
 
 ------------------------------
+ FILE:  vmstat.hpp
+ PATH:  core\command\handlers\vmstat.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+
+auto make_vmstat() -> CommandHandler {
+  return CommandHandler()
+    .set_name("vmstat")
+    .set_desc("Provides a detailed view of the active/inactive processes, available/used memory, and pages.")
+    .set_min_args(0)
+    .set_max_args(0)
+    
+    .set_validate([](Command& command, Shell& shell) -> Str {
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+
+      auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
+
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
+      cout << "To be implemented.\n";
+    });
+}
+
+------------------------------
  FILE:  _all.hpp
  PATH:  core\command\handlers\_all.hpp
 ------------------------------
@@ -1052,6 +1090,7 @@ auto make_util() -> CommandHandler {
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
+#include "vmstat.hpp"
 
 
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -1067,6 +1106,7 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
+    make_vmstat(),
   };
 }
 
@@ -1092,31 +1132,17 @@ using std::stof;
 using std::stoul;
 using std::to_string;
 
-// === Generic any cast function ===
-template <typename Type, typename From>
-auto cast(From&& x) -> Type {
-  using Raw = std::decay_t<From>;
 
-  if constexpr (std::is_same_v<Raw, std::any>)
-    return std::any_cast<Type>(x);
+/** 
+ * @brief Generic cast utility. 
+ * Use `cast<T>(x)` freely â€” auto-selects `any_cast` or `static_cast` as needed.
+ */
+template <typename Target, typename Source>
+auto cast(Source&& x) -> Target {
+  if constexpr (std::is_same_v<std::decay_t<Source>, std::any>)
+    return std::any_cast<Target>(x);
   else
-    return static_cast<Type>(std::forward<From>(x));
-}
-
-// === Aliases for clarity ===
-template <typename From> 
-auto cast_int(From&& x) -> int { 
-  return cast<int>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_uint(From&& x) -> std::uint32_t { 
-  return cast<uint32_t>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_str(From&& x) -> std::string {
-  return cast<std::string>(std::forward<From>(x)); 
+    return static_cast<Target>(std::forward<Source>(x));
 }
 
 ------------------------------
@@ -1198,22 +1224,6 @@ template <typename Key, typename Val>
 using map = unordered_map<Key, Val>;
 
 ------------------------------
- FILE:  conventions.hpp
- PATH:  core\common\imports\conventions.hpp
-------------------------------
-
-#pragma once
-#include <utility> // for std::forward
-
-#define let auto&&
-
-
-template <typename Type>
-constexpr decltype(auto) forward(Type&& x) noexcept {
-  return std::forward<Type>(x);
-}
-
-------------------------------
  FILE:  helpers.hpp
  PATH:  core\common\imports\helpers.hpp
 ------------------------------
@@ -1247,7 +1257,6 @@ constexpr auto pad_left(const std::string& s, uint32_t width, char fill=' ') -> 
 #include <sstream>
 #include <vector>
 
-  
 // I/O utility aliases
 using std::cin;
 using std::cout;
@@ -1261,7 +1270,8 @@ using std::ofstream;
 using std::ostream;
 using std::runtime_error;
 
-// === Utility functions ===
+
+/** @brief Reads all lines from a text file into a vector of strings. */
 auto read_lines(const std::string& path) -> std::vector<std::string> {
   auto file = std::ifstream(path);
   if (!file) return {};
@@ -1271,7 +1281,6 @@ auto read_lines(const std::string& path) -> std::vector<std::string> {
 
   auto in = std::istringstream(buffer.str());
   auto lines = std::vector<std::string>();
-  lines.reserve(8);
 
   for (std::string line; std::getline(in, line); )
     lines.emplace_back(std::move(line));
@@ -1649,7 +1658,7 @@ using std::format;
 using std::from_chars;
 
 // === Constants ===
-constexpr auto NPOS = string::npos;
+constexpr auto npos = string::npos;
 
 // === Validation ===
 
@@ -1683,7 +1692,7 @@ auto join(vec<str>& args, char delim=' ') -> str {
 /** @brief Returns a copy of the string with leading and trailing whitespace removed. */
 auto trim(const str& s) -> str {
   auto start = s.find_first_not_of(" \t\n\r");
-  if (start == NPOS) return "";  // all whitespace
+  if (start == npos) return "";  // all whitespace
   auto end = s.find_last_not_of(" \t\n\r");
   return s.substr(start, end - start + 1);
 };
@@ -1707,8 +1716,6 @@ using std::atomic_bool;
 using std::atomic_int;
 using std::atomic_uint;
 using std::atomic_bool;
-using aint = std::atomic_int;
-using auint = std::atomic_uint;
 
 // === Locking & Threading Aliases ===
 using std::lock_guard;
@@ -1720,34 +1727,6 @@ using std::unique_lock;
 using Thread = std::thread;
 using convar = std::condition_variable;
 
-// === Scoped Lock Execution Context ===
-struct Context {
-  /**
-   * @brief Acquires an exclusive lock using std::mutex.
-   * @param mtx The mutex to lock.
-   * @param fn The function to execute within the lock.
-   */
-  template <typename Func>
-  void lock(mutex& mtx, Func&& fn) const {
-    auto guard = lock_guard(mtx);
-    std::forward<Func>(fn)();
-  }
-
-  /**
-   * @brief Acquires an exclusive lock using std::mutex and passes the lock to the function.
-   * @param mtx The mutex to lock.
-   * @param fn The function to execute with the lock passed as argument.
-   */
-  template <typename Func>
-  void unique(mutex& mtx, Func&& fn) const {
-    auto lock = unique_lock(mtx);
-    std::forward<Func>(fn)(lock);
-  }
-};
-
-// === Scoped Context Instance ===
-inline constexpr Context with;
-
 ------------------------------
  FILE:  _all.hpp
  PATH:  core\common\imports\_all.hpp
@@ -1758,7 +1737,6 @@ inline constexpr Context with;
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"
-#include "conventions.hpp"
 #include "helpers.hpp"
 #include "io.hpp"
 #include "iterator.hpp"
@@ -1821,179 +1799,6 @@ class Ansi {
 
   static void move_cursor(ostream& out, int row, int col) {
     out << "\033[" << row << ";" << col << "H";
-  }
-};
-
-------------------------------
- FILE:  EventEmitter.hpp
- PATH:  core\common\utility\EventEmitter.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
-
-struct EventHandler {
-  using func = function<void(const any&)>;
-  uint id;
-  func fn;
-};
-
-/**
- * @class EventEmitter
- * @brief Thread-safe event emitter system.
- * 
- * Enables multiple threads to register event handlers, emit named events 
- * with optional data, and process the queued events. Supports blocking wait 
- * for event availability.
- */
-class EventEmitter {
-  using atomic = atomic_uint;
-  using pair = pair<str, any>;
-  using list = vector<pair>;
-  using obj  = EventHandler;
-  using func = EventHandler::func;
-  using task = function<void()>;
-  using objs = vector<obj>;
-  using map  = unordered_map<str, objs>;
-
-  map    listeners;   ///< Map of event name to handlers
-  list   events;      ///< Queue of emitted events
-  convar cv;          ///< Condition variable for blocking waits
-  atomic next_id = 1; ///< Atomic counter for unique handler IDs
-  mutex  mtx;         ///< Mutex for thread safety
-
-  public:
-  
-  /**
-   * @brief Register a handler for a named event.
-   * @param name The event name.
-   * @param handler A function to call when the event is dispatched.
-   * @return uint The unique handler ID assigned to the registered handler.
-   */
-  uint on(str name, func handler) {
-    uint id = next_id++;
-    return on(id, move(name), move(handler));
-  }
-
-  /**
-   * @brief Register a simple handler for a named event with no payload.
-   * @param name The event name.
-   * @param handler A function to call when the event is dispatched (ignores any payload).
-   * @return The unique handler ID assigned to this registration.
-   */
-  uint on(str name, task handler) {
-    return on(move(name), [handler=move(handler)](const any&) { 
-      handler(); 
-    });
-  }
-
-  /**
-   * @brief Register a one-time handler for a named event.
-   * The handler will be called once, then automatically unregistered.
-   * 
-   * @param name The event name.
-   * @param handler The function to call once.
-   */
-  void once(str name, func handler) {
-    uint id = next_id++; 
-    on(id, name, [this, id, name=move(name), handler=move(handler)](const any& payload) {
-      off(name, id);    // passes name by value to on(), 
-      handler(payload); // then moves into lambda capture
-    });
-  }
-
-  /**
-   * @brief Unregister a handler by ID for a specific event.
-   * @param name The event name.
-   * @param id The handler ID to remove.
-   */
-  void off(const str& name, uint id) {
-    with.lock(mtx, [&] {
-      auto it = listeners.find(name);
-      if (it != listeners.end())
-        erase_if(it->second, [&](const obj& h) { return h.id == id; });
-    });
-  }
-
-  /**
-   * @brief Unregister all handlers for a specific event.
-   * @param name The event name for which all handlers will be removed.
-   */
-  void off(const str& name) {
-    with.lock(mtx, [&] {
-      auto it = listeners.find(name);
-      if (it != listeners.end())
-        listeners.erase(it);          // Remove key and its values from map completely O(1) avg
-    });
-  }
-
-  /**
-   * @brief Emit an event with data.
-   * Queues the event and notifies any thread waiting for events.
-   * 
-   * @param name The event name.
-   * @param payload The data to pass to handlers.
-   */
-  void emit(str name, any payload={}) {
-    with.lock(mtx, [&] { 
-      events.emplace_back(move(name), move(payload));
-    });
-    cv.notify_one();
-  }
-
-  /**
-   * @brief Dispatches all queued events to their registered handlers.
-   * 
-   * Safely callable from any thread. This method swaps out the event queue
-   * under a lock and proc_table a copy of it outside the lock to avoid
-   * blocking other operations. For each event, the list of handlers is
-   * also copied under a lock to prevent concurrent modification during
-   * dispatch. This ensures thread-safe and non-blocking execution of
-   * handler callbacks, even if new handlers are added or removed during dispatch.
-   */
-  void dispatch() {
-    list local;
-    with.lock(mtx, [&] { local.swap(events); });
-
-    for (const auto& [name, data]: local) {
-      objs handlers;
-
-      with.lock(mtx, [&] {
-        auto it = listeners.find(name);
-        if (it != listeners.end() && !it->second.empty()) // Second condition avoids copying empty list
-          handlers = it->second;      // Cant pass by reference cuz handlers is unsafe after lock
-      });
-
-      if (handlers.empty()) continue; // Skip if there are no handlers
-      for (const auto& handler: handlers) 
-        handler.fn(data);
-    }
-  }
-
-  /**
-   * @brief Block until at least one event is queued, then dispatch it.
-   * Uses a condition variable to efficiently wait until work is available.
-   */
-  void wait_dispatch() {
-    with.unique(mtx, [&](auto& lock) {
-      cv.wait(lock, [&] { return !events.empty(); });
-    });
-    dispatch();
-  }
-
-  private:
-  /**
-   * @brief Internal registration helper to associate a handler with an explicit ID.
-   * @param id A preassigned handler ID.
-   * @param name The event name.
-   * @param handler The function to register.
-   * @return The same ID passed in.
-   */
-  uint on(uint id, str name, func handler) {
-    with.lock(mtx, [&] { 
-      listeners[move(name)].emplace_back(id, move(handler)); 
-    });
-    return id;
   }
 };
 
@@ -2184,7 +1989,7 @@ class RichText {
     while (stream >> token) {
       auto eq = token.find('=');
       
-      if (eq == NPOS) {
+      if (eq == npos) {
         auto key = resolve_tag(token);
         result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
         continue;
@@ -3410,6 +3215,98 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
 
 
 ------------------------------
+ FILE:  MemoryManager.hpp
+ PATH:  core\memory\MemoryManager.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+
+class MemoryManager {
+  public:
+
+  MemoryManager() {}
+};
+
+------------------------------
+ FILE:  MemoryManager.py
+ PATH:  core\memory\MemoryManager.py
+------------------------------
+
+class MemoryManager:
+    def __init__(self):
+        self.frame_size = 0     # Frame and memory info
+        self.total_frames = 0   # Simulated physical memory (flat list of bytes)
+        self.memory = []        # Queue of available frame indices
+        self.free_frames = []
+
+        # Page table: maps each process ID to its virtual pages
+        # Each page maps to a (frame_index, loaded) tuple
+        self.page_table = {}
+
+    def reset(self, total_bytes, frame_size):
+        """Reinitialize memory with a new total size and frame size."""
+        self.frame_size = frame_size
+        self.total_frames = total_bytes // frame_size
+
+        self.memory = [0] * total_bytes
+        self.free_frames = list(range(self.total_frames))
+        self.page_table.clear()
+
+    def allocate(self, pid, size):
+        """
+        Allocate memory for a process.
+        Divides the requested size into pages and maps each to a free frame.
+        """
+        pages = (size + self.frame_size - 1) // self.frame_size
+        if pages > len(self.free_frames):
+            return False  # Not enough frames available
+
+        self.page_table[pid] = {}
+        for page_number in range(pages):
+            frame_index = self.free_frames.pop(0)
+            self.page_table[pid][page_number] = (frame_index, True)
+        return True
+
+    def is_valid(self, pid, address):
+        """Check if a given virtual address is valid for the process."""
+        page = address // self.frame_size
+        return pid in self.page_table and page in self.page_table[pid]
+
+    def _get_index(self, pid, address):
+        """
+        Translate a virtual address into a physical memory index.
+        Requires the page to be valid and loaded.
+        """
+        page = address // self.frame_size
+        offset = address % self.frame_size
+        frame, _ = self.page_table[pid][page]
+        return frame * self.frame_size + offset
+
+    def write(self, pid, address, value):
+        """Write a 2-byte integer value to a virtual address."""
+        if not self.is_valid(pid, address):
+            raise Exception(f"Access violation (WRITE) at address {hex(address)}")
+        index = self._get_index(pid, address)
+        self.memory[index] = value & 0xFF               # lower byte
+        self.memory[index + 1] = (value >> 8) & 0xFF    # upper byte
+
+    def read(self, pid, address):
+        """Read a 2-byte integer value from a virtual address."""
+        if not self.is_valid(pid, address):
+            raise Exception(f"Access violation (READ) at address {hex(address)}")
+        index = self._get_index(pid, address)
+        return self.memory[index] + (self.memory[index + 1] << 8)
+
+
+mm = MemoryManager()                        # Sample usage and test
+mm.reset(total_bytes=256, frame_size=64)    # Set up memory: 256 bytes total, 64 bytes per frame â†’ 4 frames
+mm.allocate(pid=1, size=128)                # Allocate 128 bytes to process 1 â†’ needs 2 frames (128 / 64 = 2)
+mm.write(pid=1, address=0x0040, value=1337) # Write a 2-byte value to virtual address 0x0040
+print(mm.read(pid=1, address=0x0040))       # Read it back from the same address. Should output: 1337
+
+------------------------------
  FILE:  Maze.hpp
  PATH:  core\misc\Maze\Maze.hpp
 ------------------------------
@@ -4381,7 +4278,6 @@ auto get_scheduler_strategy(const str& name) -> SchedulerStrategy {
 
 #include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
 #include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
-#include "core/common/utility/EventEmitter.hpp"
 
   
 /**
@@ -4426,10 +4322,10 @@ class ShellBanner {
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
 
     // Add onboarding message
-    out << Text("To get started:")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
-    out << RichText("  1. Type [b fg=#88a17a]demo[/] to see a sample process in action.\n");
-    out << RichText("  2. Then [b fg=#c67272]exit[/] to leave the shell.\n");
-    out << RichText("  3. Use [b fg=#5fa8d3]help[/] for more information on commands.\n\n");
+    out << RichText("[fg=#88a17a]To get started:[/]\n");
+    out << RichText("  1. Type [b fg=#d39c6a]demo[/] to see a sample process in action.\n");
+    out << RichText("  2. Then [b fg=#d39c6a]exit[/] to leave the shell.\n");
+    out << RichText("  3. Use [b fg=#d39c6a]help[/] for more information on commands.\n\n\n");
     return out.str();
   }
 
@@ -4590,11 +4486,10 @@ class Shell {
   /** @brief Starts shell and system threads and blocks until shutdown. */
   void start() {
     initialize();
-    system("cls");
-    cout << '\n'; // Leave line 1 blank
 
     // Start shell (input) and system (scheduler) threads
     shell_thread  = Thread([&] { 
+      cout << RichText("Type [fg=#d39c6a]initialize[/] to start...\n\n");
       while (shell_active)  
         tick_shell(); 
     });
@@ -4643,8 +4538,12 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    RichText::enable();   // Prepare terminal settings for output
-    register_commands();  // Initialize command handlers
+    RichText::enable();                 // Prepare terminal settings for output
+    register_commands();                // Initialize command handlers
+    storage.set("initialized", false);  // Set initialized to false (to be changed by initialize command later)
+    
+    system("cls");
+    cout << '\n';                       // Leave line 1 blank
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */

@@ -180,7 +180,7 @@ class RichText {
     while (stream >> token) {
       auto eq = token.find('=');
       
-      if (eq == NPOS) {
+      if (eq == npos) {
         auto key = resolve_tag(token);
         result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
         continue;

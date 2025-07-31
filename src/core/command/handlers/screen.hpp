@@ -70,7 +70,7 @@ auto make_screen() -> CommandHandler {
     .add_flag("-ls")
     .add_flag("-c")
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");

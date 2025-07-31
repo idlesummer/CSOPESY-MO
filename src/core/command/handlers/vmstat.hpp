@@ -11,7 +11,7 @@ auto make_vmstat() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 

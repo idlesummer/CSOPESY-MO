@@ -15,29 +15,15 @@ using std::stof;
 using std::stoul;
 using std::to_string;
 
-// === Generic any cast function ===
-template <typename Type, typename From>
-auto cast(From&& x) -> Type {
-  using Raw = std::decay_t<From>;
 
-  if constexpr (std::is_same_v<Raw, std::any>)
-    return std::any_cast<Type>(x);
+/** 
+ * @brief Generic cast utility. 
+ * Use `cast<T>(x)` freely — auto-selects `any_cast` or `static_cast` as needed.
+ */
+template <typename Target, typename Source>
+auto cast(Source&& x) -> Target {
+  if constexpr (std::is_same_v<std::decay_t<Source>, std::any>)
+    return std::any_cast<Target>(x);
   else
-    return static_cast<Type>(std::forward<From>(x));
-}
-
-// === Aliases for clarity ===
-template <typename From> 
-auto cast_int(From&& x) -> int { 
-  return cast<int>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_uint(From&& x) -> std::uint32_t { 
-  return cast<uint32_t>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_str(From&& x) -> std::string {
-  return cast<std::string>(std::forward<From>(x)); 
+    return static_cast<Target>(std::forward<Source>(x));
 }

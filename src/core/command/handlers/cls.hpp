@@ -13,7 +13,7 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
        auto config = shell.scheduler.data.config;
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
