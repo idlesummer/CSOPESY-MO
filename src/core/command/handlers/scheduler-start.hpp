@@ -16,7 +16,7 @@ auto make_scheduler_start() -> CommandHandler {
     
     .set_validate([](Command&, Shell& shell) -> Str {
       auto config = shell.scheduler.data.config;
-      
+
       // Check if the scheduler has already been initialized
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
@@ -26,7 +26,7 @@ auto make_scheduler_start() -> CommandHandler {
 
       return nullopt;
     })
-    
+
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
       cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
