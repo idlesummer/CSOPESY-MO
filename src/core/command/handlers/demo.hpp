@@ -51,7 +51,7 @@ auto make_demo() -> CommandHandler {
       cout << program.render_script() << '\n';
 
       // 3. Step the process
-      const bool done = process.step();
+      auto done = process.step();
       cout << "[demo] Process stepped.\n";
       cout << (done ? "Finished." : "Still running.") << '\n';
     });

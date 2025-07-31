@@ -1,7 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/common/utility/Ansi.hpp"
-#include "core/common/utility/Text.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
@@ -29,11 +29,10 @@ class Shell {
   /** @brief Starts shell and system threads and blocks until shutdown. */
   void start() {
     initialize();
-    system("cls");
-    cout << '\n'; // Leave line 1 blank
 
     // Start shell (input) and system (scheduler) threads
     shell_thread  = Thread([&] { 
+      cout << RichText("Type [fg=#d39c6a]initialize[/] to start...\n\n");
       while (shell_active)  
         tick_shell(); 
     });
@@ -82,8 +81,10 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    Text::enable();       // Prepare terminal settings for output
+    RichText::enable();   // Prepare terminal settings for output
     register_commands();  // Initialize command handlers
+    system("cls");
+    cout << '\n';         // Leave line 1 blank
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */

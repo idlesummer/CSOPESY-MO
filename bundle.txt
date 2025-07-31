@@ -358,6 +358,10 @@ auto make_config() -> CommandHandler {
 
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/process/ProcessProgram.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
@@ -365,23 +369,49 @@ auto make_config() -> CommandHandler {
 auto make_demo() -> CommandHandler {
   return CommandHandler()
     .set_name("demo")
-    .set_desc("Creates and steps a demo process with random instructions.")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    
-    .set_execute([](Command&, Shell& shell) {
+    .add_flag("-r")
+
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
-      if (!storage.has("demo.counter")) {
-        cout << "Counter created! Run demo again to increment counter.\n";
-        cout << "Counter: 0\n";
-        storage.set("demo.counter", 0u);
+      // 0. Reset process if requested
+      if (command.flags.contains("-r")) {
+        shell.storage.remove("demo.process");
+        cout << "[demo] Dummy process reset.\n";
         return;
       }
 
-      auto counter = storage.get<uint>("demo.counter") + 1;
-      storage.set("demo.counter", counter);
-      cout << format("Counter: {}\n", counter);
+      // 1. Spawn process if not already present
+      if (!storage.has("demo.process")) {
+        auto process = Process(0, "demo.process", 10);
+        storage.set("demo.process", move(process));
+        cout << "[demo] Process created.\n";
+        return;
+      }
+
+      // 2. Access process
+      auto& process = storage.get<Process>("demo.process");
+      auto& program = process.data.program;
+
+      if (program.finished())
+        return void(cout << "[demo] Process already finished.");
+
+      // === Debug: Show context stack ===
+      cout << "[demo] Context Stack:\n";
+      cout << program.render_context() << '\n';
+
+      // === Debug: Show instruction list with pointer ===
+      cout << "[demo] Instruction List:\n";
+      cout << program.render_script() << '\n';
+
+      // 3. Step the process
+      const bool done = process.step();
+      cout << "[demo] Process stepped.\n";
+      cout << (done ? "Finished." : "Still running.") << '\n';
     });
 }
 
@@ -679,31 +709,7 @@ auto make_scheduler_start() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
-      cout << RichText("[Shell] Dummy process generation [fg=green]started[/].\n");
-
-      auto t1 = RichText("Hello [b]World[/b]");
-      auto t2 = RichText("[i]Italic[/i] text");
-      auto t3 = RichText("[u]Underlined[/u] content");
-      auto t4 = RichText("[strike]Struck[/strike] out");
-      auto t5 = RichText("Mix: [b]Bold[/] then [i]Italic[/] and [u]Underline[/]");
-      auto t6 = RichText("Color test: [fg=red]Red[/fg], [fg=#00ff00]Green[/fg]");
-      auto t7 = RichText("Background test: [bg=yellow]Yellow Background[/bg]");
-      auto t8 = RichText("[b fg=blue]Bold Blue [fg=green]Green[/fg] Back to Blue[/b]");
-      auto t9 = RichText("Escaped: \\[b\\]not bold\\[/b\\]");
-      auto t10 = RichText("[b fg=red]Red Bold[/] Normal");
-      auto t11 = RichText("[b]123[/]456");
-
-      cout << "Test 1:  " << t1 << "\n";
-      cout << "Test 2:  " << t2 << "\n";
-      cout << "Test 3:  " << t3 << "\n";
-      cout << "Test 4:  " << t4 << "\n";
-      cout << "Test 5:  " << t5 << "\n";
-      cout << "Test 6:  " << t6 << "\n";
-      cout << "Test 7:  " << t7 << "\n";
-      cout << "Test 8:  " << t8 << "\n";
-      cout << "Test 9:  " << t9 << "\n";
-      cout << "Test 10: " << t10 << "\n";
-      cout << "Test 11: " << t11 << " (size = " << t11.size << ")\n";
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
     });
 }
 
@@ -742,7 +748,7 @@ auto make_scheduler_stop() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(false);
-      cout << RichText("[Shell] Dummy process generation [fg=red]stopped[/].\n");
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#bc8f8f]stopped[/].\n");
     });
 }
 
@@ -951,70 +957,6 @@ auto make_screen() -> CommandHandler {
 }
 
 ------------------------------
- FILE:  test.hpp
- PATH:  core\command\handlers\test.hpp
-------------------------------
-
-#pragma once
-#include "core/shell/internal/Shell.impl.hpp"
-#include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
-#include "core/process/Process.hpp"
-#include "core/process/ProcessProgram.hpp"
-#include "core/command/Command.hpp"
-#include "core/command/CommandHandler.hpp"
-
-
-auto make_test() -> CommandHandler {
-  return CommandHandler()
-    .set_name("test")
-    .set_desc("Spawn and manually step a dummy FOR loop process.")
-    .set_min_args(0)
-    .set_max_args(0)
-    .add_flag("-r")
-
-    .set_execute([](Command& command, Shell& shell) {
-      auto& interpreter = InstructionInterpreter::get();
-      auto& storage = shell.storage;
-
-      // 0. Reset process if requested
-      if (command.flags.contains("-r")) {
-        shell.storage.remove("test.process");
-        cout << "[loop-test] Dummy process reset.\n";
-        return;
-      }
-
-      // 1. Spawn process if not already present
-      if (!storage.has("test.process")) {
-        auto process = Process(0, "test.process", 10);
-        storage.set("test.process", move(process));
-        cout << "[loop-test] Process created.\n";
-        return;
-      }
-
-      // 2. Access process
-      auto& process = storage.get<Process>("test.process");
-      auto& program = process.data.program;
-
-      if (program.finished())
-        return void(cout << "[loop-test] Process already finished.");
-
-      // === Debug: Show context stack ===
-      cout << "[loop-test] Context Stack:\n";
-      cout << program.render_context() << '\n';
-
-      // === Debug: Show instruction list with pointer ===
-      cout << "[loop-test] Instruction List:\n";
-      cout << program.render_script() << '\n';
-
-      // 3. Step the process
-      const bool done = process.step();
-      cout << "[loop-test] Process stepped.\n";
-      cout << (done ? "Finished." : "Still running.") << '\n';
-    });
-}
-
-------------------------------
  FILE:  util.hpp
  PATH:  core\command\handlers\util.hpp
 ------------------------------
@@ -1110,7 +1052,6 @@ auto make_util() -> CommandHandler {
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
-#include "test.hpp"
 
 
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -1126,7 +1067,6 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
-    make_test(),
   };
 }
 
@@ -1495,7 +1435,7 @@ using std::string;
 #endif
 
 // === Unicode output ===
-void enable_unicode() {
+void initialize_terminal() {
   #if defined(_WIN32)
     // Enable ANSI escape sequences
     auto h = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -1731,7 +1671,7 @@ auto lowercase(str raw) -> str {
 
 /** @brief Joins a vector of strings using the given delimiter. */
 auto join(vec<str>& args, char delim=' ') -> str {
-  if (!args.empty()) return "";
+  if (args.empty()) return "";
   
   auto oss = osstream();
   oss << args[0];
@@ -1739,6 +1679,14 @@ auto join(vec<str>& args, char delim=' ') -> str {
     oss << delim << args[i];
   return oss.str();
 }
+
+/** @brief Returns a copy of the string with leading and trailing whitespace removed. */
+auto trim(const str& s) -> str {
+  auto start = s.find_first_not_of(" \t\n\r");
+  if (start == NPOS) return "";  // all whitespace
+  auto end = s.find_last_not_of(" \t\n\r");
+  return s.substr(start, end - start + 1);
+};
 
 ------------------------------
  FILE:  thread.hpp
@@ -2106,7 +2054,7 @@ class RichText {
   public:
 
   // ------ Class variables ------
-  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]+?)\])");
+  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]*?)\])");
   static inline auto ESC_LB      = regex(R"(\\\[)");
   static inline auto ESC_RB      = regex(R"(\\\])");
   static inline auto PLACE_LB    = "\x01";
@@ -2157,7 +2105,7 @@ class RichText {
   
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Streams the rendered text to an output stream (e.g., std::cout). */
@@ -2202,7 +2150,7 @@ class RichText {
     auto codes = vec<str>();
 
     for (auto& [key, value]: styles) {
-      if (STYLES.count(key)) {
+      if (STYLES.contains(key)) {
         codes.push_back(STYLES.at(key));
 
       } else if (key == "fg") {
@@ -2238,7 +2186,7 @@ class RichText {
       
       if (eq == NPOS) {
         auto key = resolve_tag(token);
-        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": ""})
+        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
         continue;
       }
 
@@ -2264,7 +2212,7 @@ class RichText {
       out += text.substr(index, match.position());  // Add all plain text before the tag
 
       auto is_closing = match[1].str() == "/";
-      auto tag = match[2].str();  // raw tag content
+      auto tag = trim(match[2].str());  // raw tag content
 
       if (is_closing) {           // Handle [/], which resets all styles
         if (tag.empty()) {                          
@@ -2554,7 +2502,7 @@ class Text {
 
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Returns the fully formatted output string. */
@@ -4454,13 +4402,14 @@ void Shell::register_commands() {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/common/utility/Text.hpp"
 
 /** @brief Renders and styles the shell banner using a vertical gradient. */
 class ShellBanner {
   public:
 
-  /** @brief Returns the full banner with vertical gradient applied. */
+  /** @brief Returns the full banner as a string with vertical gradient applied. */
   auto get() -> str {
     auto mint = vec<int>{201, 254, 221};
     auto coral = vec<int>{249, 121, 121};
@@ -4477,10 +4426,10 @@ class ShellBanner {
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
 
     // Add onboarding message
-    out << Text("To get started, type 'initialize'.")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
-    out << "  1. Type `demo` to see a sample process in action.\n";
-    out << "  2. Then `exit` to leave the shell.\n\n";
-    out << "  3. Use `help` for more information on commands.\n\n";
+    out << Text("To get started:")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
+    out << RichText("  1. Type [b fg=#88a17a]demo[/] to see a sample process in action.\n");
+    out << RichText("  2. Then [b fg=#c67272]exit[/] to leave the shell.\n");
+    out << RichText("  3. Use [b fg=#5fa8d3]help[/] for more information on commands.\n\n");
     return out.str();
   }
 
@@ -4613,7 +4562,7 @@ class ShellStorage {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/common/utility/Ansi.hpp"
-#include "core/common/utility/Text.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
@@ -4694,7 +4643,7 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    Text::enable();       // Prepare terminal settings for output
+    RichText::enable();   // Prepare terminal settings for output
     register_commands();  // Initialize command handlers
   }
 
