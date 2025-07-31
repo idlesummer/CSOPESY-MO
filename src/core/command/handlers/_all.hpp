@@ -12,6 +12,7 @@
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
+#include "vmstat.hpp"
 
 
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -27,5 +28,6 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
+    make_vmstat(),
   };
 }
