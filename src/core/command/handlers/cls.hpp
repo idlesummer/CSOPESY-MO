@@ -13,8 +13,9 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_execute([](Command&, Shell&) {
+    .set_execute([](Command&, Shell& shell) {
       system("cls");
+      cout << shell.banner.get();
     });
 }
 
