@@ -13,6 +13,14 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
+    .set_validate([](Command& command, Shell& shell) -> Str {
+       auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
+
+      return nullopt;
+    })
+
     .set_execute([](Command&, Shell& shell) {
       system("cls");
       cout << shell.banner.get();
