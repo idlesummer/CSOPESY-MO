@@ -25,52 +25,62 @@ Finished processes:
 ──────────────────────────────────────────────────────────
  */
 
+//  inline bool is_power_of_two(int n) {
+//     return n > 0 && (n & (n - 1)) == 0;
+//  };
 
-auto make_screen() -> CommandHandler {
 
-  auto render_line = [](auto& process, auto state) -> str {
-    auto& program = process.data.program;
+auto make_screen() -> CommandHandler
+{
+
+  auto render_line = [](auto &process, auto state) -> str
+  {
+    auto &program = process.data.program;
     auto ip = program.ip;
     auto size = program.size();
     auto time = timestamp(process.data.stime);
 
     return format("  {:<10} {}   {}   {}\n",
-      process.data.name,
-      Text(format("({})", time))["fg33+pl"].get(),
-      state,
-      Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get()
-    );
+                  process.data.name,
+                  Text(format("({})", time))["fg33+pl"].get(),
+                  state,
+                  Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get());
   };
 
-  auto process_exists = [](auto& name, auto& scheduler) -> bool {
-    auto& data = scheduler.data;
+  auto process_exists = [](auto &name, auto &scheduler) -> bool
+  {
+    auto &data = scheduler.data;
     return data.has_process(name);
   };
 
-  auto process_queued = [](auto& name, auto& scheduler) -> bool {
-    for (uint i = 0; i < 30; ++i) {
+  auto process_queued = [](auto &name, auto &scheduler) -> bool
+  {
+    for (uint i = 0; i < 30; ++i)
+    {
       if (scheduler.data.has_process(name))
         return true;
 
-      with_unlocked([&] { 
-        sleep_for(200ms); 
-      });
+      with_unlocked([&]
+                    { sleep_for(200ms); });
     }
-    
+
     return false;
   };
+  
+  // auto is_power_of_two = [](int n) -> bool { return n > 0 && (n & (n - 1)) == 0; };
 
   return CommandHandler()
-    .set_name("screen")
-    .set_desc("Creates and switches through existing screens.")
-    .set_min_args(0)
-    .set_max_args(UINT_MAX)
-    .add_flag("-s")
-    .add_flag("-r")
-    .add_flag("-ls")
-    .add_flag("-c")
-    
-    .set_validate([](Command& command, Shell& shell) -> Str {
+      .set_name("screen")
+      .set_desc("Creates and switches through existing screens.")
+      .set_min_args(0)
+      .set_max_args(UINT_MAX)
+      .add_flag("-s")
+      .add_flag("-r")
+      .add_flag("-ls")
+      .add_flag("-c")
+
+      .set_validate([](Command &command, Shell &shell) -> Str
+                    {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
@@ -81,10 +91,10 @@ auto make_screen() -> CommandHandler {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
-      return nullopt;
-    })
+      return nullopt; })
 
-    .set_execute([&](Command& command, Shell& shell) {
+      .set_execute([&](Command &command, Shell &shell)
+                   {
       auto& screen = shell.screen;
       auto& scheduler = shell.scheduler;
 
@@ -125,12 +135,20 @@ auto make_screen() -> CommandHandler {
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
         auto& name = command.args[0];
+        auto& memory_size = command.args[1]; // added memory size parameter
 
         if (command.args.empty()) 
           return void(cout << "Missing process name.\n");
 
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
+
+        // int mem_size = std::stoi(memory_size);
+
+        // if (!is_power_of_two(mem_size) || mem_size < 64 || mem_size > 65536) {
+        //   return void(cout << format("Invalid Memory allocation: {}. Must be power of 2 between 64 and 65536.\n"));
+        // }
+
 
         scheduler.generate_process(name);
         cout << format("Waiting for process creation: {}", name);
@@ -193,6 +211,47 @@ auto make_screen() -> CommandHandler {
          * @c command.args   -- list of arguments
          * 
          */ 
-      }
+        
+        // screen -c will store different instructions with this format:
+        // screen -c <process_name> <process_memory_size> "<instructions>"
+        // It needs to be able to identify the instructions and be stored as the identified instrcution
+
+        //  screen -c process2 256 "DECLARE varA 10; DECLARE varB 5; ADD varA varA varB; WRITE 0x500 varA; READ varC 0x500; PRINT(\"Result: \" + varC)"
+
+
+        str process_name = command.args[0];
+        str memory_size = command.args[1];
+
+        size_t start = command.input.find('"');
+        size_t end = command.input.rfind('"');
+
+        if (start != std::string::npos && end != std::string::npos && end > start) {
+          return void(cout << format("Instruction string must be enclosed in double quotes or INVALID FORMAT\n"));
+        }
+
+        std::string extracted = command.input.substr(start + 1, end - start + 1);
+        std::vector<std::string> result;
+        // sstream ss(extracted);
+        // std::string token;
+        // char delimiter = ';';
+        
+        // while (std::getline(ss, token, delimiter)) {
+        //   token.erase(token.begin(), std::find_if(token.begin(), token.end(), [](char c) { return !isspace(c); }));
+        //   token.erase(std::find_if(token.rbegin(), token.rend(), [](char c) { return !isspace(c); }).base(), token.end());
+
+        //   if (!token.empty()) {
+        //       result.push_back(token);
+        //   }
+        // }
+
+
+
+        // cout << format("process_name:{}\n", process_name);
+        // cout << format("memory_size:{}\n", memory_size);
+
+        // for (const auto& instr : result) {
+        //   cout << format("instruction: {}\n", instr);
+        // }
+      } 
     });
 }
