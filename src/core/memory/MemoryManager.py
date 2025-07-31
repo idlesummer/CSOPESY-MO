@@ -9,12 +9,12 @@ class MemoryManager:
         # Each page maps to a (frame_index, loaded) tuple
         self.page_table = {}
 
-    def reset(self, total_bytes, frame_size):
+    def reset(self, mem_size, frame_size):
         """Reinitialize memory with a new total size and frame size."""
         self.frame_size = frame_size
-        self.total_frames = total_bytes // frame_size
+        self.total_frames = mem_size // frame_size
 
-        self.memory = [0] * total_bytes
+        self.memory = [0] * mem_size
         self.free_frames = list(range(self.total_frames))
         self.page_table.clear()
 
@@ -65,7 +65,7 @@ class MemoryManager:
 
 
 mm = MemoryManager()                        # Sample usage and test
-mm.reset(total_bytes=256, frame_size=64)    # Set up memory: 256 bytes total, 64 bytes per frame → 4 frames
+mm.reset(mem_size=256, frame_size=64)       # Set up memory: 256 bytes total, 64 bytes per frame → 4 frames
 mm.allocate(pid=1, size=128)                # Allocate 128 bytes to process 1 → needs 2 frames (128 / 64 = 2)
 mm.write(pid=1, address=0x0040, value=1337) # Write a 2-byte value to virtual address 0x0040
 print(mm.read(pid=1, address=0x0040))       # Read it back from the same address. Should output: 1337

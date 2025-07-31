@@ -60,7 +60,7 @@ class Scheduler {
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
     strategy = get_scheduler_strategy(config.gets("scheduler"));
-    data.cores.resize(config.getu("num-cpu"));                        
+    data.cores.resize(config.getu("num-cpu"));
 
     // Create the preempt handler from the factory method
     auto preempt_handler = strategy.get_preempt_handler(data);
@@ -69,8 +69,10 @@ class Scheduler {
     if (preempt_handler != nullptr) {
       for (auto& ref: data.cores.get_all()) {
         auto& core = ref.get();
+
+        // Configure cores with the tick delay and the preeption handler
         core.delay = config.getu("delays-per-exec");
-        core.set_preempt(preempt_handler);
+        core.preempt = preempt_handler;
       }
     }
 

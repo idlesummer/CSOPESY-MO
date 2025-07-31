@@ -36,7 +36,7 @@ class Core {
     delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
-    preempt     (nullptr),            // Optional strategy-injected logic
+    preempt     (nullptr),            // For injecting a preemption handler (optional).
     active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
     thread      ()                    // Background ticking thread
   { 
@@ -70,10 +70,7 @@ class Core {
   auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
-  }
-
-  /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }     
+  } 
 
   // ------ Instance variables ------
 
