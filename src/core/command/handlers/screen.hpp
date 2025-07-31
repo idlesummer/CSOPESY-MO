@@ -55,13 +55,12 @@ auto make_screen() -> CommandHandler {
       if (scheduler.data.has_process(name))
         return true;
 
-      with_unlocked([&]
-                    { sleep_for(200ms); });
+      with_unlocked([&] { sleep_for(200ms); });
     }
 
     return false;
   };
-  
+
   auto is_power_of_two = [](int n) -> bool { 
     return n > 0 && (n & (n - 1)) == 0; 
   };
