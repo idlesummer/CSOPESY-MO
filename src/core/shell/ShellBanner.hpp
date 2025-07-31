@@ -24,7 +24,7 @@ class ShellBanner {
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
 
     // Add onboarding message
-    out << Text("To get started:")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
+    out << RichText("[fg=#88a17a]To get started:[/]\n");
     out << RichText("  1. Type [b fg=#d39c6a]demo[/] to see a sample process in action.\n");
     out << RichText("  2. Then [b fg=#d39c6a]exit[/] to leave the shell.\n");
     out << RichText("  3. Use [b fg=#d39c6a]help[/] for more information on commands.\n\n\n");
