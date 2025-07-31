@@ -1,12 +1,13 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/common/utility/Text.hpp"
 
 /** @brief Renders and styles the shell banner using a vertical gradient. */
 class ShellBanner {
   public:
 
-  /** @brief Returns the full banner with vertical gradient applied. */
+  /** @brief Returns the full banner as a string with vertical gradient applied. */
   auto get() -> str {
     auto mint = vec<int>{201, 254, 221};
     auto coral = vec<int>{249, 121, 121};
@@ -23,10 +24,10 @@ class ShellBanner {
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
 
     // Add onboarding message
-    out << Text("To get started, type 'initialize'.")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
-    out << "  1. Type `demo` to see a sample process in action.\n";
-    out << "  2. Then `exit` to leave the shell.\n";
-    out << "  3. Use `help` for more information on commands.\n\n";
+    out << Text("To get started:")[format("bold+fg{}", rgb_to_ansi256(coral))] << '\n';
+    out << RichText("  1. Type [b fg=#88a17a]demo[/] to see a sample process in action.\n");
+    out << RichText("  2. Then [b fg=#c67272]exit[/] to leave the shell.\n");
+    out << RichText("  3. Use [b fg=#5fa8d3]help[/] for more information on commands.\n\n");
     return out.str();
   }
 

@@ -1,5 +1,9 @@
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/process/ProcessProgram.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
@@ -7,22 +11,48 @@
 auto make_demo() -> CommandHandler {
   return CommandHandler()
     .set_name("demo")
-    .set_desc("Creates and steps a demo process with random instructions.")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    
-    .set_execute([](Command&, Shell& shell) {
+    .add_flag("-r")
+
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
-      if (!storage.has("demo.counter")) {
-        cout << "Counter created! Run demo again to increment counter.\n";
-        cout << "Counter: 0\n";
-        storage.set("demo.counter", 0u);
+      // 0. Reset process if requested
+      if (command.flags.contains("-r")) {
+        shell.storage.remove("demo.process");
+        cout << "[demo] Dummy process reset.\n";
         return;
       }
 
-      auto counter = storage.get<uint>("demo.counter") + 1;
-      storage.set("demo.counter", counter);
-      cout << format("Counter: {}\n", counter);
+      // 1. Spawn process if not already present
+      if (!storage.has("demo.process")) {
+        auto process = Process(0, "demo.process", 10);
+        storage.set("demo.process", move(process));
+        cout << "[demo] Process created.\n";
+        return;
+      }
+
+      // 2. Access process
+      auto& process = storage.get<Process>("demo.process");
+      auto& program = process.data.program;
+
+      if (program.finished())
+        return void(cout << "[demo] Process already finished.");
+
+      // === Debug: Show context stack ===
+      cout << "[demo] Context Stack:\n";
+      cout << program.render_context() << '\n';
+
+      // === Debug: Show instruction list with pointer ===
+      cout << "[demo] Instruction List:\n";
+      cout << program.render_script() << '\n';
+
+      // 3. Step the process
+      const bool done = process.step();
+      cout << "[demo] Process stepped.\n";
+      cout << (done ? "Finished." : "Still running.") << '\n';
     });
 }
