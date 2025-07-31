@@ -30,33 +30,28 @@ Finished processes:
 //  };
 
 
-auto make_screen() -> CommandHandler
-{
+auto make_screen() -> CommandHandler {
 
-  auto render_line = [](auto &process, auto state) -> str
-  {
+  auto render_line = [](auto &process, auto state) -> str {
     auto &program = process.data.program;
     auto ip = program.ip;
     auto size = program.size();
     auto time = timestamp(process.data.stime);
 
     return format("  {:<10} {}   {}   {}\n",
-                  process.data.name,
-                  Text(format("({})", time))["fg33+pl"].get(),
-                  state,
-                  Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get());
+      process.data.name,
+      Text(format("({})", time))["fg33+pl"].get(),
+      state,
+      Text(format("{:>3} / {:<3}", ip, size))["fg208+pl"].get());
   };
 
-  auto process_exists = [](auto &name, auto &scheduler) -> bool
-  {
+  auto process_exists = [](auto &name, auto &scheduler) -> bool {
     auto &data = scheduler.data;
     return data.has_process(name);
   };
 
-  auto process_queued = [](auto &name, auto &scheduler) -> bool
-  {
-    for (uint i = 0; i < 30; ++i)
-    {
+  auto process_queued = [](auto &name, auto &scheduler) -> bool {
+    for (uint i = 0; i < 30; ++i) {
       if (scheduler.data.has_process(name))
         return true;
 
@@ -67,20 +62,21 @@ auto make_screen() -> CommandHandler
     return false;
   };
   
-  // auto is_power_of_two = [](int n) -> bool { return n > 0 && (n & (n - 1)) == 0; };
+  auto is_power_of_two = [](int n) -> bool { 
+    return n > 0 && (n & (n - 1)) == 0; 
+  };
 
   return CommandHandler()
-      .set_name("screen")
-      .set_desc("Creates and switches through existing screens.")
-      .set_min_args(0)
-      .set_max_args(UINT_MAX)
-      .add_flag("-s")
-      .add_flag("-r")
-      .add_flag("-ls")
-      .add_flag("-c")
+    .set_name("screen")
+    .set_desc("Creates and switches through existing screens.")
+    .set_min_args(0)
+    .set_max_args(UINT_MAX)
+    .add_flag("-s")
+    .add_flag("-r")
+    .add_flag("-ls")
+    .add_flag("-c")
 
-      .set_validate([](Command &command, Shell &shell) -> Str
-                    {
+    .set_validate([](Command &command, Shell &shell) -> Str {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
@@ -91,10 +87,10 @@ auto make_screen() -> CommandHandler
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
-      return nullopt; })
+      return nullopt; }
+    )
 
-      .set_execute([&](Command &command, Shell &shell)
-                   {
+    .set_execute([&](Command &command, Shell &shell) {
       auto& screen = shell.screen;
       auto& scheduler = shell.scheduler;
 
@@ -143,12 +139,13 @@ auto make_screen() -> CommandHandler
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
-        // int mem_size = std::stoi(memory_size);
+        int mem_size = stoi(memory_size);
 
         // if (!is_power_of_two(mem_size) || mem_size < 64 || mem_size > 65536) {
         //   return void(cout << format("Invalid Memory allocation: {}. Must be power of 2 between 64 and 65536.\n"));
         // }
 
+        cout << format("=================={}==================", is_power_of_two(mem_size));
 
         scheduler.generate_process(name);
         cout << format("Waiting for process creation: {}", name);
@@ -253,5 +250,5 @@ auto make_screen() -> CommandHandler
         //   cout << format("instruction: {}\n", instr);
         // }
       } 
-    });
+  });
 }
