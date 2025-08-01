@@ -297,7 +297,7 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
        auto config = shell.scheduler.data.config;
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
@@ -498,7 +498,7 @@ auto make_initialize() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
       
       // Check if the scheduler has already been initialized
@@ -560,7 +560,7 @@ auto make_process_smi() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (shell.screen.is_main())
         return "Not in a process screen.";
 
@@ -613,7 +613,7 @@ auto make_report_util() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
@@ -698,7 +698,7 @@ auto make_scheduler_start() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
 
       // Check if the scheduler has already been initialized
@@ -833,7 +833,7 @@ auto make_screen() -> CommandHandler {
     .add_flag("-ls")
     .add_flag("-c")
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
@@ -979,7 +979,7 @@ auto make_util() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
 
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
       return nullopt;
@@ -1055,7 +1055,7 @@ auto make_vmstat() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
@@ -1401,9 +1401,6 @@ using func = std::function<Args...>;
 template <typename Type> 
 using ref = std::reference_wrapper<Type>;
 
-template <typename Type> 
-using Ref = optional<ref<Type>>;
-
 // === Constants ===
 using std::nullopt;
 
@@ -1443,7 +1440,18 @@ using std::string;
   #include <codecvt>    // std::wstring_convert
 #endif
 
-// === Unicode output ===
+
+/**
+ * @brief Configures the terminal for ANSI and UTF-8 output.
+ *
+ * On Windows, enables virtual terminal processing (ANSI escape codes)
+ * and sets the output code page to UTF-8 for proper Unicode rendering.
+ *
+ * On Unix-like systems, disables stream synchronization for performance,
+ * sets the global locale to the user's environment, and enables wide string output.
+ *
+ * Call this once at startup before any styled or Unicode terminal output.
+ */
 void initialize_terminal() {
   #if defined(_WIN32)
     // Enable ANSI escape sequences
@@ -1463,7 +1471,14 @@ void initialize_terminal() {
   #endif
 }
 
-// === Terminal width detection ===
+/**
+ * @brief Returns the current terminal width in columns.
+ *
+ * Uses platform-specific system calls to detect the width of the terminal window.
+ * Falls back to 80 columns if the query fails.
+ *
+ * @return Number of columns in the terminal (default: 80 if unknown).
+ */
 auto get_terminal_width() -> uint32_t {
   #if defined(_WIN32)
     auto csbi = CONSOLE_SCREEN_BUFFER_INFO{};
@@ -1477,7 +1492,18 @@ auto get_terminal_width() -> uint32_t {
     return 80; // fallback
 }
 
-// === Unicode-aware visual width of a string ===
+/**
+ * @brief Calculates the visual width of a UTF-8 string in terminal columns.
+ *
+ * Converts the string to wide characters and estimates the number of columns it will occupy,
+ * accounting for fullwidth Unicode characters (e.g., CJK, symbols).
+ *
+ * On Windows, uses `MultiByteToWideChar` and manual width rules.
+ * On Unix, uses `wcwidth` with locale awareness.
+ *
+ * @param utf8 A UTF-8 encoded string.
+ * @return Number of display columns the string visually occupies.
+ */
 auto len(const std::string& utf8) -> int {
   #if defined(_WIN32)
     // Convert UTF-8 â†’ UTF-16 wide string
@@ -1509,7 +1535,7 @@ auto len(const std::string& utf8) -> int {
     auto conv = std::wstring_convert<std::codecvt_utf8<wchar_t>>{};
     auto wstr = conv.from_bytes(utf8);
 
-    int width = 0;
+    auto width = 0;
     for (wchar_t wc : wstr) {
       int w = wcwidth(wc);
       width += (w >= 0) ? w : 0;
@@ -1535,8 +1561,6 @@ using std::make_shared;
 template <typename Type>
 using uptr = std::unique_ptr<Type>;
 
-template <typename Type>
-using sptr = std::shared_ptr<Type>;
 
 ------------------------------
  FILE:  random.hpp
@@ -1637,7 +1661,6 @@ using std::regex_replace;
 // === String Aliases ===
 using std::string;
 using str = std::string;
-using Str = std::optional<string>;
 using std::literals::string_literals::operator""s;
 
 // === Utilities ===
@@ -1725,7 +1748,6 @@ using std::shared_mutex;
 using std::this_thread::sleep_for;
 using std::unique_lock;
 using Thread = std::thread;
-using convar = std::condition_variable;
 
 ------------------------------
  FILE:  _all.hpp
@@ -2430,7 +2452,7 @@ class Core {
     delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
-    preempt     (nullptr),            // Optional strategy-injected logic
+    preempt     (nullptr),            // For injecting a preemption handler (optional).
     active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
     thread      ()                    // Background ticking thread
   { 
@@ -2451,6 +2473,12 @@ class Core {
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
 
+  /** @brief Initializes core with a given delay and optional preemp handler. */
+  void init(uint ticks, func handler=nullptr) {
+    delay = ticks;
+    preempt = handler;
+  }
+
   /** @brief Called by scheduller to assign a process to this core. */
   void assign(Process& process) { set_job(&process, id); }
 
@@ -2464,10 +2492,7 @@ class Core {
   auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
-  }
-
-  /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }     
+  } 
 
   // ------ Instance variables ------
 
@@ -2498,8 +2523,12 @@ class Core {
       if (job->data.program.finished())
         can_release = true;
 
+      // Mark release if process is sleeping
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS
+        can_release = true;
+
       // If the process has finished all its instructions, mark for release
-      if (preempt && preempt(*this))
+      else if (preempt && preempt(*this))
         can_release = true;
 
     } catch (exception& e) {
@@ -2547,7 +2576,7 @@ class Core {
  * - Handles core lifecycle: creation, reset, and safe iteration.
  * 
  * Key Behaviors:
- * - `resize(size)`: Replaces all cores with a new set of N fresh cores.
+ * - `init(size)`: Replaces all cores with a new set of N fresh cores.
  * - `get_busy()` / `get_idle()`: Filters out cores by status for use in scheduling logic.
  * - `get_usage()`: Returns a float utilization ratio (busy / total cores).
  * - `get_running_pids()` and `get_busy_core_ids()`: Extract diagnostic metadata from active cores.
@@ -2555,7 +2584,7 @@ class Core {
  * Design Notes:
  * - vec<uptr<Core>> are stored as `uptr<Core>` to ensure clean ownership and destruction.
  * - Always use reference-returning accessors (`vec<ref<Core>>`) instead of raw pointer access.
- * - Guards against null pointers even though `resize()` always populates all slots.
+ * - Guards against null pointers even though `init()` always populates all slots.
  * - Scheduler is the only component expected to use this class directly.
  */
 class CoreManager {
@@ -2564,11 +2593,11 @@ class CoreManager {
   CoreManager():
     cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
 
-  /** @brief Clears and reinitializes the core list with the specified number of cores */
-  void resize(uint size) {
-    cores.clear();                // Destroys all existing cores
+  /** @brief Clears and initializes the core list with the specified number of cores */
+  void init(uint size) {
+    cores.clear();                // Destroys all existing cores (just in case)
     cores.reserve(size);          // Preallocate to avoid reallocations
-    for (uint i=0; i < size; ++i)
+    for (auto i=0u; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i+1));
   }
 
@@ -3209,12 +3238,6 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
 }
 
 ------------------------------
- FILE:  .gitkeep
- PATH:  core\memory\.gitkeep
-------------------------------
-
-
-------------------------------
  FILE:  MemoryManager.hpp
  PATH:  core\memory\MemoryManager.hpp
 ------------------------------
@@ -3234,75 +3257,84 @@ class MemoryManager {
  PATH:  core\memory\MemoryManager.py
 ------------------------------
 
+
+class PageEntry:
+    def __init__(self, frame_index, loaded=True):
+        self.frame = frame_index
+        self.loaded = loaded
+
+
 class MemoryManager:
     def __init__(self):
-        self.frame_size = 0     # Frame and memory info
-        self.total_frames = 0   # Simulated physical memory (flat list of bytes)
-        self.memory = []        # Queue of available frame indices
+        # Config and memory state
+        self.page_size = 0           # Bytes per page/frame
+        self.frame_count = 0         # Total number of frames
+
+        # Physical memory: flat list of bytes
+        self.memory = []
+
+        # Tracks available frame indices
         self.free_frames = []
 
-        # Page table: maps each process ID to its virtual pages
-        # Each page maps to a (frame_index, loaded) tuple
+        # Page table: maps pid â†’ { page_number: (frame_index, loaded) }
         self.page_table = {}
 
-    def reset(self, total_bytes, frame_size):
-        """Reinitialize memory with a new total size and frame size."""
-        self.frame_size = frame_size
-        self.total_frames = total_bytes // frame_size
+    def init(self, mem_capacity, page_size):
+        """Initialize the memory manager with total capacity and page size."""
+        self.page_size = page_size
+        self.frame_count = mem_capacity // page_size
 
-        self.memory = [0] * total_bytes
-        self.free_frames = list(range(self.total_frames))
+        self.memory = [0] * mem_capacity
+        self.free_frames = list(range(self.frame_count))
         self.page_table.clear()
 
-    def allocate(self, pid, size):
-        """
-        Allocate memory for a process.
-        Divides the requested size into pages and maps each to a free frame.
-        """
-        pages = (size + self.frame_size - 1) // self.frame_size
-        if pages > len(self.free_frames):
-            return False  # Not enough frames available
+    def allocate(self, pid, alloc_size):
+        """Allocate alloc_size bytes to process pid."""
+        pages_needed = (alloc_size + self.page_size - 1) // self.page_size  # Round up math by subtracting and floor divide
+        if pages_needed > len(self.free_frames):
+            return False  # Not enough frames
 
         self.page_table[pid] = {}
-        for page_number in range(pages):
+        for page_number in range(pages_needed):
             frame_index = self.free_frames.pop(0)
-            self.page_table[pid][page_number] = (frame_index, True)
+            self.page_table[pid][page_number] = PageEntry(frame_index, loaded=True)
         return True
 
-    def is_valid(self, pid, address):
-        """Check if a given virtual address is valid for the process."""
-        page = address // self.frame_size
+    def is_valid(self, pid, addr):
+        """Check if a virtual address is valid for the given process."""
+        page = addr // self.page_size
         return pid in self.page_table and page in self.page_table[pid]
 
-    def _get_index(self, pid, address):
-        """
-        Translate a virtual address into a physical memory index.
-        Requires the page to be valid and loaded.
-        """
-        page = address // self.frame_size
-        offset = address % self.frame_size
-        frame, _ = self.page_table[pid][page]
-        return frame * self.frame_size + offset
+    def _get_mem_addr(self, pid, addr):
+        """Translate a virtual address to a physical memory index."""
+        page = addr // self.page_size
+        offset = addr % self.page_size
+        entry = self.page_table[pid][page]
+        frame = entry.frame
+        return frame * self.page_size + offset
 
-    def write(self, pid, address, value):
-        """Write a 2-byte integer value to a virtual address."""
-        if not self.is_valid(pid, address):
-            raise Exception(f"Access violation (WRITE) at address {hex(address)}")
-        index = self._get_index(pid, address)
-        self.memory[index] = value & 0xFF               # lower byte
-        self.memory[index + 1] = (value >> 8) & 0xFF    # upper byte
+    def write(self, pid, addr, value):
+        """Write a 2-byte integer to the virtual address of a process."""
+        if not self.is_valid(pid, addr):
+            raise Exception(f"Access violation (WRITE) at address {hex(addr)}")
+        
+        mem_addr = self._get_mem_addr(pid, addr)
+        self.memory[mem_addr] = value & 0xFF
+        self.memory[mem_addr + 1] = (value >> 8) & 0xFF
 
-    def read(self, pid, address):
-        """Read a 2-byte integer value from a virtual address."""
-        if not self.is_valid(pid, address):
-            raise Exception(f"Access violation (READ) at address {hex(address)}")
-        index = self._get_index(pid, address)
-        return self.memory[index] + (self.memory[index + 1] << 8)
+    def read(self, pid, addr):
+        """Read a 2-byte integer from the virtual address of a process."""
+        if not self.is_valid(pid, addr):
+            raise Exception(f"Access violation (READ) at address {hex(addr)}")
+        
+        mem_addr = self._get_mem_addr(pid, addr)
+        return self.memory[mem_addr] + (self.memory[mem_addr + 1] << 8)
 
 
+# Sample usage
 mm = MemoryManager()                        # Sample usage and test
-mm.reset(total_bytes=256, frame_size=64)    # Set up memory: 256 bytes total, 64 bytes per frame â†’ 4 frames
-mm.allocate(pid=1, size=128)                # Allocate 128 bytes to process 1 â†’ needs 2 frames (128 / 64 = 2)
+mm.init(mem_capacity=256, page_size=64)     # Set up memory: 256 bytes total, 64 bytes per frame â†’ 4 frames
+mm.allocate(pid=1, alloc_size=128)          # Allocate 128 bytes to process 1 â†’ needs 2 frames (128 / 64 = 2)
 mm.write(pid=1, address=0x0040, value=1337) # Write a 2-byte value to virtual address 0x0040
 print(mm.read(pid=1, address=0x0040))       # Read it back from the same address. Should output: 1337
 
@@ -3850,18 +3882,17 @@ class Scheduler {
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
     strategy = get_scheduler_strategy(config.gets("scheduler"));
-    data.cores.init(config.getu("num-cpu"));                        
+    auto core_size = config.getu("num-cpu");
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto delay = config.getu("delays-per-exec");
+    
+    // Resizes number of cores (destroys old ones if any)
+    data.cores.init(core_size);
 
-    // Create the preempt handler from the factory method
-    auto preempt_handler = strategy.get_preempt_handler(data);
-
-    // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr) {
-      for (auto& ref: data.cores.get_all()) {
-        auto& core = ref.get();
-        core.delay = config.getu("delays-per-exec");
-        core.set_preempt(preempt_handler);
-      }
+    // Configure cores with the tick delay and preempt handler (if any)
+    for (auto& ref: data.cores.get_all()) {
+      auto& core = ref.get();
+      core.init(delay, preempt_handler);
     }
 
     data.config = move(config); // Must come last                               
@@ -3928,13 +3959,12 @@ class Scheduler {
       auto& process = data.get_process(*it);
       process.step();           // decrement sleep_ticks
 
-      if (!process.data.control.sleeping()) {
+      if (process.data.control.sleeping())
+        ++it;                   // still sleeping
+      else {
         data.rqueue.push(*it);  // ready again
-        it = wqueue.erase(it);  // remove from wqueue
-        continue;
+        it = wqueue.erase(it);  // remove from wqueue  
       }
-
-      ++it;                     // still sleeping
     }
   }
 };
@@ -4000,7 +4030,7 @@ class SchedulerData {
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  Config config;             
+  Config config;
   CoreManager cores;                  
   atomic_uint next_pid;           
 
