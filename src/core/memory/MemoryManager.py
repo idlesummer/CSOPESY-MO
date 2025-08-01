@@ -202,7 +202,7 @@ class MemoryManager:
         Returns:
             int: A frame number that was reclaimed.
         """
-
+        
 
 class VirtualMemory:
     """
