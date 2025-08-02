@@ -1,13 +1,27 @@
+class PageEntry:
+    """
+    Represents the metadata of a virtual page (not the actual content).
 
-class Page:
-    def __init__(self, frame_num=None, loaded=False):
-        self.frame = frame_num   # Physical frame index (or None if not loaded)
-        self.loaded = loaded     # True if page is currently loaded in memory
+    This object tracks:
+      - which physical frame it's loaded in (if any)
+      - whether the page is currently loaded into memory
+
+    Note:
+        This does NOT contain the page's data. Content is stored in the
+        memory array (RAM) and/or the backing store.
+    """
+
+    def __init__(self, frame_num=None):
+        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
+
+    def is_loaded(self):
+        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
+        return self.frame_num is not None
 
 
 class PageTable:
     def __init__(self):
-        self.entries = {}  # Maps virtual page number → Page
+        self.entries = {}  # Maps virtual page number → PageEntry
 
     def has_page(self, page_num):
         return page_num in self.entries
@@ -22,13 +36,13 @@ class PageTable:
         return self.entries.keys()
 
     def mark_unloaded(self, page_num):
-        self.entries[page_num].loaded = False
+        self.entries[page_num].frame_num = None
 
     def is_loaded(self, page_num):
-        return self.entries[page_num].loaded
+        return self.entries[page_num].is_loaded()
 
     def get_frame(self, page_num):
-        return self.entries[page_num].frame
+        return self.entries[page_num].frame_num
 
 
 class MemoryManager:
@@ -39,17 +53,17 @@ class MemoryManager:
 
         self.memory = []            # Physical memory: flat list of bytes
         self.free_frames = []       # Tracks available frame indices
-        self.page_tables = {}       # Page tables: maps pid → PageTable object
-        self.eviction_queue = []    # Tracks (pid, page_num) in load order
+        self.page_table_map = {}    # Page tables: maps pid → PageTable object
+        self.equeue = []            # Tracks (pid, page_num) in load order
+        self.store = {}             # Backing store: (pid, page_num) → byte array
 
     def init(self, capacity, page_size):
         """Initialize the memory manager with total capacity and page size."""
         self.page_size = page_size
         self.frame_count = capacity // page_size
-
         self.memory = [0] * capacity
         self.free_frames = list(range(self.frame_count))
-        self.page_tables.clear()
+        self.page_table_map.clear()
 
     def allocate(self, pid, bytes_needed):
         """
@@ -63,44 +77,33 @@ class MemoryManager:
         Returns:
             bool: True if allocation succeeded.
         """
-        
-        # Equivalent to `pages_needed = ceil(bytes_needed / page_size)`
         pages_needed = (bytes_needed + self.page_size - 1) // self.page_size
         page_table = PageTable()
-
         for page_num in range(pages_needed):
-            page_table.add(page_num, Page())  # Lazy allocation
-            
-        self.page_tables[pid] = page_table
+            page_table.add(page_num, PageEntry())
+        self.page_table_map[pid] = page_table
         return True
 
     def write(self, pid, vaddr, value):
         """Write a 2-byte value at the virtual address of a process."""
         if not self._owns_vaddr(pid, vaddr, num_bytes=2):
             raise Exception(f"Access violation (WRITE) at address {hex(vaddr)}")
-
         maddr1 = self._maddr_of(pid, vaddr)
         maddr2 = self._maddr_of(pid, vaddr + 1)
-
-        self.memory[maddr1] = value & 0xFF          # Separate lower byte into maddr1
-        self.memory[maddr2] = (value >> 8) & 0xFF   # Separate upper byte into maddr2
+        self.memory[maddr1] = value & 0xFF
+        self.memory[maddr2] = (value >> 8) & 0xFF
 
     def read(self, pid, vaddr):
         """Read a 2-byte value at the virtual address of a process."""
         if not self._owns_vaddr(pid, vaddr, num_bytes=2):
             raise Exception(f"Access violation (READ) at address {hex(vaddr)}")
-
         maddr1 = self._maddr_of(pid, vaddr)
         maddr2 = self._maddr_of(pid, vaddr + 1)
+        lo = self.memory[maddr1]
+        hi = self.memory[maddr2] << 8
+        return lo | hi
 
-        lower_byte = self.memory[maddr1]        # Retrieve lower byte
-        upper_byte = self.memory[maddr2] << 8   # Retrieve upper byte shifted left
-        value = lower_byte | upper_byte         # Combine both lower and upper byte
-        return value
-
-
-    # ------ PRIVATE METHHODS ------
-
+    # ------ PRIVATE METHODS ------
 
     def _owns_vaddr(self, pid, vaddr, num_bytes=1):
         """
@@ -116,17 +119,12 @@ class MemoryManager:
         Returns:
             bool: True if all pages in range are reserved by the process.
         """
-        if pid not in self.page_tables:
+        if pid not in self.page_table_map:
             return False
-
-        page_table = self.page_tables[pid]
-        start_page = vaddr // self.page_size                    # e.g., addr=60 → page 0
-        end_page = (vaddr + num_bytes - 1) // self.page_size    # e.g., addr=60, bytes=4 (60,61,62,63) → last byte = 63 → page 0
-
-        for page_num in range(start_page, end_page + 1):
-            if not page_table.has_page(page_num):
-                return False
-        return True
+        table = self.page_table_map[pid]
+        start = vaddr // self.page_size
+        end = (vaddr + num_bytes - 1) // self.page_size
+        return all(table.has_page(p) for p in range(start, end + 1))
 
     def _maddr_of(self, pid, vaddr):
         """
@@ -140,17 +138,25 @@ class MemoryManager:
         Returns:
             int: Index in physical memory array.
         """
-        page_num = vaddr // self.page_size               # virtual page number
-        offset = vaddr % self.page_size                  # byte offset within the page
+        page_num = vaddr // self.page_size
+        offset = vaddr % self.page_size
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        if not page.is_loaded():
+            self._page_in(pid, page_num)
+        return page.frame_num * self.page_size + offset
 
-        page_table = self.page_tables[pid]
-        page = page_table.get(page_num)
+    def _fill_frame(self, frame_num, filler):
+        """
+        Fills the given frame in memory using the provided filler function.
 
-        if not page.loaded:
-            self._page_in(pid, page_num)                # 🔥 Lazy page-in on fault
-
-        frame = page.frame
-        return frame * self.page_size + offset
+        Args:
+            frame_num (int): Frame number to fill.
+            filler (Callable[[int], int]): Function taking index (0..page_size-1) and returning a byte.
+        """
+        maddr = frame_num * self.page_size
+        for i in range(self.page_size):
+            self.memory[maddr + i] = filler(i)
 
     def _page_in(self, pid, page_num):
         """
@@ -169,29 +175,20 @@ class MemoryManager:
         Raises:
             Exception: If no free frames are available.
         """
+        frame_num = self.free_frames.pop(0) if self.free_frames else self._page_out()
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        page.frame_num = frame_num
+        self.equeue.append((pid, page_num))
 
-        frame = None
-        if self.free_frames:
-            frame = self.free_frames.pop(0)
+        key = (pid, page_num)
+        if key in self.store:
+            data = self.store.pop(key)
+            self._fill_frame(frame_num, lambda i: data[i])
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} → page={page_num:<2} → frame={frame_num} (restored from store)")
         else:
-            # Reclaim a frame from an existing loaded page
-            frame = self._page_out()
-
-        page_table = self.page_tables[pid]  # Get page table from registry
-        page = page_table.get(page_num)     # Get page from page table
-        page.frame = frame
-        page.loaded = True
-
-        # Add to eviction tracking (FIFO)
-        self.eviction_queue.append((pid, page_num))
-
-        # Compute the starting maddr (byte offset) of the frame
-        # Each frame is a contiguous block of `page_size` bytes
-        maddr = frame * self.page_size  
-        
-        # Zero-fill the entire frame to simulate a clean page load
-        for i in range(self.page_size): 
-            self.memory[maddr + i] = 0
+            self._fill_frame(frame_num, lambda i: 0)
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} → page={page_num:<2} → frame={frame_num} (zero-filled)")
 
     def _page_out(self):
         """
@@ -202,7 +199,22 @@ class MemoryManager:
         Returns:
             int: A frame number that was reclaimed.
         """
-        
+        while self.equeue:
+            pid, page_num = self.equeue.pop(0)
+            table = self.page_table_map[pid]
+            page = table.get(page_num)
+            
+            if not page.is_loaded():
+                continue
+            
+            frame_num = page.frame_num
+            page.frame_num = None
+            self.free_frames.append(frame_num)
+            
+            print(f"[MemoryManager._page_out()] EVICT pid={pid} → page={page_num:<2} → freed frame={frame_num}")
+            return frame_num
+        raise Exception("Eviction failed: no pages available to evict")
+
 
 class VirtualMemory:
     """
@@ -222,16 +234,73 @@ class VirtualMemory:
         """Write a 2-byte value to the process's virtual memory."""
         self.manager.write(self.pid, vaddr, value)
 
+class ProcessMemory:
+    def __init__(self, vmemory):
+        self.vmemory = vmemory
+        self.symbol_table = {}    # var name → virtual address
+        self.next_offset = 0      # Next offset within symbol table
+        self.symbol_limit = 64    # Max 64 bytes (→ 32 symbol_table)
 
-# mm = MemoryManager()
-# mm.init(capacity=128, page_size=64)     # 2 frames: [0-63] and [64-127]
-# mm.allocate(pid=0, bytes_needed=64)     # process0: 0-63 virtual memory
-# mm.allocate(pid=1, bytes_needed=64)     # process1:             0-63 virtual memory
+    def set(self, var, value):
+        if var in self.symbol_table:
+            addr = self.symbol_table[var]
+        elif self.next_offset + 2 <= self.symbol_limit:
+            addr = self.next_offset
+            self.symbol_table[var] = addr
+            self.next_offset += 2
+            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
+        else:
+            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full → skipping '{var}'")
+            return
+        self.vmemory.write(addr, value)
 
-# vm0 = VirtualMemory(pid=0, manager=mm)
-# vm0.write(10, 1234)
-# print(vm0.read(10))
+    def get(self, var):
+        if var not in self.symbol_table:
+            print(f"[ProcessMemory.get()] '{var}' not declared — returning 0")
+            return 0
+        addr = self.symbol_table[var]
+        print(f"[ProcessMemory.get()] symbol_table['{var}'] → vaddr={hex(addr)}")
+        return self.vmemory.read(addr)
 
-# vm1 = VirtualMemory(pid=1, manager=mm)
-# vm1.write(10, 4321)
-# print(vm1.read(10))
+
+class Process:
+    pass
+
+
+def DECLARE(inst, process):
+    var = inst.args[0]
+    val = int(inst.args[1])
+    print(f"[DECLARE] {var} = {val}")
+    process.memory.set(var, val)
+
+
+def ADD(inst, process):
+    dst = inst.args[0]
+    op1 = inst.args[1]
+    op2 = inst.args[2]
+    print(f"[exec] ADD {dst} {op1} {op2}")
+
+    val1 = process.memory.get(op1)
+    val2 = process.memory.get(op2)
+    result = (val1 + val2) & 0xFFFF  # Clamp to 2 bytes
+    process.memory.set(dst, result)
+
+
+# === Example Test Run ===
+
+class Instruction:
+    def __init__(self, args):
+        self.args = args
+
+
+mm = MemoryManager()
+mm.init(capacity=128, page_size=64)       # Creates 2 frames
+mm.allocate(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
+
+vmemory = VirtualMemory(pid=1, manager=mm)
+process = Process()
+process.memory = ProcessMemory(vmemory)
+
+DECLARE(Instruction(["a", "100"]), process)
+DECLARE(Instruction(["b", "250"]), process)
+ADD(Instruction(["c", "a", "b"]), process)
