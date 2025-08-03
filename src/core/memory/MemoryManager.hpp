@@ -60,26 +60,19 @@ class MemoryManager {
    * May evict another page if no free frame is available (side effect).
    */
   auto page_in(uint pid, uint page_num) -> bool {
-    auto& free_frames = data.free_frames;
-    auto frame_num = opt<uint>();
-    
     // Try to get a free frame
-    if (!data.free_frames.empty()) {
-      frame_num = free_frames.front();
-      free_frames.pop_front();
-    } 
-    // Try to evict a page
-    else
-      frame_num = page_out(); // <- side effect
-
-    // Failed to allocate a frame (no evictable page)  
-    if (!frame_num)
-      return false;
+    if (data.free_frames.empty())
+      if (!page_out())
+        return false;   // Couldn't evict a page!
+    
+    // Retrieve free frame
+    auto frame_num = data.free_frames.front();
+    data.free_frames.pop_front();
 
     // Fetch page table and page metadata
     auto& table = data.page_table_map[pid];
     auto& page = table.get(page_num);
-
+    
     // Assign physical frame to page
     page.frame_num = frame_num;
     data.equeue.push_back({ pid, page_num });
@@ -89,10 +82,13 @@ class MemoryManager {
     if (data.store.contains(key)) {
       auto bytes = move(data.store.at(key));
       data.store.erase(key);
-      fill_frame(*frame_num, [&](uint i) -> uint { return bytes[i]; });
+      fill_frame(frame_num, [&](uint i) -> uint { return bytes[i]; });
+      cout << format("  [restore] pid={} page={} → frame={} ← restored from store\n", pid, page_num, frame_num);
     }
-    else
-      fill_frame(*frame_num, [](uint) -> uint { return 0; });
+    else {
+      fill_frame(frame_num, [](uint) -> uint { return 0; });
+      cout << format("  [zero]    pid={} page={} → frame={} ← filled with zeros\n", pid, page_num, frame_num);
+    }
 
     return true;
   }
@@ -102,7 +98,7 @@ class MemoryManager {
     * This simulates basic page replacement when memory is full.
     * Also known as: "evict_page".
     */
-  auto page_out() -> opt<uint> {
+  auto page_out() -> bool {
     while (!data.equeue.empty()) {
       auto [pid, page_num] = data.equeue.front();
       data.equeue.pop_front();   
@@ -119,9 +115,15 @@ class MemoryManager {
       auto end = start + data.page_size;
       auto bytes_out = vec<uint>(start, end);
       data.store[make_key(pid, page_num)] = move(bytes_out);
-      return frame_num;
+
+      cout << format("  [evict]   pid={} page={} → freed frame={} → saved to store\n",
+                     pid, page_num, frame_num);
+
+      return true;  // Evicted a page to backing store!
     }
-    return nullopt;
+
+    cout << "  [evict]   page_out FAILED → no pages available to evict\n";
+    return false;   // Nothing to evict
   }
 
   /**
