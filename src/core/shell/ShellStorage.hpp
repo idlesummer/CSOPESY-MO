@@ -7,7 +7,7 @@ class ShellStorage {
   public:
 
   ShellStorage():
-    storage (map<str,any>()) {}
+    storage (umap<str,any>()) {}
 
   /** Get a reference to a stored value. Throws if key/type is incorrect. */
   template <typename Type>
@@ -34,5 +34,5 @@ class ShellStorage {
   void remove(const str& key) { storage.erase(key); }
 
   // ------ Instance variables ------
-  map<str,any> storage;
+  umap<str,any> storage;
 };

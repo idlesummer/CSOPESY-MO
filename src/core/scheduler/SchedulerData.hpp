@@ -15,7 +15,7 @@ class SchedulerData {
   public:
   
   SchedulerData():
-    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    proc_table    (umap<uint,uptr<Process>>()),  // Container for all processes
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
     wqueue        (list<uint>()),               // Ready queue of processes waiting to be scheduled
@@ -50,7 +50,7 @@ class SchedulerData {
 
   // ------ Instance variables ------
 
-  map<uint, uptr<Process>> proc_table;
+  umap<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 

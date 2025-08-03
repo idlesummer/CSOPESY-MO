@@ -1191,7 +1191,7 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="%m/%
 ------------------------------
 
 #pragma once
-#include <array>
+#include <deque>
 #include <list>
 #include <map>
 #include <queue>
@@ -1201,8 +1201,7 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="%m/%
 #include <utility>
 #include <vector>
 
-
-using std::array;
+using std::deque;
 using std::list;
 using std::make_pair;
 using std::out_of_range;
@@ -1216,6 +1215,9 @@ using std::vector;
 // === Aliases ===
 template <typename Type>
 using vec = vector<Type>;
+
+template <typename... Types>
+using tup = tuple<Types...>;
 
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
@@ -1391,10 +1393,14 @@ using std::function;
 using std::optional;
 using byte = uint8_t;
 using uint = uint32_t;
+using uint64 = uint64_t;
 using uchar = unsigned char;
 using Uint = std::optional<uint>;
 
 // === Aliases ===
+template <typename Type>
+using opt = optional<Type>;
+
 template <typename... Args> 
 using func = std::function<Args...>;
 
@@ -2595,8 +2601,8 @@ class CoreManager {
 
   /** @brief Clears and initializes the core list with the specified number of cores */
   void init(uint size) {
-    cores.clear();                // Destroys all existing cores (just in case)
-    cores.reserve(size);          // Preallocate to avoid reallocations
+    cores.clear();        // Destroys all existing cores (just in case)
+    cores.reserve(size);  // Preallocate to avoid reallocations
     for (auto i=0u; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i+1));
   }
@@ -3238,18 +3244,306 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
 }
 
 ------------------------------
+ FILE:  main.py
+ PATH:  core\memory\main.py
+------------------------------
+
+from MemoryManager2 import *
+
+
+class Process:
+    def __init__(self, pid, manager):
+        vmemory = manager.get_vmemory(pid)
+        self.memory = ProcessMemory(vmemory)
+
+
+class CommandRegistry:
+    def __init__(self, mm: MemoryManager, process: Process):
+        self.mm = mm
+        self.process = process
+        self.commands = {
+            "write": self._write,
+            "read": self._read,
+            "declare": self._declare,
+            "add": self._add,
+            "vmstat": self._vmstat,
+            "process-smi": self._process_smi,
+            "write-raw": self._write_raw,
+        }
+
+    def execute(self, line):
+        tokens = line.strip().split()
+        if not tokens: return
+        cmd, args = tokens[0], tokens[1:]
+
+        if cmd not in self.commands:
+            print(f"[shell] Unknown command: {cmd}")
+            return
+
+        try:
+            self.commands[cmd](args)
+        except Exception as e:
+            print(f"[error] {e}")
+
+    # Command Handlers
+
+    def _write_raw(self, args):
+        if len(args) != 2:
+            print("[write-raw] Usage: write-raw <vaddr> <value>")
+            return
+
+        vaddr = int(args[0])
+        value = int(args[1])
+        print(f"[exec] WRITE-RAW vaddr={hex(vaddr)} = {value}")
+
+        is_violation, is_pagefaulted = self.process.memory.view.write(vaddr, value)
+        if is_violation:
+            print("[write-raw] Invalid address (violation)")
+        elif is_pagefaulted:
+            print("[write-raw] Page fault occurred â€” retry later")
+        else:
+            print("[write-raw] Write successful")
+
+    def _write(self, args):
+        var, value = args[0], int(args[1])
+        print(f"[exec] WRITE {var} = {value}")
+        success = self.process.memory.set(var, value)
+        if not success:
+            print("[write] Page fault occurred â€” retry later")
+
+    def _read(self, args):
+        var = args[0]
+        print(f"[exec] READ {var}")
+        value, is_violation, is_pagefaulted = self.process.memory.get(var)
+
+        if is_violation:
+            print(f"[read] '{var}' is undeclared â€” cannot read")
+        elif is_pagefaulted:
+            print("[read] Page fault occurred â€” retry later")
+
+    def _declare(self, args):
+        if len(args) != 2:
+            print("[declare] Usage: declare <var> <value>")
+            return
+
+        var, value = args[0], int(args[1])
+        print(f"[exec] DECLARE {var} = {value}")
+        success = self.process.memory.set(var, value)
+        if not success:
+            print(f"[declare] Page fault occurred during declaration â€” retry later")
+
+    def _add(self, args):
+        if len(args) != 3:
+            print("[add] Usage: add <dst> <src1> <src2>")
+            return
+        dst, src1, src2 = args
+        print(f"[exec] ADD {dst} {src1} {src2}")
+
+        val1, inv1, pf1 = self.process.memory.get(src1)
+        val2, inv2, pf2 = self.process.memory.get(src2)
+
+        if inv1 or inv2:
+            print("[add] One or more variables undeclared â€” aborting")
+            return
+        if pf1 or pf2:
+            print("[add] Page fault occurred â€” retry later")
+            return
+
+        result = (val1 + val2) & 0xFFFF
+        success = self.process.memory.set(dst, result)
+        if not success:
+            print("[add] Destination write page fault â€” retry later")
+
+    def _vmstat(self, args):
+        if not args:
+            print("[vmstat] Usage: vmstat <pid>")
+            return
+
+        pid = int(args[0])
+        if pid not in self.mm.data.page_table_map:
+            print(f"[vmstat] No page table found for pid={pid}")
+            return
+
+        print(f"[vmstat] Process {pid}:")
+        table = self.mm.data.page_table_map[pid]
+        for page_num in sorted(table.pages()):
+            entry = table.get(page_num)
+            if entry.is_loaded():
+                print(f"  Page {page_num:<2} â†’ Frame {entry.frame_num}")
+            else:
+                print(f"  Page {page_num:<2} â†’ Not Loaded")
+
+    def _process_smi(self, args):
+        mm = self.mm
+        print("=== PROCESS-SMI: Memory Summary ===")
+        print(f"Total frames:     {mm.data.frame_count}")
+        print(f"Free frames:      {len(mm.data.free_frames)}")
+        print(f"Used frames:      {mm.data.frame_count - len(mm.data.free_frames)}\n")
+
+        for pid, page_table in mm.data.page_table_map.items():
+            print(f"Process PID: {pid}")
+            loaded = 0
+            for page_num in sorted(page_table.pages()):
+                page = page_table.get(page_num)
+                if page.is_loaded():
+                    print(f"  Page {page_num:02} â†’ Frame {page.frame_num}")
+                    loaded += 1
+                else:
+                    print(f"  Page {page_num:02} â†’ Not loaded")
+            print(f"  Total pages: {len(page_table.pages())}, Loaded: {loaded}")
+            print()
+
+
+if __name__ == "__main__":
+    mm = MemoryManager()
+    mm.init(capacity=64, page_size=64)
+    mm.alloc(pid=1, bytes_needed=128)        # 2 pages
+    process = Process(pid=1, manager=mm)
+    registry = CommandRegistry(mm, process)
+
+    registry.execute("write-raw 0 111")      ; print()  # page 0 â†’ frame 0
+    registry.execute("write-raw 64 222")     ; print()  # page 1 â†’ frame 0
+    registry.execute("write-raw 0 333")      ; print()  # will fail naturally
+
+
+------------------------------
  FILE:  MemoryManager.hpp
  PATH:  core\memory\MemoryManager.hpp
 ------------------------------
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "MemoryManagerData.hpp"
+#include "MemoryView.hpp"
+#include "types.hpp"
 
 
 class MemoryManager {
   public:
 
-  MemoryManager() {}
+  MemoryManager():
+    data (MemoryManagerData()) {}
+
+  void init(uint capacity, uint page_size) {    
+    data.page_size = page_size;
+    data.frame_count = capacity / page_size;
+    data.memory = vec<uint>(capacity, 0);
+  
+    // Reset and repopulate the free frame list
+    data.free_frames.clear(); 
+    for (auto i=0u; i < data.frame_count; ++i)
+      data.free_frames.push_back(i);
+
+    // Clear all process page tables
+    data.page_table_map.clear();
+  }
+
+  auto alloc(uint pid, uint bytes_needed) -> bool {
+    auto pages_needed = (bytes_needed + data.page_size - 1) / data.page_size;
+    auto page_table = PageTable();
+
+    for (auto page_num=0; page_num < pages_needed; ++page_num)
+      page_table.add(page_num, PageEntry());
+
+    data.page_table_map[pid] = move(page_table);
+    return true;
+  }
+
+  auto memory_view_of(uint pid) -> MemoryView {
+    return MemoryView(pid, data, [this](uint pid, uint page_num) {
+      return this->page_in(pid, page_num);
+    });
+  }
+
+  // ------ Member variables ------
+  MemoryManagerData data;
+  
+  // ------ Internal helpers ------
+  private:
+
+  /** Fills the given frame in memory using the provided filler function. */
+  void fill_frame(uint frame_num, func<uint(uint)> filler) {
+    auto maddr = frame_num * data.page_size;
+    for (auto i = 0u; i < data.page_size; ++i)
+      data.memory[maddr + i] = filler(i);
+  }
+
+  /**
+   * Loads the given virtual page into memory for a process.
+   * May evict another page if no free frame is available (side effect).
+   */
+  auto page_in(uint pid, uint page_num) -> bool {
+    auto& free_frames = data.free_frames;
+    auto frame_num = opt<uint>();
+    
+    // Try to get a free frame
+    if (!data.free_frames.empty()) {
+      frame_num = free_frames.front();
+      free_frames.pop_front();
+    } 
+    // Try to evict a page
+    else
+      frame_num = page_out(); // <- side effect
+
+    // Failed to allocate a frame (no evictable page)  
+    if (!frame_num)
+      return false;
+
+    // Fetch page table and page metadata
+    auto& table = data.page_table_map[pid];
+    auto& page = table.get(page_num);
+
+    // Assign physical frame to page
+    page.frame_num = frame_num;
+    data.equeue.push_back({ pid, page_num });
+
+    // Fill frame with content from backing store or zero-fill
+    auto key = make_key(pid, page_num);
+    if (data.store.contains(key)) {
+      auto bytes = move(data.store.at(key));
+      data.store.erase(key);
+      fill_frame(*frame_num, [&](uint i) { return bytes[i]; });
+    }
+    else
+      fill_frame(*frame_num, [](uint) { return 0; });
+
+    return true;
+  }
+
+  /**
+    * Evicts one loaded page from memory and returns its freed frame number.
+    * This simulates basic page replacement when memory is full.
+    * Also known as: "evict_page".
+    */
+  auto page_out() -> opt<uint> {
+    while (!data.equeue.empty()) {
+      auto [pid, page_num] = data.equeue.front();
+      data.equeue.pop_front();   
+
+      auto& table = data.page_table_map[pid];
+      auto& page = table.get(page_num);
+
+      auto frame_num = page.frame();
+      page.frame_num = nullopt;
+      data.free_frames.push_back(frame_num);
+
+      auto maddr = frame_num * data.page_size;
+      auto start = data.memory.begin() + maddr;
+      auto end = start + data.page_size;
+      auto bytes_out = vec<uint>(start, end);
+      data.store[make_key(pid, page_num)] = move(bytes_out);
+      return frame_num;
+    }
+    return nullopt;
+  }
+
+  /**
+   * Computes a unique 64-bit key for a process-page pair.
+   * Used as the backing store index for evicted pages.
+   */
+  auto make_key(uint pid, uint page_num) -> uint64 {
+    return (cast<uint64>(pid) << 32) | page_num;
+  }
 };
 
 ------------------------------
@@ -3257,86 +3551,798 @@ class MemoryManager {
  PATH:  core\memory\MemoryManager.py
 ------------------------------
 
-
 class PageEntry:
-    def __init__(self, frame_index, loaded=True):
-        self.frame = frame_index
-        self.loaded = loaded
+    """
+    Represents the metadata of a virtual page (not the actual content).
+
+    This object tracks:
+      - which physical frame it's loaded in (if any)
+      - whether the page is currently loaded into memory
+
+    Note:
+        This does NOT contain the page's data. Content is stored in the
+        memory array (RAM) and/or the backing store.
+    """
+
+    def __init__(self, frame_num=None):
+        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
+
+    def is_loaded(self):
+        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
+        return self.frame_num is not None
+
+
+class PageTable:
+    def __init__(self):
+        self.entries = {}  # Maps virtual page number â†’ PageEntry
+
+    def has_page(self, page_num):
+        return page_num in self.entries
+
+    def get(self, page_num):
+        return self.entries[page_num]
+
+    def add(self, page_num, page):
+        self.entries[page_num] = page
+
+    def pages(self):
+        return self.entries.keys()
+
+    def mark_unloaded(self, page_num):
+        self.entries[page_num].frame_num = None
+
+    def is_loaded(self, page_num):
+        return self.entries[page_num].is_loaded()
+
+    def get_frame(self, page_num):
+        return self.entries[page_num].frame_num
 
 
 class MemoryManager:
     def __init__(self):
         # Config and memory state
-        self.page_size = 0           # Bytes per page/frame
-        self.frame_count = 0         # Total number of frames
+        self.page_size = 0          # Bytes per page/frame
+        self.frame_count = 0        # Total number of frames
 
-        # Physical memory: flat list of bytes
-        self.memory = []
+        self.memory = []            # Physical memory: flat list of bytes
+        self.free_frames = []       # Tracks available frame indices
+        self.page_table_map = {}    # Page tables: maps pid â†’ PageTable object
+        self.equeue = []            # Tracks (pid, page_num) in load order
+        self.store = {}             # Backing store: (pid, page_num) â†’ byte array
 
-        # Tracks available frame indices
-        self.free_frames = []
-
-        # Page table: maps pid â†’ { page_number: (frame_index, loaded) }
-        self.page_table = {}
-
-    def init(self, mem_capacity, page_size):
+    def init(self, capacity, page_size):
         """Initialize the memory manager with total capacity and page size."""
         self.page_size = page_size
-        self.frame_count = mem_capacity // page_size
-
-        self.memory = [0] * mem_capacity
+        self.frame_count = capacity // page_size
+        self.memory = [0] * capacity
         self.free_frames = list(range(self.frame_count))
-        self.page_table.clear()
+        self.page_table_map.clear()
 
-    def allocate(self, pid, alloc_size):
-        """Allocate alloc_size bytes to process pid."""
-        pages_needed = (alloc_size + self.page_size - 1) // self.page_size  # Round up math by subtracting and floor divide
-        if pages_needed > len(self.free_frames):
-            return False  # Not enough frames
+    def alloc(self, pid, bytes_needed):
+        """
+        Reserves virtual pages for a process without loading them.
+        Pages are created but not assigned frames until accessed.
 
-        self.page_table[pid] = {}
-        for page_number in range(pages_needed):
-            frame_index = self.free_frames.pop(0)
-            self.page_table[pid][page_number] = PageEntry(frame_index, loaded=True)
+        Args:
+            pid (int): Process ID.
+            bytes_needed (int): Bytes to alloc.
+
+        Returns:
+            bool: True if allocation succeeded.
+        """
+        pages_needed = (bytes_needed + self.page_size - 1) // self.page_size
+        page_table = PageTable()
+        for page_num in range(pages_needed):
+            page_table.add(page_num, PageEntry())
+        self.page_table_map[pid] = page_table
         return True
 
-    def is_valid(self, pid, addr):
-        """Check if a virtual address is valid for the given process."""
-        page = addr // self.page_size
-        return pid in self.page_table and page in self.page_table[pid]
+    def write(self, pid, vaddr, value):
+        """Write a 2-byte value at the virtual address of a process."""
+        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
+            raise Exception(f"Access violation (WRITE) at address {hex(vaddr)}")
+        maddr1 = self._maddr_of(pid, vaddr)
+        maddr2 = self._maddr_of(pid, vaddr + 1)
+        self.memory[maddr1] = value & 0xFF
+        self.memory[maddr2] = (value >> 8) & 0xFF
 
-    def _get_mem_addr(self, pid, addr):
-        """Translate a virtual address to a physical memory index."""
-        page = addr // self.page_size
-        offset = addr % self.page_size
-        entry = self.page_table[pid][page]
-        frame = entry.frame
-        return frame * self.page_size + offset
+    def read(self, pid, vaddr):
+        """Read a 2-byte value at the virtual address of a process."""
+        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
+            raise Exception(f"Access violation (READ) at address {hex(vaddr)}")
+        maddr1 = self._maddr_of(pid, vaddr)
+        maddr2 = self._maddr_of(pid, vaddr + 1)
+        lo = self.memory[maddr1]
+        hi = self.memory[maddr2] << 8
+        return lo | hi
 
-    def write(self, pid, addr, value):
-        """Write a 2-byte integer to the virtual address of a process."""
-        if not self.is_valid(pid, addr):
-            raise Exception(f"Access violation (WRITE) at address {hex(addr)}")
+    # ------ PRIVATE METHODS ------
+
+    def _owns_vaddr(self, pid, vaddr, num_bytes=1):
+        """
+        Checks whether a range of virtual addresses is allocated to the given process.
+        Validates that [addr, addr + bytes - 1] fits entirely within
+        the set of reserved pages (regardless of load state).
+
+        Args:
+            pid (int): Process ID.
+            addr (int): Starting virtual address.
+            bytes (int): Number of bytes to check (default: 1).
+
+        Returns:
+            bool: True if all pages in range are reserved by the process.
+        """
+        if pid not in self.page_table_map:
+            return False
+        table = self.page_table_map[pid]
+        start = vaddr // self.page_size
+        end = (vaddr + num_bytes - 1) // self.page_size
+        return all(table.has_page(p) for p in range(start, end + 1))
+
+    def _maddr_of(self, pid, vaddr):
+        """
+        Translates a virtual address to a physical memory index.
+        Triggers page-in if the page is not yet loaded.
+
+        Args:
+            pid (int): Process ID.
+            addr (int): Virtual address.
+
+        Returns:
+            int: Index in physical memory array.
+        """
+        page_num = vaddr // self.page_size
+        offset = vaddr % self.page_size
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        if not page.is_loaded():
+            self._page_in(pid, page_num)
+        return page.frame_num * self.page_size + offset
+
+    def _fill_frame(self, frame_num, filler):
+        """
+        Fills the given frame in memory using the provided filler function.
+
+        Args:
+            frame_num (int): Frame number to fill.
+            filler (Callable[[int], int]): Function taking index (0..page_size-1) and returning a byte.
+        """
+        maddr = frame_num * self.page_size
+        for i in range(self.page_size):
+            self.memory[maddr + i] = filler(i)
+
+    def _page_in(self, pid, page_num):
+        """
+        Loads a page into memory by assigning a free frame.
+        Also known as: "load_page".
+
+        Case 0: If the page is not loaded, this assigns a frame and zero-fills it.
+        Simulates demand paging (no actual disk access).
         
-        mem_addr = self._get_mem_addr(pid, addr)
-        self.memory[mem_addr] = value & 0xFF
-        self.memory[mem_addr + 1] = (value >> 8) & 0xFF
+        Case 1: If memory is full, this triggers page replacement via FIFO eviction.
 
-    def read(self, pid, addr):
-        """Read a 2-byte integer from the virtual address of a process."""
-        if not self.is_valid(pid, addr):
-            raise Exception(f"Access violation (READ) at address {hex(addr)}")
+        Args:
+            pid (int): Process ID.
+            page_num (int): Virtual page number to load.
+
+        Raises:
+            Exception: If no free frames are available.
+        """
+        frame_num = self.free_frames.pop(0) if self.free_frames else self._page_out()
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        page.frame_num = frame_num
+        self.equeue.append((pid, page_num))
+
+        key = (pid, page_num)
+        if key in self.store:
+            data = self.store.pop(key)
+            self._fill_frame(frame_num, lambda i: data[i])
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (restored from store)")
+        else:
+            self._fill_frame(frame_num, lambda i: 0)
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (zero-filled)")
+
+    def _page_out(self):
+        """
+        Evicts one loaded page from memory and returns its freed frame number.
+        This simulates basic page replacement when memory is full.
+        Also known as: "evict_page".
+
+        Returns:
+            int: A frame number that was reclaimed.
+        """
+        while self.equeue:
+            pid, page_num = self.equeue.pop(0)
+            table = self.page_table_map[pid]
+            page = table.get(page_num)
+            
+            if not page.is_loaded():
+                continue
+            
+            frame_num = page.frame_num
+            page.frame_num = None
+            self.free_frames.append(frame_num)
+            
+            print(f"[MemoryManager._page_out()] EVICT pid={pid} â†’ page={page_num:<2} â†’ freed frame={frame_num}")
+            return frame_num
+        raise Exception("Eviction failed: no pages available to evict")
+
+
+class VirtualMemory:
+    """
+    Represents the virtual memory view for a specific process.
+    Provides read/write access using virtual addresses,
+    delegating to the system-wide MemoryManager.
+    """
+    def __init__(self, pid, manager):
+        self.pid = pid
+        self.manager = manager
+
+    def read(self, vaddr):
+        """Read a 2-byte value from the process's virtual memory."""
+        return self.manager.read(self.pid, vaddr)
+
+    def write(self, vaddr, value):
+        """Write a 2-byte value to the process's virtual memory."""
+        self.manager.write(self.pid, vaddr, value)
+
+class ProcessMemory:
+    def __init__(self, vmemory):
+        self.vmemory = vmemory
+        self.symbol_table = {}    # var name â†’ virtual address
+        self.next_offset = 0      # Next offset within symbol table
+        self.symbol_limit = 64    # Max 64 bytes (â†’ 32 symbol_table)
+
+    def set(self, var, value):
+        if var in self.symbol_table:
+            addr = self.symbol_table[var]
+        elif self.next_offset + 2 <= self.symbol_limit:
+            addr = self.next_offset
+            self.symbol_table[var] = addr
+            self.next_offset += 2
+            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
+        else:
+            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
+            return
+        self.vmemory.write(addr, value)
+
+    def get(self, var):
+        if var not in self.symbol_table:
+            print(f"[ProcessMemory.get()] '{var}' not declared â€” returning 0")
+            return 0
+        addr = self.symbol_table[var]
+        print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
+        return self.vmemory.read(addr)
+
+
+# mm = MemoryManager()
+# mm.init(capacity=128, page_size=64)       # Creates 2 frames
+# mm.alloc(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
+
+# vmemory = VirtualMemory(pid=1, manager=mm)
+# process = Process()
+# process.memory = ProcessMemory(vmemory)
+
+# DECLARE(Instruction(["a", "100"]), process)
+# DECLARE(Instruction(["b", "250"]), process)
+# ADD(Instruction(["c", "a", "b"]), process)
+
+------------------------------
+ FILE:  MemoryManager2.py
+ PATH:  core\memory\MemoryManager2.py
+------------------------------
+
+# This version uses MemoryView instead of VirtualMemory for process memory abstraction.
+
+class PageEntry:
+    """
+    Represents the metadata of a virtual page (not the actual content).
+
+    This object tracks:
+      - which physical frame it's loaded in (if any)
+      - whether the page is currently loaded into memory
+
+    Note:
+        This does NOT contain the page's data. Content is stored in the
+        memory array (RAM) and/or the backing store.
+    """
+
+    def __init__(self, frame_num=None):
+        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
+
+    def is_loaded(self):
+        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
+        return self.frame_num is not None
+
+
+class PageTable:
+    def __init__(self):
+        self.entries = {}  # Maps virtual page number â†’ PageEntry
+
+    def has_page(self, page_num):
+        return page_num in self.entries
+
+    def get(self, page_num):
+        return self.entries[page_num]
+
+    def add(self, page_num, page):
+        self.entries[page_num] = page
+
+    def pages(self):
+        return self.entries.keys()
+
+
+class MemoryManagerData:
+    def __init__(self):
+        self.page_size = 0          # Bytes per page/frame
+        self.frame_count = 0        # Total number of frames
+        self.memory = []            # Physical memory (flat byte array)
+        self.free_frames = []       # List of available frame indices
+        self.page_table_map = {}    # pid â†’ PageTable
+        self.equeue = []            # FIFO eviction queue: (pid, page_num)
+        self.store = {}             # Backing store: uint64 key â†’ byte array
+
+
+class MemoryView:
+    """
+    Represents the virtual memory view for a specific process.
+    Provides read/write access using virtual addresses.
+
+    This object handles:
+      - Ownership and access checks
+      - Demand paging (pages are loaded into RAM on first access)
+      - Read/write of 2-byte values
+
+    âš ï¸ WARNING:
+        The methods `read()` and `write()` will automatically
+        trigger a page-in if the requested virtual address resides
+        on a page that is not yet loaded in memory.
         
-        mem_addr = self._get_mem_addr(pid, addr)
-        return self.memory[mem_addr] + (self.memory[mem_addr + 1] << 8)
+        This means these methods can:
+          - Modify physical memory state (RAM usage)
+          - Trigger evictions (if memory is full)
+          - Load pages from the backing store
+    """
+    def __init__(self, pid, data, page_in):
+        self.pid = pid
+        self.data = data
+        self.page_in = page_in
+
+    def read(self, vaddr) -> tuple[int, bool, bool]:
+        """
+        Read a 2-byte value from virtual memory.
+
+        Automatically triggers paging if the page(s) are not loaded.
+
+        Args:
+            vaddr (int): The starting virtual address (2 bytes will be read).
+
+        Returns:
+            (value, is_violation, is_pagefaulted)
+            - value: The read value (0 if failed)
+            - is_violation: True if the address was invalid (out-of-bounds or unmapped)
+            - is_pagefaulted: True if a page fault occurred during read
+        """
+        
+        if not self._owns_vaddr(vaddr, num_bytes=2):
+            return 0, True, False  # Treat as access violation (bad symbol), ignore is_pagefault
+
+        maddr1 = self._maddr_of(vaddr)
+        maddr2 = self._maddr_of(vaddr+1)
+        if maddr1 is None or maddr2 is None:
+            return 0, False, True  # Page fault
+
+        lower_byte = self.data.memory[maddr1]
+        upper_byte = self.data.memory[maddr2] << 8
+        return lower_byte | upper_byte, False, False
+
+    def write(self, vaddr, value) -> tuple[bool, bool]:
+        """
+        Write a 2-byte value to virtual memory.
+
+        Automatically triggers paging if the page(s) are not loaded.
+
+        Args:
+            vaddr (int): Starting virtual address to write to
+            value (int): 2-byte unsigned integer (0â€“65535)
+
+        Returns:
+            (is_violation, is_pagefaulted)
+            - is_violation: True if write was to an invalid address
+            - is_pagefaulted: True if a page fault occurred during write
+        """
+        if not self._owns_vaddr(vaddr, num_bytes=2):
+            return True, False  # Access violation
+
+        maddr1 = self._maddr_of(vaddr)
+        maddr2 = self._maddr_of(vaddr+1)
+        if maddr1 is None or maddr2 is None:
+            return False, True  # Page fault
+
+        self.data.memory[maddr1] = value & 0xFF
+        self.data.memory[maddr2] = (value >> 8) & 0xFF
+        return False, False
+
+    # ------ PRIVATE METHODS ------
+
+    def _owns_vaddr(self, vaddr, num_bytes=1):
+        page_table = self.data.page_table_map.get(self.pid)
+        if not page_table:
+            return False
+
+        start = vaddr // self.data.page_size
+        end = (vaddr + num_bytes - 1) // self.data.page_size
+        return all(page_table.has_page(p) for p in range(start, end + 1))
+
+    def _maddr_of(self, vaddr):
+        """
+        Translate virtual address to physical address.
+        Triggers demand paging if page not loaded.
+        Returns None only if page_in() fails.
+        """
+        page_num = vaddr // self.data.page_size
+        offset   = vaddr % self.data.page_size
+        
+        page_table = self.data.page_table_map[self.pid]
+        page = page_table.get(page_num)
+
+        if not page.is_loaded():
+            success = self.page_in(self.pid, page_num)
+            if not success:
+                return None
+            # Refresh the page reference after page_in()
+            page = page_table.get(page_num) # Refresh in case of mutation
+
+        return page.frame_num * self.data.page_size + offset
 
 
-# Sample usage
-mm = MemoryManager()                        # Sample usage and test
-mm.init(mem_capacity=256, page_size=64)     # Set up memory: 256 bytes total, 64 bytes per frame â†’ 4 frames
-mm.allocate(pid=1, alloc_size=128)          # Allocate 128 bytes to process 1 â†’ needs 2 frames (128 / 64 = 2)
-mm.write(pid=1, address=0x0040, value=1337) # Write a 2-byte value to virtual address 0x0040
-print(mm.read(pid=1, address=0x0040))       # Read it back from the same address. Should output: 1337
+class MemoryManager:
+    def __init__(self):
+        self.data = MemoryManagerData()
+
+    def init(self, capacity, page_size):
+        """Initialize the memory manager with total capacity and page size."""
+        self.data.page_size = page_size
+        self.data.frame_count = capacity // page_size
+        self.data.memory = [0] * capacity
+        self.data.free_frames = list(range(self.data.frame_count))
+        self.data.page_table_map.clear()
+
+    def alloc(self, pid, bytes_needed):
+        """
+        Reserves virtual pages for a process without loading them.
+        Pages are created but not assigned frames until accessed.
+        """
+        pages_needed = (bytes_needed + self.data.page_size - 1) // self.data.page_size
+
+        page_table = PageTable()
+        for page_num in range(pages_needed):
+            page_table.add(page_num, PageEntry())
+        self.data.page_table_map[pid] = page_table
+        return True
+
+    def get_vmemory(self, pid):
+        """Returns a MemoryView for the given process."""
+        return MemoryView(
+            pid,
+            self.data,
+            page_in=lambda pid, page_num: self._page_in(pid, page_num)
+        )
+
+    # ------ PRIVATE METHODS ------
+
+    def _fill_frame(self, frame_num, filler):
+        """Fills the given frame in memory using the provided filler function."""
+        maddr = frame_num * self.data.page_size
+        for i in range(self.data.page_size):
+            self.data.memory[maddr + i] = filler(i)
+
+    def _page_in(self, pid, page_num):
+        """
+        Loads a page into memory by assigning a free frame.
+        Also known as: "load_page".
+        """
+        frame_num = (
+            self.data.free_frames.pop(0)
+            if self.data.free_frames
+            else self._page_out()
+        )
+
+        if frame_num is False: ########################
+            return False
+
+        page_table = self.data.page_table_map[pid]
+        page = page_table.get(page_num)
+        
+        # Sanity check, the current page should not be in memory before page_in is called!
+        assert not page.is_loaded(), "page_in() called on already-loaded page"
+        
+        page.frame_num = frame_num
+        self.data.equeue.append((pid, page_num))
+
+        key = self._make_key(pid, page_num)
+        if key in self.data.store:
+            bytes = self.data.store.pop(key)
+            self._fill_frame(frame_num, lambda i: bytes[i])
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (restored from store)")
+        else:
+            self._fill_frame(frame_num, lambda i: 0)
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (zero-filled)")
+        return True
+
+    def _page_out(self):
+        """
+        Evicts one loaded page from memory and returns its freed frame number.
+        This simulates basic page replacement when memory is full.
+        Also known as: "evict_page".
+        """
+        while self.data.equeue:
+            pid, page_num = self.data.equeue.pop(0)
+            table = self.data.page_table_map[pid]
+            page = table.get(page_num)
+
+            # âœ… This *should* be loaded, otherwise we have stale data
+            assert page.is_loaded(), "page_out() called on an already-evicted page"
+
+            frame_num = page.frame_num
+            page.frame_num = None
+            self.data.free_frames.append(frame_num)
+
+            # Save to store
+            maddr = frame_num * self.data.page_size
+            bytes_out = self.data.memory[maddr: maddr + self.data.page_size]
+
+            key = self._make_key(pid, page_num)
+            self.data.store[key] = list(bytes_out)
+
+            print(f"[MemoryManager._page_out()] EVICT pid={pid} â†’ page={page_num:<2} â†’ freed frame={frame_num}")
+            return frame_num
+
+        raise Exception("Eviction failed: no pages available to evict") ########################
+
+    def _make_key(self, pid, page_num):
+        return (pid << 32) | page_num
+
+
+class ProcessMemory:
+    def __init__(self, view):
+        self.view = view
+        self.symbol_table = {}    # var name â†’ virtual address
+        self.next_offset = 0      # Next offset within symbol table
+        self.symbol_limit = 64    # Max 64 bytes (â†’ 32 variables)
+
+    def set(self, var, value) -> tuple[bool, bool]:
+        """
+        Writes a 2-byte value to a variable.
+
+        Returns:
+            is_violation (bool): True if address assignment was invalid (e.g. symbol table full)
+            is_pagefaulted (bool): True if the write triggered a page fault
+        """
+        if var in self.symbol_table:
+            addr = self.symbol_table[var]
+
+        elif self.next_offset + 2 <= self.symbol_limit:
+            addr = self.next_offset
+            self.symbol_table[var] = addr
+            self.next_offset += 2
+            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
+
+        else:
+            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
+            return True, False  # Violation, but no page fault
+
+        return self.view.write(addr, value) # Returns (is_violation, is_pagefaulted)
+    
+    def get(self, var) -> tuple[int, bool, bool]:
+        """
+        Returns:
+            value (int): the variable's value or 0
+            is_violation (bool): True if address was invalid (e.g. undeclared or out of bounds)
+            is_pagefaulted (bool): True if a page fault occurred
+        """
+        if var not in self.symbol_table:
+            print(f"[ProcessMemory.get()] '{var}' not declared")
+            return 0, False, True ######################## CREATE VARIABLE IF NOT CREATED   
+
+        addr = self.symbol_table[var]
+        print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
+        
+        return self.view.read(addr) # Returns (value, is_violation, is_pagefaulted)
+
+------------------------------
+ FILE:  MemoryManagerData.hpp
+ PATH:  core\memory\MemoryManagerData.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "types.hpp"
+
+
+class MemoryManagerData {
+  public:
+
+  MemoryManagerData():
+    page_size      (0u),    
+    frame_count    (0u),
+    memory         (vec<uint>()),
+    free_frames    (deque<uint>()),
+    // page_table_map (map<uint,PageTable>()),
+    // equeue         (deque<tup<uint, uint>>()),
+    // store          (map<uint64,vec<uint>>()) {}
+
+  // ------ Member variables ------
+  uint page_size;
+  uint frame_count;
+  vec<uint> memory;
+  deque<uint> free_frames;
+  map<uint,PageTable> page_table_map;
+  deque<tup<uint, uint>> equeue;
+  map<uint64,vec<uint>> store;
+};
+
+------------------------------
+ FILE:  MemoryView.hpp
+ PATH:  core\memory\MemoryView.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "MemoryManagerData.hpp"
+#include "types.hpp"
+
+
+class MemoryView {
+  public:
+
+  MemoryView(uint pid, MemoryManagerData& data, func<bool(uint, uint)> page_in):
+    pid     (pid),        // Process ID owning this memory view
+    data    (data),       // Reference to shared memory manager state (frames, tables, store, etc.)
+    page_in (page_in) {}  // Page-in callback: loads (pid, page_num) into memory if not present
+
+  /**
+   * @brief Reads a 2-byte value from virtual memory.
+   * @return (value, is_violation, is_pagefaulted)
+   *         - value: the uint16 read from memory (or 0 if failed)
+   *         - is_violation: true if address is invalid or unmapped
+   *         - is_pagefaulted: true if a page fault occurred
+   */
+  auto read(uint vaddr) -> tup<int, bool, bool> {
+    if (!has_pages_for(vaddr, 2))
+      return {0, true, false}; // access violation
+
+    auto m1 = maddr_of(vaddr);      
+    auto m2 = maddr_of(vaddr + 1);
+    if (!m1 || !m2)
+      return {0, false, true}; // page fault
+
+    auto lower_byte = data.memory[*m1];
+    auto upper_byte = data.memory[*m2] << 8;
+    return {lower_byte | upper_byte, false, false};
+  }
+    
+  /**
+   * @brief Writes a 2-byte value to virtual memory.
+   * @return (is_violation, is_pagefaulted)
+   *        - is_violation: true if address is invalid or unmapped
+   *        - is_pagefaulted: true if a page fault occurred
+   */
+  auto write(uint vaddr, uint value) -> tup<bool, bool> {
+    if (!has_pages_for(vaddr, 2))
+      return {true, false}; // access violation
+
+    auto m1 = maddr_of(vaddr);
+    auto m2 = maddr_of(vaddr+1);
+    if (!m1 || !m2)
+      return {false, true}; // page fault
+
+    data.memory[*m1] = value & 0xFF;
+    data.memory[*m2] = (value >> 8) & 0xFF;
+    return {false, false};
+  }
+
+  // ------ Member variables ------
+  uint pid;
+  MemoryManagerData& data;
+  func<bool(uint,uint)> page_in;
+  
+  // ------ Internal Helpers ------
+  private:
+
+  /** @brief Checks whether the process has declared all pages needed for a virtual memory access. */
+  auto has_pages_for(uint vaddr, uint num_bytes=1) -> bool {
+    auto it = data.page_table_map.find(pid);
+    if (it == data.page_table_map.end())
+      return false;
+    
+    auto& page_table = it->second;
+    auto start = vaddr / data.page_size;
+    auto end = (vaddr + num_bytes - 1) / data.page_size;
+
+    for (auto page_num=start; page_num <= end; ++page_num)
+      if (!page_table.has_page(page_num))
+        return false;
+    return true;
+  }
+
+  /**
+   * @brief Translates a virtual address to a physical memory address for the current process.
+   * Triggers a page-in if the page is not loaded; returns nullopt on failure.
+   * Returns the physical address (frame * page_size + offset) if successful.
+   */
+  auto maddr_of(uint vaddr) -> opt<uint> {
+    auto page_num = vaddr / data.page_size;
+    auto offset   = vaddr % data.page_size;
+    auto& page_table = data.page_table_map.at(pid);
+    auto& page = page_table.get(page_num);
+
+    if (!page.is_loaded() && !page_in(pid, page_num)) // Note: page_in method has side effects
+      return nullopt;
+    return page.frame() * data.page_size + offset;
+  }
+};
+
+------------------------------
+ FILE:  types.hpp
+ PATH:  core\memory\types.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+
+/** @brief Represents the metadata of a virtual page (not the actual content). */
+class PageEntry {
+  public:
+
+  PageEntry():
+  frame_num (nullopt) {} // The physical frame index (nullopt if not loaded)
+  
+  /** @brief Returns true if this page is loaded in a physical frame. */
+  auto is_loaded() -> bool { return frame_num.has_value(); }
+  
+  /** @brief Returns the physical frame number. Throws if not loaded. */
+  auto frame() -> uint { return frame_num.value(); }
+  
+  // ------ Member variables ------
+  opt<uint> frame_num;
+};
+
+
+/**
+ * @brief Represents the page table for a process.
+ * Maps virtual page numbers to their PageEntry metadata.
+ */
+class PageTable {
+  public:
+
+  PageTable(): 
+    entries (map<uint,PageEntry>()) {}  // Virtual page number: metadata
+
+  /** @brief Returns true if this table tracks the given virtual page. */
+  auto has_page(uint page_num) -> bool { return entries.contains(page_num); }
+
+  /** @brief Returns a reference to the PageEntry for the given page. */
+  auto get(int page_num) -> PageEntry& { return entries.at(page_num); }
+
+  /** @brief Adds a PageEntry to the table for the given page number. */
+  void add(uint page_num, PageEntry page) { entries[page_num] = page; }
+
+  /** @brief Returns a view of all stored virtual page numbers. */
+  auto pages() -> vec<uint> {
+    auto keys = vec<uint>();
+    keys.reserve(entries.size());
+
+    for (auto& [key, _]: entries)
+      keys.push_back(key);
+    return keys;
+  }
+
+  // ------ Member variables ------
+  map<uint,PageEntry> entries;
+};
 
 ------------------------------
  FILE:  Maze.hpp

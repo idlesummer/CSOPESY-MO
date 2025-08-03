@@ -14,7 +14,7 @@ class InstructionInterpreter {
    * Initializes and registers all handlers once. 
    */
   InstructionInterpreter():
-    handlers         (map<str,InstructionHandler>()),   // opcode -> handler
+    handlers         (umap<str,InstructionHandler>()),   // opcode -> handler
     all_handlers     (vec<ref<InstructionHandler>>()),  // cached reference list for introspection
     flat_handlers    (vec<ref<InstructionHandler>>()),  // Handlers for non-control instructions
     control_handlers (vec<ref<InstructionHandler>>())   // Handlers for control instructions
@@ -85,7 +85,7 @@ class InstructionInterpreter {
 
   // ------ Instance variables ------
 
-  map<str,InstructionHandler> handlers;           
+  umap<str,InstructionHandler> handlers;           
   vec<ref<InstructionHandler>> all_handlers;      
   vec<ref<InstructionHandler>> flat_handlers;     
   vec<ref<InstructionHandler>> control_handlers;

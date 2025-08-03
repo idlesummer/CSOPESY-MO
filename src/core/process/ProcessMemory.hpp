@@ -7,7 +7,7 @@ class ProcessMemory {
   public:
   
   ProcessMemory():
-    symbol_table (map<str,uint>()) {}
+    symbol_table (umap<str,uint>()) {}
 
   /** Memory mutators */
   void set(str key, uint value) {
@@ -26,10 +26,10 @@ class ProcessMemory {
   }
   
   /** Exposes internal variable bindings */
-  auto get_symbol_table() -> map<str,uint>& {
+  auto get_symbol_table() -> umap<str,uint>& {
     return symbol_table;
   }
 
   // ------ Instance variables ------
-  map<str,uint> symbol_table;
+  umap<str,uint> symbol_table;
 };

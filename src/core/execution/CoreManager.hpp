@@ -31,8 +31,8 @@ class CoreManager {
 
   /** @brief Clears and initializes the core list with the specified number of cores */
   void init(uint size) {
-    cores.clear();                // Destroys all existing cores (just in case)
-    cores.reserve(size);          // Preallocate to avoid reallocations
+    cores.clear();        // Destroys all existing cores (just in case)
+    cores.reserve(size);  // Preallocate to avoid reallocations
     for (auto i=0u; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i+1));
   }

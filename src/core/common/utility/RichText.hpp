@@ -9,7 +9,7 @@ class StyleStack {
     stack(vec<pair<str,str>>()) {}  // Start with an empty list of style layers
 
   /** @brief Add all styles (as separate layers) to the stack. */
-  void push(map<str,str> styles) {
+  void push(umap<str,str> styles) {
     for (auto& [key, val]: styles)
       stack.emplace_back(move(key), move(val));
   }
@@ -32,9 +32,9 @@ class StyleStack {
     stack.shrink_to_fit();
   }
 
-  /** @brief Combine all active styles into one map. */
-  auto get_styles() -> map<str,str> {
-    auto result = map<str,str>();
+  /** @brief Combine all active styles into one umap. */
+  auto get_styles() -> umap<str,str> {
+    auto result = umap<str,str>();
 
     for (auto& [key, val]: stack)
       result[key] = val;
@@ -57,7 +57,7 @@ class RichText {
   static inline auto PLACE_RB    = "\x02";
   static inline auto ANSI_RESET  = "\033[0m";
 
-  static inline auto STYLES = map<str,str>{
+  static inline auto STYLES = umap<str,str>{
     {"bold",      "1"}, 
     {"dim",       "2"}, 
     {"italic",    "3"},
@@ -65,7 +65,7 @@ class RichText {
     {"strike",    "9"},
   };
 
-  static inline auto COLORS = map<str,str>{
+  static inline auto COLORS = umap<str,str>{
     {"black",     "#000000"}, 
     {"red",       "#ff0000"}, 
     {"green",     "#00ff00"},
@@ -81,7 +81,7 @@ class RichText {
     {"darkblue",  "#000088"},
   };
 
-  static inline auto ALIASES = map<str,str>{
+  static inline auto ALIASES = umap<str,str>{
     {"b", "bold"}, 
     {"i", "italic"}, 
     {"u", "underline"},
@@ -141,8 +141,8 @@ class RichText {
       && all_of(value.begin()+1, value.end(), ::isxdigit);
   }
 
-  /** @brief Converts a style map to an ANSI escape code string. */
-  auto to_ansi(const map<str,str>& styles) -> str {
+  /** @brief Converts a style umap to an ANSI escape code string. */
+  auto to_ansi(const umap<str,str>& styles) -> str {
     auto codes = vec<str>();
 
     for (auto& [key, value]: styles) {
@@ -172,8 +172,8 @@ class RichText {
     return ALIASES.contains(tag) ? ALIASES.at(tag) : tag;
   }
 
-  auto parse_to_styles(str& tag) -> map<str,str> {
-    auto result = map<str,str>();
+  auto parse_to_styles(str& tag) -> umap<str,str> {
+    auto result = umap<str,str>();
     auto stream = isstream(tag);
     auto token = ""s;
 

@@ -65,14 +65,14 @@ class MemoryManager:
         self.free_frames = list(range(self.frame_count))
         self.page_table_map.clear()
 
-    def allocate(self, pid, bytes_needed):
+    def alloc(self, pid, bytes_needed):
         """
         Reserves virtual pages for a process without loading them.
         Pages are created but not assigned frames until accessed.
 
         Args:
             pid (int): Process ID.
-            bytes_needed (int): Bytes to allocate.
+            bytes_needed (int): Bytes to alloc.
 
         Returns:
             bool: True if allocation succeeded.
@@ -263,44 +263,14 @@ class ProcessMemory:
         return self.vmemory.read(addr)
 
 
-class Process:
-    pass
+# mm = MemoryManager()
+# mm.init(capacity=128, page_size=64)       # Creates 2 frames
+# mm.alloc(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
 
+# vmemory = VirtualMemory(pid=1, manager=mm)
+# process = Process()
+# process.memory = ProcessMemory(vmemory)
 
-def DECLARE(inst, process):
-    var = inst.args[0]
-    val = int(inst.args[1])
-    print(f"[DECLARE] {var} = {val}")
-    process.memory.set(var, val)
-
-
-def ADD(inst, process):
-    dst = inst.args[0]
-    op1 = inst.args[1]
-    op2 = inst.args[2]
-    print(f"[exec] ADD {dst} {op1} {op2}")
-
-    val1 = process.memory.get(op1)
-    val2 = process.memory.get(op2)
-    result = (val1 + val2) & 0xFFFF  # Clamp to 2 bytes
-    process.memory.set(dst, result)
-
-
-# === Example Test Run ===
-
-class Instruction:
-    def __init__(self, args):
-        self.args = args
-
-
-mm = MemoryManager()
-mm.init(capacity=128, page_size=64)       # Creates 2 frames
-mm.allocate(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
-
-vmemory = VirtualMemory(pid=1, manager=mm)
-process = Process()
-process.memory = ProcessMemory(vmemory)
-
-DECLARE(Instruction(["a", "100"]), process)
-DECLARE(Instruction(["b", "250"]), process)
-ADD(Instruction(["c", "a", "b"]), process)
+# DECLARE(Instruction(["a", "100"]), process)
+# DECLARE(Instruction(["b", "250"]), process)
+# ADD(Instruction(["c", "a", "b"]), process)
