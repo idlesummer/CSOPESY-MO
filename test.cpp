@@ -54,8 +54,12 @@ int main() {
   // === Optional: Dump backing store summary ===
   cout << format("\nBacking store state:\n");
   cout << format("  entries = {}\n", mm.data.store.size());
-  for (auto& [key, bytes] : mm.data.store)
-    cout << format("  key = {} | first_byte = {}\n", key, bytes.empty() ? -1 : bytes[0]);
+  for (auto& [key, bytes] : mm.data.store) {
+    auto pid = key >> 32;
+    auto page_num = key & 0xFFFFFFFF;
+    auto val = bytes[0] | (bytes[1] << 8); // reconstruct 16-bit value
+    cout << format("  pid = {:<2} page = {:<2} | value = {}\n", pid, page_num, val);
+  }
 
   cout << "\n";
   return 0;
