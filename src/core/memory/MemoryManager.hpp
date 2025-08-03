@@ -83,11 +83,11 @@ class MemoryManager {
       auto bytes = move(data.store.at(key));
       data.store.erase(key);
       fill_frame(frame_num, [&](uint i) -> uint { return bytes[i]; });
-      cout << format("  [restore] pid={} page={} → frame={} ← restored from store\n", pid, page_num, frame_num);
+      // cout << format("  [restore] pid={} page={} → frame={} ← restored from store\n", pid, page_num, frame_num);
     }
     else {
       fill_frame(frame_num, [](uint) -> uint { return 0; });
-      cout << format("  [zero]    pid={} page={} → frame={} ← filled with zeros\n", pid, page_num, frame_num);
+      // cout << format("  [zero]    pid={} page={} → frame={} ← filled with zeros\n", pid, page_num, frame_num);
     }
 
     return true;
@@ -116,13 +116,13 @@ class MemoryManager {
       auto bytes_out = vec<uint>(start, end);
       data.store[make_key(pid, page_num)] = move(bytes_out);
 
-      cout << format("  [evict]   pid={} page={} → freed frame={} → saved to store\n",
-                     pid, page_num, frame_num);
+      // cout << format("  [evict]   pid={} page={} → freed frame={} → saved to store\n",
+      //                pid, page_num, frame_num);
 
       return true;  // Evicted a page to backing store!
     }
 
-    cout << "  [evict]   page_out FAILED → no pages available to evict\n";
+    // cout << "  [evict]   page_out FAILED → no pages available to evict\n";
     return false;   // Nothing to evict
   }
 
