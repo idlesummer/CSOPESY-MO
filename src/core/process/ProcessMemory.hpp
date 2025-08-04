@@ -1,13 +1,15 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/memory/MemoryView.hpp"
 #include "types.hpp"
 
 
 class ProcessMemory { 
   public:
   
-  ProcessMemory():
-    symbol_table (umap<str,uint>()) {}
+  ProcessMemory(MemoryView& view):
+    symbol_table (umap<str,uint>()),  // TODO: docs
+    view         (view) {}            // TODO: docs
 
   /** Memory mutators */
   void set(str key, uint value) {
@@ -32,4 +34,5 @@ class ProcessMemory {
 
   // ------ Instance variables ------
   umap<str,uint> symbol_table;
+  MemoryView& view;
 };

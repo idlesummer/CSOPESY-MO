@@ -2,10 +2,9 @@
 
 int main() {
   auto mm = MemoryManager();
-  mm.init(128, 64);       // 2 physical frames (64 words each)
-  mm.alloc(1, 192);       // 3 virtual pages (64 * 3 = 192)
+  mm.init(128, 64);                     // 2 physical frames (64 words each)
 
-  auto vm = mm.memory_view_of(1);
+  auto vm = mm.memory_view_of(1, 192u); // 3 virtual pages (64 * 3 = 192)
 
   auto print_read = [](str label, int val, bool vio, bool fault) {
     cout << format("  {:<28} | value = {:<5} | violation = {:<5} | fault = {:<5}\n\n",

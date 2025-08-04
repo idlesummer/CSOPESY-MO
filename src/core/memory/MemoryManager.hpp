@@ -25,18 +25,15 @@ class MemoryManager {
     data.page_table_map.clear();
   }
 
-  auto alloc(uint pid, uint bytes_needed) -> bool {
-    auto pages_needed = (bytes_needed + data.page_size - 1) / data.page_size;
-    auto page_table = PageTable();
+  auto memory_view_of(uint pid, uint bytes_needed=64u) -> MemoryView {
+    // Enforce minimum size of 64 bytes (symbol table)
+    if (bytes_needed < 64u)
+      bytes_needed = 64u;
 
-    for (auto page_num=0; page_num < pages_needed; ++page_num)
-      page_table.add(page_num, PageEntry());
+    // Auto-allocate if not yet allocated
+    if (!data.page_table_map.contains(pid))
+      alloc(pid, bytes_needed);  // Auto-alloc with minimum default
 
-    data.page_table_map[pid] = move(page_table);
-    return true;
-  }
-
-  auto memory_view_of(uint pid) -> MemoryView {
     return MemoryView(pid, data, [this](uint pid, uint page_num) {
       return this->page_in(pid, page_num);
     });
@@ -47,6 +44,17 @@ class MemoryManager {
   
   // ------ Internal helpers ------
   private:
+
+  auto alloc(uint pid, uint bytes_needed) -> bool {
+    auto pages_needed = (bytes_needed + data.page_size - 1) / data.page_size;
+    auto page_table = PageTable();
+
+    for (auto page_num=0; page_num < pages_needed; ++page_num)
+      page_table.add(page_num, PageEntry());
+
+    data.page_table_map[pid] = move(page_table);
+    return true;
+  }
 
   /** Fills the given frame in memory using the provided filler function. */
   void fill_frame(uint frame_num, func<uint(uint)> filler) {

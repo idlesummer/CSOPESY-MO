@@ -100,13 +100,25 @@ class Scheduler {
 
   /** @brief Helper that generates user and scheduler-enqueued processes. */
   void generate_processes() {
-    auto make_process = [&](uint pid, str name="") {
+    auto make_process = [&](uint pid, str name = "") {
+      auto& config = data.config;
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto min = data.config.getu("min-ins");
-      auto max = data.config.getu("max-ins");
-      auto size = Rand::num(min, max);
 
-      data.add_process(Process(pid, move(pname), size));
+      // === Generate instruction count
+      auto min_ins = config.getu("min-ins");
+      auto max_ins = config.getu("max-ins");
+      auto ins_size = Rand::num(min_ins, max_ins);
+
+      // === Generate memory size for process (clamped to ≥64 automatically)
+      auto min_mem = config.getu("min-mem-per-proc");
+      auto max_mem = config.getu("max-mem-per-proc");
+      auto mem_size = Rand::num(min_mem, max_mem);
+
+      // === Auto-alloc and get view (failsafe inside memory_view_of)
+      auto view = data.memory.memory_view_of(pid, mem_size);
+
+      // === Add to process table and ready queue
+      data.add_process(Process(pid, move(pname), ins_size, view));
       data.rqueue.push(pid);
     };
 

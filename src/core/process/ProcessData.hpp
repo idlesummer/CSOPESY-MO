@@ -1,6 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
+#include "core/memory/MemoryView.hpp"
 #include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessControl.hpp"
@@ -18,15 +19,15 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, vec<Instruction> script): 
+  ProcessData(uint id, str name, vec<Instruction> script, MemoryView& view): 
     id      (id),                     // Unique process ID
     name    (move(name)),             // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),             // Output logs collected from PRINT instructions
     core_id (0u),                     // ID of the core this process is assigned to (0 if unassigned)
     stime   (Clock::now()),           // Timestamp of when the process was created
+    memory  (ProcessMemory(view)),        // TODO: docs
     program (ProcessProgram(script)), // List of instructions and execution context
-    control (ProcessControl()),       // Sleep controller of the process
-    memory  (ProcessMemory()) {}      // Key-value variable store (e.g. for DECLARE, ADD, etc.)
+    control (ProcessControl()) {}     // Sleep controller of the process
 
   /** @brief Append a log message (used for PRINT instructions) */
   void log(str line) { logs.push_back(move(line)); }
@@ -37,7 +38,7 @@ class ProcessData {
   vec<str> logs;         
   uint core_id;       
   Time stime;        
+  ProcessMemory memory;   
   ProcessProgram program; 
   ProcessControl control; 
-  ProcessMemory memory;   
 };
