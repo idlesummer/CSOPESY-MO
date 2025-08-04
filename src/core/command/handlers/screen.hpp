@@ -144,8 +144,8 @@ auto make_screen() -> CommandHandler {
         // }
 
 
-        auto view = scheduler.data.memory.create_memory_view_for(0, mem_size); // - added this - raine
-        auto process = Process(0, name, 10, move(view)); // - added this - raine
+        // auto view = scheduler.data.memory.create_memory_view_for(0, mem_size); // - added this - raine
+        // auto process = Process(0, name, 10, move(view)); // - added this - raine
 
         cout << format("Waiting for process creation: {}", name);
 
