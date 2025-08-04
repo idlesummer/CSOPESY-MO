@@ -18,6 +18,7 @@ auto make_exit() -> CommandHandler {
         return void(shell.stop());
 
       screen.switch_to_main();
+      system("cls");
       cout << shell.banner.get();
     });
 }
