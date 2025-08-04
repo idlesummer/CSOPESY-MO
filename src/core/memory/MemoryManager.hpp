@@ -11,10 +11,10 @@ class MemoryManager {
   MemoryManager():
     data (MemoryManagerData()) {}
 
-  void init(uint capacity, uint page_size) {    
+  void init(uint memory_capacity, uint page_size) {    
     data.page_size = page_size;
-    data.frame_count = capacity / page_size;
-    data.memory = vec<uint>(capacity, 0);
+    data.frame_count = memory_capacity / page_size;
+    data.memory = vec<uint>(memory_capacity, 0);
   
     // Reset and repopulate the free frame list
     data.free_frames.clear(); 

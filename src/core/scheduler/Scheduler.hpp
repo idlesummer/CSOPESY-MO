@@ -61,9 +61,9 @@ class Scheduler {
   void set_config(Config config) {
     
     // Initialize memory manager
-    // auto mem_capacity = config.getu("max-overall-mem");
-    // auto page_size = config.getu("mem-per-frame");
-    // data.memory.init(mem_capacity, page_size);
+    auto memory_capacity = config.getu("max-overall-mem");
+    auto page_size = config.getu("mem-per-frame");
+    data.memory.init(memory_capacity, page_size);
     
     // Initialize CPU cores
     strategy = get_scheduler_strategy(config.gets("scheduler"));
