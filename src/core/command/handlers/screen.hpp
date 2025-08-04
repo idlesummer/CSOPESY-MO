@@ -42,11 +42,6 @@ auto make_screen() -> CommandHandler {
     );
   };
 
-  auto process_exists = [](auto& name, auto& scheduler) -> bool {
-    auto& data = scheduler.data;
-    return data.has_process(name);
-  };
-
   auto process_queued = [](auto& name, auto& scheduler) -> bool {
     for (uint i = 0; i < 30; ++i) {
       if (scheduler.data.has_process(name))
@@ -69,6 +64,7 @@ auto make_screen() -> CommandHandler {
     .add_flag("-r")
     .add_flag("-ls")
     .add_flag("-c")
+    .add_flag("-v")
     
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
@@ -124,21 +120,29 @@ auto make_screen() -> CommandHandler {
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        
-        if (command.args.empty()) 
-          return void(cout << "Missing process name.\n");
+        if (command.args.size() < 2)
+          return void(cout << "[screen] Usage: screen -s <name> <memory>\n");
 
-        auto& name = command.args[0];
-        if (process_exists(name, scheduler))
-          return void(cout << format("Process '{}' already exists\n", name));
+        auto& name   = command.args[0];
+        auto& memstr = command.args[1];
 
-        scheduler.generate_process(name);
-        cout << format("Waiting for process creation: {}", name);
+        if (scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' already exists.\n", name));
 
-        // Wait until process queues
+        // Parse memory argument
+        uint memory = stoui(memstr);
+        if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
+          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+
+        // Generate the process
+        scheduler.generate_process(name, memory);
+        cout << format("[screen] Waiting for process creation: {}...", name);
+
+        // Wait until queued
         if (!process_queued(name, scheduler))
-          return void(cout << "\nTimed out.\n");
+          return void(cout << "\n[screen] Timed out.\n");
 
+        // Retrieve process info
         auto& process = scheduler.data.get_process(name);
         auto pid = process.data.id;
 
@@ -148,7 +152,7 @@ auto make_screen() -> CommandHandler {
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (auto& log: process.data.logs)
+        for (auto& log : process.data.logs)
           cout << format("  {}\n", log);
 
         auto& program = process.data.program;
@@ -184,15 +188,80 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-        /** 
-         * Hi Raine! Here's the new changes:
-         * 
-         * @c command.input  -- raw input (without the command name)
-         * @c command.tokens -- list of all args and flags in order of the input
-         * @c command.flags  -- set of tokens with a dash `-` at the beginning
-         * @c command.args   -- list of arguments
-         * 
-         */ 
+        if (command.args.size() < 3)
+          return void(cout << "[screen] Usage: screen -c <name> <memory> \"<instruction string>\"\n");
+
+        auto& name = command.args[0];
+        auto size = stoui(command.args[1]);
+        auto& inst_str = command.args[2];
+
+        // Check if process already exists
+        if (scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' already exists.\n", name));
+
+        // Validate memory size
+        if (size < 64 || size > 65536 || (size & (size - 1)) != 0)
+          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+
+        // Tokenize instruction string by semicolons
+        auto token_lines = vec<vec<str>>();
+        auto lines = re::split(inst_str, std::regex(";"));
+        for (auto& line : lines) {
+          if (!line.empty())
+            token_lines.push_back(re::tokenize(re::strip(line)));
+        }
+
+        // Enforce instruction count limit
+        if (token_lines.empty() || token_lines.size() > 50)
+          return void(cout << "[screen] Instruction count must be between 1 and 50.\n");
+
+        // Parse and validate instruction script
+        auto& interpreter = InstructionInterpreter::get();
+        auto script = interpreter.parse_script(token_lines);
+        if (script.empty())
+          return void(cout << "[screen] Failed to parse instruction script.\n");
+
+        // Create process and memory view
+        auto view = scheduler.data.memory.create_memory_view_for(0, size); // pid = 0 (will be set)
+        auto process = Process(0, name, move(view), move(script));
+        auto pid = scheduler.data.new_pid();
+        process.data.id = pid;
+        scheduler.data.add_process(move(process));
+        scheduler.data.rqueue.push(pid);
+
+        // Attach to screen
+        screen.switch_to(pid);
+
+        // Confirm to user
+        auto& proc = scheduler.data.get_process(pid);
+        cout << format("[screen] Process '{}' created with PID {}.\n", name, pid);
+        cout << "Logs:\n";
+        for (auto& log : proc.data.logs)
+          cout << format("  {}\n", log);
+        cout << format("Current instruction line: {}\n", proc.data.program.ip);
+        cout << format("Lines of code: {}\n", proc.data.program.size());
+      }
+
+      else if (command.flags.contains("-v")) {
+        if (command.args.empty())
+          return void(cout << "[screen] Usage: screen -v <process_name>\n");
+
+        auto& name = command.args[0];
+
+        // Check if process exists
+        if (!scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' not found.\n", name));
+
+        auto& process = scheduler.data.get_process(name);
+        auto& program = process.data.program;
+        auto& memory  = process.data.memory;
+
+        cout << format("[screen] Inspecting process '{}'\n", name);
+        cout << "────────────────────────────────────────────\n";
+        cout << "Context Stack:\n" << program.render_context() << '\n';
+        cout << "Instruction List:\n" << program.render_script() << '\n';
+        cout << "Symbol Table:\n" << memory.render_symbol_table();
+        cout << "────────────────────────────────────────────\n";
       }
     });
 }

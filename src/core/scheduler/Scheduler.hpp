@@ -18,14 +18,14 @@ class Scheduler {
   public:
 
   Scheduler():
-    names      (vec<str>()),            // Deferred generation list for user-inserted process table
+    spawn_reqs (vec<tup<str,uint>>()),  // Deferred generation list for user-inserted process table
     ticks      (0u),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
   /** Adds a user-named process to the pending generation vec<str>. */
-  void generate_process(str name) { names.push_back(move(name)); }
+  void generate_process(str name, uint size) { spawn_reqs.emplace_back(move(name), size); }
 
   /** Enables or disables automatic process generation each tick. */
   void generate(bool flag) { generating = flag; }
@@ -79,7 +79,7 @@ class Scheduler {
 
   // ------ Instance variables ------
 
-  vec<str> names;                
+  vec<tup<str,uint>> spawn_reqs;                
   uint ticks;             
   bool generating;    
   SchedulerData data;         
@@ -97,7 +97,7 @@ class Scheduler {
 
   /** @brief Helper that generates user and scheduler-enqueued processes. */
   void generate_processes() {
-    auto make_process = [&](uint pid, str name = "") {
+    auto make_process = [&](uint pid, str name="", uint size=0u) {
       auto& config = data.config;
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
 
@@ -109,7 +109,7 @@ class Scheduler {
       // === Generate memory size for process (clamped to ≥64 automatically)
       auto min_mem = config.getu("min-mem-per-proc");
       auto max_mem = config.getu("max-mem-per-proc");
-      auto mem_size = Rand::num(min_mem, max_mem);
+      auto mem_size = size == 0 ? Rand::num(min_mem, max_mem) : size;
 
       // === Auto-alloc and get view (failsafe inside create_memory_view_for)
       auto view = data.memory.create_memory_view_for(pid, mem_size);
@@ -119,9 +119,9 @@ class Scheduler {
       data.rqueue.push(pid);
     };
 
-    for (auto& name: names)
-      make_process(data.new_pid(), move(name));
-    names.clear();
+    for (auto& [name, size]: spawn_reqs)
+      make_process(data.new_pid(), move(name), size);
+    spawn_reqs.clear();
 
     if (generating && interval_has_elapsed())
       make_process(data.new_pid());
