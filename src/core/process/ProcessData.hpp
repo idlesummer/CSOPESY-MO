@@ -2,7 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/memory/MemoryView.hpp"
-#include "ProcessMemory2.hpp"
+#include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessControl.hpp"
 #include "types.hpp"

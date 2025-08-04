@@ -62,9 +62,10 @@ auto make_script() -> CommandHandler {
       cout << "[script] Symbol Table:\n";
       cout << memory.render_symbol_table() << '\n';
 
-      if (program.finished()) {
+      if (program.finished())
         cout << "[script] Already finished.\n";
-      } else {
+
+      else {
         process.step();
         cout << "[script] Stepped once.\n";
       }
