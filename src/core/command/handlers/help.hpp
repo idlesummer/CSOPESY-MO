@@ -13,15 +13,11 @@ auto make_help() -> CommandHandler {
     .set_desc("Provides information of how the commands work")
     .set_min_args(0)
     .set_max_args(0)
+    .set_disabled(false)
     
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
-
-      auto config = shell.scheduler.data.config;
-      if (!config.getb("initialized"))
-        return "Scheduler not initialized. Please run 'initialize' first.";
-
       return nullopt;
     })
 
@@ -30,7 +26,8 @@ auto make_help() -> CommandHandler {
 
       for (auto& [name, handler] : shell.interpreter.handlers) {
         if (handler.disabled) continue;
-        cout << format("  \033[1m{:<18}\033[0m {}\n", name, handler.desc);
+        // cout << format("  \033[1m{:<18}\033[0m {}\n", name, handler.desc);
+        cout << RichText(format("  [bold]{:<18}[/] {}\n", name, handler.desc));
       }
 
       cout << "\nUse the command name directly to invoke it. Example: `exit`\n";
