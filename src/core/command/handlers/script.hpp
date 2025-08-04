@@ -14,50 +14,64 @@ auto make_script() -> CommandHandler {
       auto& interpreter = InstructionInterpreter::get();
       auto& storage     = shell.storage;
 
-      // ───────────────────────────────────────
-      // Hardcoded tokenized script
-      // ───────────────────────────────────────
-      auto token_lines = vec<vec<str>>{
-        { "DECLARE", "x", "10" },
-        { "ADD",     "x", "1",  "2" },
-        { "PRINT",   "x" },
-        { "DECLARE", "y", "0xA" },      // 10 in hex
-        { "ADD",     "y", "0x1", "x" }, // y = 1 + x
-        { "PRINT",   "y" },
-      };
+      // Reset script process
+      if (command.flags.contains("-r")) {
+        storage.remove("script.process");
+        cout << "[script] Script process reset.\n";
+        return;
+      }
 
       // ───────────────────────────────────────
-      // Parse the instruction script
+      // Create and store script process if not yet existing
       // ───────────────────────────────────────
-      auto script = interpreter.parse_script(token_lines);
-      if (script.empty())
-        return void(cout << "[script] Failed to parse script.\n");
+      if (!storage.has("script.process")) {
+        auto token_lines = vec<vec<str>>{
+          { "DECLARE", "x", "0xF"       },
+          { "DECLARE", "y", "10"        },
+          { "ADD",     "sum", "x", "y"  },
+          { "PRINT",   "sum"            },
+          { "DECLARE", "hexnum", "0x1F4" },
+          { "ADD",     "sum2", "hexnum", "0x10" },
+          { "PRINT",   "sum2" }
+        };
+
+        auto script = interpreter.parse_script(token_lines);
+        if (script.empty()) {
+          cout << "[script] Failed to parse script.\n";
+          return;
+        }
+
+        auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
+        auto process = Process(0, "script", move(view), move(script));
+        storage.set("script.process", move(process));
+
+        cout << "[script] Script process created.\n";
+      }
 
       // ───────────────────────────────────────
-      // Create and initialize dummy process
+      // Access and step the process
       // ───────────────────────────────────────
-      auto view    = shell.scheduler.data.memory.create_memory_view_for(0, 64);
-      auto process = Process(0, "script", move(view), move(script));
+      auto& process = storage.get<Process>("script.process");
       auto& program = process.data.program;
+      auto& memory  = process.data.memory;
 
-      // ───────────────────────────────────────
-      // Display the parsed script
-      // ───────────────────────────────────────
-      cout << "[script] Instructions to execute:\n";
+      cout << "[script] ================================\n";
+      cout << "[script] Script instructions:\n";
       cout << program.render_script() << '\n';
 
-      // ───────────────────────────────────────
-      // Step through and execute the script
-      // ───────────────────────────────────────
-      cout << "[script] Execution output:\n";
-      cout << "────────────────────────────────────────\n";
+      cout << "[script] Symbol Table:\n";
+      cout << memory.render_symbol_table() << '\n';
 
-      while (!program.finished())
+      if (program.finished()) {
+        cout << "[script] Already finished.\n";
+      } else {
         process.step();
+        cout << "[script] Stepped once.\n";
+      }
 
       for (auto& log : process.data.logs)
         cout << format("{}\n", log);
-      cout << "────────────────────────────────────────\n";
-      cout << "[script] Script execution complete.\n";
+
+      cout << "[script] ================================\n";
     });
 }
