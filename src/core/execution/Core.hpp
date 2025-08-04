@@ -104,14 +104,14 @@ class Core {
       ++job_ticks;
 
       // If the process has finished all its instructions, mark for release
-      if (job->data.program.finished())
+      if (process.data.program.finished())
         can_release = true;
 
       // Mark release if process is sleeping
-      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS!!!
         can_release = true;
 
-      // If the process has finished all its instructions, mark for release
+      // Release if the preemption logic says so
       else if (preempt && preempt(*this))
         can_release = true;
 

@@ -25,7 +25,7 @@ class MemoryManager {
     data.page_table_map.clear();
   }
 
-  auto memory_view_of(uint pid, uint bytes_needed=64u) -> MemoryView {
+  auto create_memory_view_for(uint pid, uint bytes_needed=64u) -> MemoryView {
     // Enforce minimum size of 64 bytes (symbol table)
     if (bytes_needed < 64u)
       bytes_needed = 64u;

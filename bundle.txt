@@ -3296,10 +3296,10 @@ class CommandRegistry:
         value = int(args[1])
         print(f"[exec] WRITE-RAW vaddr={hex(vaddr)} = {value}")
 
-        is_violation, is_pagefaulted = self.process.memory.view.write(vaddr, value)
+        is_violation, is_page_fault = self.process.memory.view.write(vaddr, value)
         if is_violation:
             print("[write-raw] Invalid address (violation)")
-        elif is_pagefaulted:
+        elif is_page_fault:
             print("[write-raw] Page fault occurred â€” retry later")
         else:
             print("[write-raw] Write successful")
@@ -3314,11 +3314,11 @@ class CommandRegistry:
     def _read(self, args):
         var = args[0]
         print(f"[exec] READ {var}")
-        value, is_violation, is_pagefaulted = self.process.memory.get(var)
+        value, is_violation, is_page_fault = self.process.memory.get(var)
 
         if is_violation:
             print(f"[read] '{var}' is undeclared â€” cannot read")
-        elif is_pagefaulted:
+        elif is_page_fault:
             print("[read] Page fault occurred â€” retry later")
 
     def _declare(self, args):
@@ -3449,7 +3449,7 @@ class MemoryManager {
     return true;
   }
 
-  auto memory_view_of(uint pid) -> MemoryView {
+  auto create_memory_view_for(uint pid) -> MemoryView {
     return MemoryView(pid, data, [this](uint pid, uint page_num) {
       return this->page_in(pid, page_num);
     });
@@ -3919,10 +3919,10 @@ class MemoryView:
             vaddr (int): The starting virtual address (2 bytes will be read).
 
         Returns:
-            (value, is_violation, is_pagefaulted)
+            (value, is_violation, is_page_fault)
             - value: The read value (0 if failed)
             - is_violation: True if the address was invalid (out-of-bounds or unmapped)
-            - is_pagefaulted: True if a page fault occurred during read
+            - is_page_fault: True if a page fault occurred during read
         """
         
         if not self._owns_vaddr(vaddr, num_bytes=2):
@@ -3948,9 +3948,9 @@ class MemoryView:
             value (int): 2-byte unsigned integer (0â€“65535)
 
         Returns:
-            (is_violation, is_pagefaulted)
+            (is_violation, is_page_fault)
             - is_violation: True if write was to an invalid address
-            - is_pagefaulted: True if a page fault occurred during write
+            - is_page_fault: True if a page fault occurred during write
         """
         if not self._owns_vaddr(vaddr, num_bytes=2):
             return True, False  # Access violation
@@ -4118,7 +4118,7 @@ class ProcessMemory:
 
         Returns:
             is_violation (bool): True if address assignment was invalid (e.g. symbol table full)
-            is_pagefaulted (bool): True if the write triggered a page fault
+            is_page_fault (bool): True if the write triggered a page fault
         """
         if var in self.symbol_table:
             addr = self.symbol_table[var]
@@ -4133,14 +4133,14 @@ class ProcessMemory:
             print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
             return True, False  # Violation, but no page fault
 
-        return self.view.write(addr, value) # Returns (is_violation, is_pagefaulted)
+        return self.view.write(addr, value) # Returns (is_violation, is_page_fault)
     
     def get(self, var) -> tuple[int, bool, bool]:
         """
         Returns:
             value (int): the variable's value or 0
             is_violation (bool): True if address was invalid (e.g. undeclared or out of bounds)
-            is_pagefaulted (bool): True if a page fault occurred
+            is_page_fault (bool): True if a page fault occurred
         """
         if var not in self.symbol_table:
             print(f"[ProcessMemory.get()] '{var}' not declared")
@@ -4149,7 +4149,7 @@ class ProcessMemory:
         addr = self.symbol_table[var]
         print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
         
-        return self.view.read(addr) # Returns (value, is_violation, is_pagefaulted)
+        return self.view.read(addr) # Returns (value, is_violation, is_page_fault)
 
 ------------------------------
  FILE:  MemoryManagerData.hpp
@@ -4204,10 +4204,10 @@ class MemoryView {
 
   /**
    * @brief Reads a 2-byte value from virtual memory.
-   * @return (value, is_violation, is_pagefaulted)
+   * @return (value, is_violation, is_page_fault)
    *         - value: the uint16 read from memory (or 0 if failed)
    *         - is_violation: true if address is invalid or unmapped
-   *         - is_pagefaulted: true if a page fault occurred
+   *         - is_page_fault: true if a page fault occurred
    */
   auto read(uint vaddr) -> tup<int, bool, bool> {
     if (!has_pages_for(vaddr, 2))
@@ -4225,9 +4225,9 @@ class MemoryView {
     
   /**
    * @brief Writes a 2-byte value to virtual memory.
-   * @return (is_violation, is_pagefaulted)
+   * @return (is_violation, is_page_fault)
    *        - is_violation: true if address is invalid or unmapped
-   *        - is_pagefaulted: true if a page fault occurred
+   *        - is_page_fault: true if a page fault occurred
    */
   auto write(uint vaddr, uint value) -> tup<bool, bool> {
     if (!has_pages_for(vaddr, 2))

@@ -46,10 +46,10 @@ class CommandRegistry:
         value = int(args[1])
         print(f"[exec] WRITE-RAW vaddr={hex(vaddr)} = {value}")
 
-        is_violation, is_pagefaulted = self.process.memory.view.write(vaddr, value)
+        is_violation, is_page_fault = self.process.memory.view.write(vaddr, value)
         if is_violation:
             print("[write-raw] Invalid address (violation)")
-        elif is_pagefaulted:
+        elif is_page_fault:
             print("[write-raw] Page fault occurred — retry later")
         else:
             print("[write-raw] Write successful")
@@ -64,11 +64,11 @@ class CommandRegistry:
     def _read(self, args):
         var = args[0]
         print(f"[exec] READ {var}")
-        value, is_violation, is_pagefaulted = self.process.memory.get(var)
+        value, is_violation, is_page_fault = self.process.memory.get(var)
 
         if is_violation:
             print(f"[read] '{var}' is undeclared — cannot read")
-        elif is_pagefaulted:
+        elif is_page_fault:
             print("[read] Page fault occurred — retry later")
 
     def _declare(self, args):

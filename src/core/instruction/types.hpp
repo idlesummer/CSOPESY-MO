@@ -69,11 +69,10 @@ class Signature {
   vec<Arg> args;
 
   // ------ Constants ------
-  inline static  auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
-  inline static  auto vars = vec<str>{ "x", "y", "z" };
+  inline static auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
+  inline static auto vars = vec<str>{ "_x", "_y", "_z" };
 
   // ------ Internal Helpers ------
-  
   /** @brief Adds a generic argument of given type and optional bounds. */
   auto add(str type, uint min=0, uint max=0) -> Signature& { 
     return args.emplace_back(move(type), min, max), *this; 

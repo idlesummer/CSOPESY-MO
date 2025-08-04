@@ -12,13 +12,13 @@ class Process {
   inline static auto& interpreter = InstructionInterpreter::get();
 
   /** @brief Creates a process with a random instruction script. */
-  Process(uint pid, str name, uint size, MemoryView& view): 
+  Process(uint pid, str name, uint size, MemoryView view): 
     data(           // Data container of process
       ProcessData(
         pid,
         move(name),
         move(interpreter.generate_script(size)),
-        view
+        move(view)
       )
     ) {}
 

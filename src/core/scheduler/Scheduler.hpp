@@ -41,9 +41,6 @@ class Scheduler {
       // Release finished or preempted cores
       release_processes();
       
-      /** TODO: Clean/update paging info. */ 
-      // memory.tick(data);
-      
       // Tick sleeping processes in the waiting queue
       tick_sleeping_processes();
 
@@ -114,11 +111,11 @@ class Scheduler {
       auto max_mem = config.getu("max-mem-per-proc");
       auto mem_size = Rand::num(min_mem, max_mem);
 
-      // === Auto-alloc and get view (failsafe inside memory_view_of)
-      auto view = data.memory.memory_view_of(pid, mem_size);
+      // === Auto-alloc and get view (failsafe inside create_memory_view_for)
+      auto view = data.memory.create_memory_view_for(pid, mem_size);
 
       // === Add to process table and ready queue
-      data.add_process(Process(pid, move(pname), ins_size, view));
+      data.add_process(Process(pid, move(pname), ins_size, move(view)));
       data.rqueue.push(pid);
     };
 

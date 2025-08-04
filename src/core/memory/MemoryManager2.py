@@ -84,10 +84,10 @@ class MemoryView:
             vaddr (int): The starting virtual address (2 bytes will be read).
 
         Returns:
-            (value, is_violation, is_pagefaulted)
+            (value, is_violation, is_page_fault)
             - value: The read value (0 if failed)
             - is_violation: True if the address was invalid (out-of-bounds or unmapped)
-            - is_pagefaulted: True if a page fault occurred during read
+            - is_page_fault: True if a page fault occurred during read
         """
         
         if not self._owns_vaddr(vaddr, num_bytes=2):
@@ -113,9 +113,9 @@ class MemoryView:
             value (int): 2-byte unsigned integer (0–65535)
 
         Returns:
-            (is_violation, is_pagefaulted)
+            (is_violation, is_page_fault)
             - is_violation: True if write was to an invalid address
-            - is_pagefaulted: True if a page fault occurred during write
+            - is_page_fault: True if a page fault occurred during write
         """
         if not self._owns_vaddr(vaddr, num_bytes=2):
             return True, False  # Access violation
@@ -283,7 +283,7 @@ class ProcessMemory:
 
         Returns:
             is_violation (bool): True if address assignment was invalid (e.g. symbol table full)
-            is_pagefaulted (bool): True if the write triggered a page fault
+            is_page_fault (bool): True if the write triggered a page fault
         """
         if var in self.symbol_table:
             addr = self.symbol_table[var]
@@ -298,14 +298,14 @@ class ProcessMemory:
             print(f"[ProcessMemory.set()] DECLARE failed: symbol table full → skipping '{var}'")
             return True, False  # Violation, but no page fault
 
-        return self.view.write(addr, value) # Returns (is_violation, is_pagefaulted)
+        return self.view.write(addr, value) # Returns (is_violation, is_page_fault)
     
     def get(self, var) -> tuple[int, bool, bool]:
         """
         Returns:
             value (int): the variable's value or 0
             is_violation (bool): True if address was invalid (e.g. undeclared or out of bounds)
-            is_pagefaulted (bool): True if a page fault occurred
+            is_page_fault (bool): True if a page fault occurred
         """
         if var not in self.symbol_table:
             print(f"[ProcessMemory.get()] '{var}' not declared")
@@ -314,4 +314,4 @@ class ProcessMemory:
         addr = self.symbol_table[var]
         print(f"[ProcessMemory.get()] symbol_table['{var}'] → vaddr={hex(addr)}")
         
-        return self.view.read(addr) # Returns (value, is_violation, is_pagefaulted)
+        return self.view.read(addr) # Returns (value, is_violation, is_page_fault)

@@ -14,10 +14,10 @@ class MemoryView {
 
   /**
    * @brief Reads a 2-byte value from virtual memory.
-   * @return (value, is_violation, is_pagefaulted)
+   * @return (value, is_violation, is_page_fault)
    *         - value: the uint16 read from memory (or 0 if failed)
    *         - is_violation: true if address is invalid or unmapped
-   *         - is_pagefaulted: true if a page fault occurred
+   *         - is_page_fault: true if a page fault occurred
    */
   auto read(uint vaddr) -> tup<int, bool, bool> {
     if (!has_pages_for(vaddr, 2))
@@ -35,9 +35,9 @@ class MemoryView {
     
   /**
    * @brief Writes a 2-byte value to virtual memory.
-   * @return (is_violation, is_pagefaulted)
+   * @return (is_violation, is_page_fault)
    *        - is_violation: true if address is invalid or unmapped
-   *        - is_pagefaulted: true if a page fault occurred
+   *        - is_page_fault: true if a page fault occurred
    */
   auto write(uint vaddr, uint value) -> tup<bool, bool> {
     if (!has_pages_for(vaddr, 2))
