@@ -12,7 +12,7 @@ class CommandParser {
 
   /** @brief Parses a line into a Command object (name, args, flags, etc.). */
   static auto parse(str& line) -> Command {
-    auto tokens = tokenize(line);
+    auto tokens = re::tokenize(line);
     if (tokens.empty()) return {};
 
     auto cmd = Command();
@@ -34,20 +34,5 @@ class CommandParser {
     auto pos = line.find_first_not_of(' ', cmd.name.size());
     cmd.input = (pos != npos) ? line.substr(pos) : "";
     return cmd;
-  }
-
-  // ------ Internal logic ------
-
-  private:
-
-  /** @brief Splits a line into space-delimited tokens. */
-  static auto tokenize(str& line) -> vec<str> {
-    if (line.empty()) return {};
-    auto stream = isstream(line);
-    auto tokens = vec<str>();
-
-    for (str token; stream >> token; )
-      tokens.push_back(move(token));
-    return tokens;
   }
 };
