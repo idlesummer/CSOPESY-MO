@@ -23,12 +23,13 @@ auto make_add() -> InstructionHandler {
     .add_signature(Signature().Var().Uint16().Uint16())
     
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
       auto& memory = process.memory;
       auto& args = inst.args;
 
       auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
       auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
-      
+
       // "Variables are automatically declared with a value of 0 
       // if they have not yet been declared beforehand."
       if (lundeclared)
@@ -41,10 +42,12 @@ auto make_add() -> InstructionHandler {
       auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], sum);
 
       // Optional logs for debugging or trace output
-      if (lviolation || rviolation || is_violation)
+      if (lfault || rfault || is_page_fault) {
+        process.log("[ADD] Unable to resolve page fault on first try.");
+        program.set_ip(program.ip);
+      }
+      else if (lviolation || rviolation || is_violation)
         process.log("[ADD] Violation during operand or result write.");
-      else if (lfault || rfault || is_page_fault)
-        process.log("[ADD] Page fault triggered.");
       else if (is_symbol_limit)
         process.log("[ADD] Symbol table full — could not DECLARE target variable.");
     });
