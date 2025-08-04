@@ -6,6 +6,9 @@
 #include "core/command/CommandHandler.hpp"
 #include "core/scheduler/SchedulerData.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/InstructionsParser.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+
 
 /**
 ──────────────────────────────────────────────────────────
@@ -24,11 +27,6 @@ Finished processes:
   p10        (07/26/2025 03:49:48AM)   Finished      5 / 5
 ──────────────────────────────────────────────────────────
  */
-
-//  inline bool is_power_of_two(int n) {
-//     return n > 0 && (n & (n - 1)) == 0;
-//  };
-
 
 auto make_screen() -> CommandHandler {
 
@@ -61,9 +59,9 @@ auto make_screen() -> CommandHandler {
     return false;
   };
 
-  auto is_power_of_two = [](int n) -> bool { 
-    return n > 0 && (n & (n - 1)) == 0; 
-  };
+  // auto is_power_of_two = [](int n) -> bool { 
+  //   return n > 0 && (n & (n - 1)) == 0; 
+  // };
 
   return CommandHandler()
     .set_name("screen")
@@ -92,6 +90,7 @@ auto make_screen() -> CommandHandler {
     .set_execute([&](Command &command, Shell &shell) {
       auto& screen = shell.screen;
       auto& scheduler = shell.scheduler;
+      auto& interpreter = InstructionInterpreter::get(); // - added this - raine
 
       // === -ls: List screen info
       if (command.flags.contains("-ls")) {
@@ -130,24 +129,24 @@ auto make_screen() -> CommandHandler {
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
         auto& name = command.args[0];
-        auto& memory_size = command.args[1]; // added memory size parameter
+        auto& memory_size = command.args[1]; // added memory size parameter - added this - raine
 
         if (command.args.empty()) 
           return void(cout << "Missing process name.\n");
 
-        auto& name = command.args[0];
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
-        int mem_size = stoi(memory_size);
+        unsigned int mem_size = stoul(memory_size); // - added this - raine
 
         // if (!is_power_of_two(mem_size) || mem_size < 64 || mem_size > 65536) {
         //   return void(cout << format("Invalid Memory allocation: {}. Must be power of 2 between 64 and 65536.\n"));
         // }
 
-        cout << format("=================={}==================", is_power_of_two(mem_size));
 
-        scheduler.generate_process(name);
+        auto view = scheduler.data.memory.create_memory_view_for(0, mem_size); // - added this - raine
+        auto process = Process(0, name, 10, move(view)); // - added this - raine
+
         cout << format("Waiting for process creation: {}", name);
 
         // Wait until process queues
@@ -213,42 +212,30 @@ auto make_screen() -> CommandHandler {
         // screen -c <process_name> <process_memory_size> "<instructions>"
         // It needs to be able to identify the instructions and be stored as the identified instrcution
 
-        //  screen -c process2 256 "DECLARE varA 10; DECLARE varB 5; ADD varA varA varB; WRITE 0x500 varA; READ varC 0x500; PRINT(\"Result: \" + varC)"
+        //  screen -c process2 256 "DECLARE varA 10; DECLARE varB 5; ADD varA varA varB; WRITE 0x500 varA; READ varC 0x500; PRINT \"Result: \" varC"
 
-
-        str process_name = command.args[0];
-        str memory_size = command.args[1];
-
-        size_t start = command.input.find('"');
-        size_t end = command.input.rfind('"');
-
-        if (start != std::string::npos && end != std::string::npos && end > start) {
-          return void(cout << format("Instruction string must be enclosed in double quotes or INVALID FORMAT\n"));
-        }
-
-        std::string extracted = command.input.substr(start + 1, end - start + 1);
-        std::vector<std::string> result;
-        // sstream ss(extracted);
-        // std::string token;
-        // char delimiter = ';';
+        vec<str> tokens = re::tokenize(command.input);
         
-        // while (std::getline(ss, token, delimiter)) {
-        //   token.erase(token.begin(), std::find_if(token.begin(), token.end(), [](char c) { return !isspace(c); }));
-        //   token.erase(std::find_if(token.rbegin(), token.rend(), [](char c) { return !isspace(c); }).base(), token.end());
+        ParsedProcess parsed;
+        parsed.process_name = tokens[1];
+        parsed.memory_size = std::stoul(tokens[2]);
 
-        //   if (!token.empty()) {
-        //       result.push_back(token);
-        //   }
-        // }
+        auto result = re::split(tokens[3], ";");
 
+        cout << format("process_name:{}\n", parsed.process_name);
+        cout << format("memory_size:{}\n", parsed.memory_size);
 
-
-        // cout << format("process_name:{}\n", process_name);
-        // cout << format("memory_size:{}\n", memory_size);
-
-        // for (const auto& instr : result) {
-        //   cout << format("instruction: {}\n", instr);
-        // }
+        for (const auto& raw : result) {
+          Instruction instr = parse_instruction(raw);
+          parsed.program.push_back(instr);
+          
+          cout << format("opcode: {}\n", instr.opcode);
+          cout << "args: ";
+          for (const auto& arg : instr.args) {
+            cout << arg << ",";
+          }
+          cout << "\n"; 
+        }
       } 
   });
 }
