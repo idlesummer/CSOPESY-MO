@@ -1,6 +1,6 @@
 #pragma once
 #include "core/instruction/InstructionHandler.hpp"
-// #include "add.hpp"
+#include "add.hpp"
 #include "declare.hpp"
 #include "endfor.hpp"
 #include "for.hpp"
@@ -11,7 +11,7 @@
 
 auto get_instruction_handlers() -> vec<InstructionHandler> {
   return {
-    // make_add(),
+    make_add(),
     make_declare(),
     make_endfor(),
     make_for(),
