@@ -59,15 +59,19 @@ class Scheduler {
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
-    strategy = get_scheduler_strategy(config.gets("scheduler"));
-    auto core_size = config.getu("num-cpu");
-    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
-    auto delay = config.getu("delays-per-exec");
     
-    // Resizes number of cores (destroys old ones if any)
+    // Initialize memory manager
+    // auto mem_capacity = config.getu("max-overall-mem");
+    // auto page_size = config.getu("mem-per-frame");
+    // data.memory.init(mem_capacity, page_size);
+    
+    // Initialize CPU cores
+    strategy = get_scheduler_strategy(config.gets("scheduler"));
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto core_size = config.getu("num-cpu");
+    auto delay = config.getu("delays-per-exec");
     data.cores.init(core_size);
 
-    // Configure cores with the tick delay and preempt handler (if any)
     for (auto& ref: data.cores.get_all()) {
       auto& core = ref.get();
       core.init(delay, preempt_handler);
