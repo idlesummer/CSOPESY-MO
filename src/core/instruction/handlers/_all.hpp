@@ -6,7 +6,7 @@
 #include "for.hpp"
 #include "print.hpp"
 #include "sleep.hpp"
-// #include "subtract.hpp"
+#include "subtract.hpp"
 
 
 auto get_instruction_handlers() -> vec<InstructionHandler> {
@@ -17,6 +17,6 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
     make_for(),
     make_print(),
     make_sleep(),
-    // make_subtract(),
+    make_subtract(),
   };
 }

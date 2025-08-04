@@ -5,6 +5,18 @@
 #include "core/process/ProcessData.hpp"
 
 
+/**
+ * @brief Implements the SUBTRACT instruction.
+ * 
+ * Syntax: `SUBTRACT x y z` → `x = max(0, y - z)`
+ * - Resolves both operands (y and z) via resolve().
+ * - Clamps result to 0 (no negative values for uint16).
+ * - Stores the result in x via set().
+ * 
+ * Behavior:
+ * - If y or z is undeclared, declares them with 0.
+ * - Memory accesses may cause page faults or violations.
+ */
 auto make_subtract() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SUBTRACT")
@@ -13,9 +25,29 @@ auto make_subtract() -> InstructionHandler {
     .add_signature(Signature().Var().Uint16().Uint16())
 
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
       auto& memory = process.memory;
-      auto lhs = memory.get(inst.args[1]);
-      auto rhs = memory.resolve(inst.args[2]);
-      memory.set(inst.args[0], lhs > rhs ? lhs - rhs : 0);
+      auto& args = inst.args;
+
+      auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
+      auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
+
+      if (lundeclared)
+        memory.set(args[1], 0u);
+
+      if (rundeclared)
+        memory.set(args[2], 0u);
+
+      auto diff = (lval > rval) ? (lval - rval) : 0u;
+      auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], diff);
+
+      if (lfault || rfault || is_page_fault) {
+        process.log("[SUBTRACT] Unable to resolve page fault on first try.");
+        program.set_ip(program.ip); // Retry on next tick
+      }
+      else if (lviolation || rviolation || is_violation)
+        process.log("[SUBTRACT] Violation during operand or result write.");
+      else if (is_symbol_limit)
+        process.log("[SUBTRACT] Symbol table full — could not DECLARE target variable.");
     });
 }

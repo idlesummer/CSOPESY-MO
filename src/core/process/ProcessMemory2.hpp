@@ -96,6 +96,22 @@ class ProcessMemory {
     return get(token);
   }
 
+  /** @brief Renders a formatted view of the symbol table with virtual address and value. */
+  auto render_symbol_table() -> str {
+    if (symbol_table.empty())
+      return "  <empty>\n";
+    
+    auto out = osstream();
+    for (auto& [var, vaddr] : symbol_table) {
+      auto [value, violation, fault] = virtual_memory.read(vaddr);
+      out << format("  {:<6} → vaddr={:#06x} = {:<5}", var, vaddr, value);
+      if (violation) out << "  [VIOLATION]";
+      if (fault)     out << "  [PAGE FAULT]";
+      out << '\n';
+    }
+    return out.str();
+  }
+
   // ------ Member variables ------
   umap<str,uint> symbol_table;
   MemoryView virtual_memory;

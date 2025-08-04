@@ -36,34 +36,24 @@ auto make_demo() -> CommandHandler {
       // Access process
       auto& process = storage.get<Process>("demo.process");
       auto& program = process.data.program;
+      auto& memory = process.data.memory;
 
-      // Show context
-      cout << "[demo] Context Stack:\n" << program.render_context() << '\n';
-
-      // Show instruction list
-      cout << "[demo] Instruction List:\n" << program.render_script() << '\n';
-
-      // Show symbol table and their current values
-      cout << "[demo] Symbol Table:\n";
-      for (auto& [var, vaddr] : process.data.memory.symbol_table) {
-        auto [value, is_violation, is_page_fault] = process.data.memory.virtual_memory.read(vaddr);
-        cout << format("  {:<6} → vaddr={:#04x} = {:<5}", var, vaddr, value);
-        if (is_violation) cout << "  [VIOLATION]";
-        if (is_page_fault) cout << "  [PAGE FAULT]";
-        cout << '\n';
-      }
-      cout << '\n';
+      // Show context, symbol table, and instruction list
+      cout << "[demo] ==============================\n";
+      cout << format("Context Stack:\n{}\n", program.render_context());
+      cout << format("Symbol Table:\n{}\n", memory.render_symbol_table());
+      cout << format("Instruction List:\n{}\n", program.render_script());
 
       // Check if process is finished before stepping
-      if (program.finished()) {
+      if (program.finished())
         cout << "[demo] Process already finished.\n";
-        return;
       
-      } else {
+      else {
         // Step
         auto done = process.step();
         cout << "[demo] Process stepped.\n";
         cout << (done ? "Finished." : "Still running.") << '\n';
       }
+      cout << "=====================================\n";
     });
 }
