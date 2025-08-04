@@ -91,8 +91,12 @@ class ProcessMemory {
    *         - page_fault (bool): true if page fault occurred
    */
   auto resolve(const str& token) -> tup<uint, bool, bool, bool> {
-    if (is_digits(token))
-      return {stoul(token), false, false, false};
+    // Try to parse it as a number (supports hex, clamps overflow)
+    auto value = parse_uint(token);
+    if (value != 0 || token == "0")  // catch both "0" and valid numbers
+      return {value, false, false, false};
+
+    // Otherwise treat as variable
     return get(token);
   }
 

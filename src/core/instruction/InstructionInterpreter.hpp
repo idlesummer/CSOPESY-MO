@@ -55,8 +55,34 @@ class InstructionInterpreter {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
       throw runtime_error("Unknown instruction: " + inst.opcode);
-
     it->second.execute(inst, proc);
+  }
+
+  /** @brief Parses a list of tokenized script lines into Instruction objects. */
+  auto parse_script(const vec<vec<str>>& token_lines) -> vec<Instruction> {
+    auto script = vec<Instruction>();
+
+    for (auto& tokens : token_lines) {
+      if (tokens.empty()) continue;
+
+      auto opcode = tokens[0];
+      auto it = handlers.find(opcode);
+      if (it == handlers.end()) {
+        cout << format("[parse_script]: Unknown opcode '{}'\n", opcode);
+        return {}; // return empty on unknown instruction
+      }
+
+      auto& handler = it->second;
+      auto args = vec<str>(tokens.begin()+1, tokens.end());
+      auto inst = Instruction(opcode, args);
+
+      if (!handler.matches(inst.args)) {
+        cout << format("[parse_script]: Invalid arguments for '{}'\n", opcode);
+        return {};
+      }
+      script.push_back(move(inst));
+    }
+    return script;
   }
 
   /** @brief Generates a random list of up to `size` instructions with proper block closure. */

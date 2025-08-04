@@ -115,7 +115,7 @@ class Scheduler {
       auto view = data.memory.create_memory_view_for(pid, mem_size);
 
       // === Add to process table and ready queue
-      data.add_process(Process(pid, move(pname), ins_size, move(view)));
+      data.add_process(Process(pid, move(pname), move(view), ins_size));
       data.rqueue.push(pid);
     };
 

@@ -8,8 +8,8 @@
 auto make_print() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("PRINT")
-    // .add_signature(Signature().Str())
-    // .add_signature(Signature().Str().Var())
+    .add_signature(Signature().Str())
+    .add_signature(Signature().Str().Var())
 
     .set_execute([](Instruction& inst, ProcessData& process) {
       process.log(format("Hello world from {}!", process.name));

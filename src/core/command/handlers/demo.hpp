@@ -28,7 +28,7 @@ auto make_demo() -> CommandHandler {
       // Create process if not yet spawned
       if (!storage.has("demo.process")) {
         auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
-        auto process = Process(0, "demo.process", 10, move(view));
+        auto process = Process(0, "demo.process", move(view), 10);
         storage.set("demo.process", move(process));
         cout << "[demo] Process created.\n";
       }

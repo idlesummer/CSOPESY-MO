@@ -11,14 +11,25 @@ class Process {
   // ------ Class variables ------
   inline static auto& interpreter = InstructionInterpreter::get();
 
-  /** @brief Creates a process with a random instruction script. */
-  Process(uint pid, str name, uint size, MemoryView view): 
+  /** @brief Creates a process with a random instruction script given size. */
+  Process(uint pid, str name, MemoryView view, uint size): 
     data(           // Data container of process
       ProcessData(
         pid,
         move(name),
-        move(interpreter.generate_script(size)),
-        move(view)
+        move(view),
+        move(interpreter.generate_script(size))
+      )
+    ) {}
+
+  /** @brief Creates a process with a random instruction script. */
+  Process(uint pid, str name, MemoryView view, vec<Instruction> script): 
+    data(           // Data container of process
+      ProcessData(
+        pid,
+        move(name),
+        move(view),
+        move(script)
       )
     ) {}
 
