@@ -92,7 +92,7 @@ class ProcessMemory {
    */
   auto resolve(const str& token) -> tup<uint, bool, bool, bool> {
     // Try to parse it as a number (supports hex, clamps overflow)
-    auto value = parse_uint(token);
+    auto value =  stoui(token);
     if (value != 0 || token == "0")  // catch both "0" and valid numbers
       return {value, false, false, false};
 

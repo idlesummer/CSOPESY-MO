@@ -73,7 +73,7 @@ class Signature {
       auto& actual = inputs[i];
 
       if (expected.type == "uint") {
-        auto value = parse_uint(actual);
+        auto value =  stoui(actual);
         if (value < expected.min || value > expected.max)
           return false;
 
