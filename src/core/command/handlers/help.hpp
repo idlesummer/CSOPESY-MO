@@ -3,6 +3,8 @@
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/command/handlers/_all.hpp"
+#include "core/common/utility/RichText.hpp"
+
 
 
 auto make_help() -> CommandHandler {
@@ -23,8 +25,14 @@ auto make_help() -> CommandHandler {
       return nullopt;
     })
 
-    .set_execute([](Command& command, Shell& shell) {
-        cout << "To be implemented.\n";
+     .set_execute([](Command&, Shell& shell) {
+      cout << RichText("  [b fg=#d39c6a]Available Commands: [/]\n\n");
 
+      for (auto& [name, handler] : shell.interpreter.handlers) {
+        if (handler.disabled) continue;
+        cout << format("  \033[1m{:<18}\033[0m {}\n", name, handler.desc);
+      }
+
+      cout << "\nUse the command name directly to invoke it. Example: `exit`\n";
     });
 }
