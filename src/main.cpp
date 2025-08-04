@@ -3,6 +3,12 @@
 
 
 int main() {
-  auto shell = Shell(); // Main shell interface
-  shell.start();        // Launch shell thread
+
+  auto tokens = re::split("Hello;world", ";");
+
+  for (auto& token : tokens)
+    cout << format("{}\n", token);
+
+  // auto shell = Shell(); // Main shell interface
+  // shell.start();        // Launch shell thread
 }

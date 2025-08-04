@@ -36,6 +36,11 @@ class re {
     return input.substr(first, last - first + 1);
   }
 
+  /** @brief Splits a string using a string delimiter pattern. */
+  static auto split(const std::string& input, const std::string& pattern) -> std::vector<std::string> {
+    return split(input, std::regex(pattern));
+  }
+
   /** @brief Splits a string using a regex delimiter. */
   static auto split(const std::string& input, const std::regex& delimiter) -> std::vector<std::string> {
     auto result = std::vector<std::string>();
