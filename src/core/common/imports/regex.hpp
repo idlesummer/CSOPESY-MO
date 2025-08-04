@@ -28,6 +28,31 @@ class re {
     return tokens;
   }
 
+  /** @brief Trims leading and trailing whitespace from a string. */
+  static auto strip(const std::string& input) -> std::string {
+    auto first = input.find_first_not_of(" \t\n\r\f\v");
+    if (first == std::string::npos) return ""; // all whitespace
+    auto last = input.find_last_not_of(" \t\n\r\f\v");
+    return input.substr(first, last - first + 1);
+  }
+
+  /** @brief Splits a string using a regex delimiter. */
+  static auto split(const std::string& input, const std::regex& delimiter) -> std::vector<std::string> {
+    auto result = std::vector<std::string>();
+    auto begin = std::sregex_token_iterator(input.begin(), input.end(), delimiter, -1);
+    auto end = std::sregex_token_iterator();
+
+    for (auto it = begin; it != end; ++it)
+      result.push_back(it->str());
+    return result;
+  }
+
+  /** @brief Splits a string on whitespace by default. */
+  static auto split(const std::string& input) -> std::vector<std::string> {
+    static const auto default_delim = std::regex(R"(\s+)");
+    return split(input, default_delim);
+  }
+
   private:
   /** @brief Fixes unmatched unescaped quotes by appending a quote at the end. */
   static auto sanitize_quotes(const std::string& line) -> std::string {
