@@ -13,7 +13,7 @@ class ProcessControl {
   public:
 
   ProcessControl():
-    sleep_ticks (0) {}
+    sleep_ticks (0u) {}
   
   /** @brief Returns true if the process is currently sleeping. */
   auto sleeping() const -> bool { return sleep_ticks > 0; }    

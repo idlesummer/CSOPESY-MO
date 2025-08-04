@@ -20,18 +20,19 @@ using std::function;
 using std::optional;
 using byte = uint8_t;
 using uint = uint32_t;
+using uint64 = uint64_t;
 using uchar = unsigned char;
 using Uint = std::optional<uint>;
 
 // === Aliases ===
+template <typename Type>
+using opt = optional<Type>;
+
 template <typename... Args> 
 using func = std::function<Args...>;
 
 template <typename Type> 
 using ref = std::reference_wrapper<Type>;
-
-template <typename Type> 
-using Ref = optional<ref<Type>>;
 
 // === Constants ===
 using std::nullopt;

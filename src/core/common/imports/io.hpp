@@ -6,7 +6,6 @@
 #include <sstream>
 #include <vector>
 
-  
 // I/O utility aliases
 using std::cin;
 using std::cout;
@@ -20,7 +19,8 @@ using std::ofstream;
 using std::ostream;
 using std::runtime_error;
 
-// === Utility functions ===
+
+/** @brief Reads all lines from a text file into a vector of strings. */
 auto read_lines(const std::string& path) -> std::vector<std::string> {
   auto file = std::ifstream(path);
   if (!file) return {};
@@ -30,7 +30,6 @@ auto read_lines(const std::string& path) -> std::vector<std::string> {
 
   auto in = std::istringstream(buffer.str());
   auto lines = std::vector<std::string>();
-  lines.reserve(8);
 
   for (std::string line; std::getline(in, line); )
     lines.emplace_back(std::move(line));

@@ -14,7 +14,7 @@ auto make_initialize() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
       
       // Check if the scheduler has already been initialized

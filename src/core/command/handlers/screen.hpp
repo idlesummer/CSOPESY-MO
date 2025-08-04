@@ -74,8 +74,8 @@ auto make_screen() -> CommandHandler {
     .add_flag("-r")
     .add_flag("-ls")
     .add_flag("-c")
-
-    .set_validate([](Command &command, Shell &shell) -> Str {
+    
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
@@ -135,6 +135,7 @@ auto make_screen() -> CommandHandler {
         if (command.args.empty()) 
           return void(cout << "Missing process name.\n");
 
+        auto& name = command.args[0];
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 

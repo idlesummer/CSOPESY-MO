@@ -41,9 +41,6 @@ class Scheduler {
       // Release finished or preempted cores
       release_processes();
       
-      /** TODO: Clean/update paging info. */ 
-      // memory.tick(data);
-      
       // Tick sleeping processes in the waiting queue
       tick_sleeping_processes();
 
@@ -59,16 +56,23 @@ class Scheduler {
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
+    
+    // Initialize memory manager
+    auto memory_capacity = config.getu("max-overall-mem");
+    auto page_size = config.getu("mem-per-frame");
+    data.memory.init(memory_capacity, page_size);
+    
+    // Initialize CPU cores
     strategy = get_scheduler_strategy(config.gets("scheduler"));
-    data.cores.resize(config.getu("num-cpu"));                        
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto core_size = config.getu("num-cpu");
+    auto delay = config.getu("delays-per-exec");
+    data.cores.init(core_size);
 
-    // Create the preempt handler from the factory method
-    auto preempt_handler = strategy.get_preempt_handler(data);
-
-    // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr)
-      for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(preempt_handler);
+    for (auto& ref: data.cores.get_all()) {
+      auto& core = ref.get();
+      core.init(delay, preempt_handler);
+    }
 
     data.config = move(config); // Must come last                               
   }
@@ -93,13 +97,25 @@ class Scheduler {
 
   /** @brief Helper that generates user and scheduler-enqueued processes. */
   void generate_processes() {
-    auto make_process = [&](uint pid, str name="") {
+    auto make_process = [&](uint pid, str name = "") {
+      auto& config = data.config;
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto min = data.config.getu("min-ins");
-      auto max = data.config.getu("max-ins");
-      auto size = Rand::num(min, max);
 
-      data.add_process(Process(pid, move(pname), size));
+      // === Generate instruction count
+      auto min_ins = config.getu("min-ins");
+      auto max_ins = config.getu("max-ins");
+      auto ins_size = Rand::num(min_ins, max_ins);
+
+      // === Generate memory size for process (clamped to ≥64 automatically)
+      auto min_mem = config.getu("min-mem-per-proc");
+      auto max_mem = config.getu("max-mem-per-proc");
+      auto mem_size = Rand::num(min_mem, max_mem);
+
+      // === Auto-alloc and get view (failsafe inside create_memory_view_for)
+      auto view = data.memory.create_memory_view_for(pid, mem_size);
+
+      // === Add to process table and ready queue
+      data.add_process(Process(pid, move(pname), ins_size, move(view)));
       data.rqueue.push(pid);
     };
 
@@ -134,13 +150,12 @@ class Scheduler {
       auto& process = data.get_process(*it);
       process.step();           // decrement sleep_ticks
 
-      if (!process.data.control.sleeping()) {
+      if (process.data.control.sleeping())
+        ++it;                   // still sleeping
+      else {
         data.rqueue.push(*it);  // ready again
-        it = wqueue.erase(it);  // remove from wqueue
-        continue;
+        it = wqueue.erase(it);  // remove from wqueue  
       }
-
-      ++it;                     // still sleeping
     }
   }
 };

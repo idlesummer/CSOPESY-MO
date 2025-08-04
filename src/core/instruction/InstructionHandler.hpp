@@ -39,7 +39,7 @@ class InstructionHandler {
   /** @brief Returns true if this instruction begins a exit control block (e.g., FOR). */
   auto is_control_exit() -> bool { return !open_opcode.empty(); }
 
-  /** Generates a random instruction based on the signature. */
+  /** @brief Generates a random instruction based on the signature. */
   auto generate() -> Instruction {
     auto inst = Instruction(opcode);
     if (signatures.empty()) return inst;

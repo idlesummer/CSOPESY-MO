@@ -21,8 +21,19 @@ using std::string;
   #include <codecvt>    // std::wstring_convert
 #endif
 
-// === Unicode output ===
-void enable_unicode() {
+
+/**
+ * @brief Configures the terminal for ANSI and UTF-8 output.
+ *
+ * On Windows, enables virtual terminal processing (ANSI escape codes)
+ * and sets the output code page to UTF-8 for proper Unicode rendering.
+ *
+ * On Unix-like systems, disables stream synchronization for performance,
+ * sets the global locale to the user's environment, and enables wide string output.
+ *
+ * Call this once at startup before any styled or Unicode terminal output.
+ */
+void initialize_terminal() {
   #if defined(_WIN32)
     // Enable ANSI escape sequences
     auto h = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -41,7 +52,14 @@ void enable_unicode() {
   #endif
 }
 
-// === Terminal width detection ===
+/**
+ * @brief Returns the current terminal width in columns.
+ *
+ * Uses platform-specific system calls to detect the width of the terminal window.
+ * Falls back to 80 columns if the query fails.
+ *
+ * @return Number of columns in the terminal (default: 80 if unknown).
+ */
 auto get_terminal_width() -> uint32_t {
   #if defined(_WIN32)
     auto csbi = CONSOLE_SCREEN_BUFFER_INFO{};
@@ -55,7 +73,18 @@ auto get_terminal_width() -> uint32_t {
     return 80; // fallback
 }
 
-// === Unicode-aware visual width of a string ===
+/**
+ * @brief Calculates the visual width of a UTF-8 string in terminal columns.
+ *
+ * Converts the string to wide characters and estimates the number of columns it will occupy,
+ * accounting for fullwidth Unicode characters (e.g., CJK, symbols).
+ *
+ * On Windows, uses `MultiByteToWideChar` and manual width rules.
+ * On Unix, uses `wcwidth` with locale awareness.
+ *
+ * @param utf8 A UTF-8 encoded string.
+ * @return Number of display columns the string visually occupies.
+ */
 auto len(const std::string& utf8) -> int {
   #if defined(_WIN32)
     // Convert UTF-8 → UTF-16 wide string
@@ -87,7 +116,7 @@ auto len(const std::string& utf8) -> int {
     auto conv = std::wstring_convert<std::codecvt_utf8<wchar_t>>{};
     auto wstr = conv.from_bytes(utf8);
 
-    int width = 0;
+    auto width = 0;
     for (wchar_t wc : wstr) {
       int w = wcwidth(wc);
       width += (w >= 0) ? w : 0;

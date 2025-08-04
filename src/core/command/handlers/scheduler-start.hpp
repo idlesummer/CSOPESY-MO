@@ -1,5 +1,6 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/process/Process.hpp"
@@ -13,9 +14,9 @@ auto make_scheduler_start() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
-      
+
       // Check if the scheduler has already been initialized
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
@@ -25,9 +26,9 @@ auto make_scheduler_start() -> CommandHandler {
 
       return nullopt;
     })
-    
+
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
-      cout << "[Shell] Dummy process generation started.\n";
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
     });
 }

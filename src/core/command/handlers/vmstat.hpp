@@ -1,29 +1,28 @@
 #pragma once
-#include "core/common/imports/_all.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
 
-auto make_cls() -> CommandHandler {
+auto make_vmstat() -> CommandHandler {
   return CommandHandler()
-    .set_name("cls")
-    .set_desc("Clear screen contents.")
+    .set_name("vmstat")
+    .set_desc("Provides a detailed view of the active/inactive processes, available/used memory, and pages.")
     .set_min_args(0)
     .set_max_args(0)
-    .set_disabled(false)
-
+    
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
-       auto config = shell.scheduler.data.config;
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+
+      auto config = shell.scheduler.data.config;
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
 
       return nullopt;
     })
 
-    .set_execute([](Command&, Shell& shell) {
-      system("cls");
-      cout << shell.banner.get();
+    .set_execute([](Command& command, Shell& shell) {
+      cout << "To be implemented.\n";
     });
 }
-

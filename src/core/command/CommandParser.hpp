@@ -32,7 +32,7 @@ class CommandParser {
 
     // Save input string (everything after the command name)
     auto pos = line.find_first_not_of(' ', cmd.name.size());
-    cmd.input = (pos != NPOS) ? line.substr(pos) : "";
+    cmd.input = (pos != npos) ? line.substr(pos) : "";
     return cmd;
   }
 

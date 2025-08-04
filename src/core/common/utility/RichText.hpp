@@ -9,7 +9,7 @@ class StyleStack {
     stack(vec<pair<str,str>>()) {}  // Start with an empty list of style layers
 
   /** @brief Add all styles (as separate layers) to the stack. */
-  void push(map<str,str> styles) {
+  void push(umap<str,str> styles) {
     for (auto& [key, val]: styles)
       stack.emplace_back(move(key), move(val));
   }
@@ -32,9 +32,9 @@ class StyleStack {
     stack.shrink_to_fit();
   }
 
-  /** @brief Combine all active styles into one map. */
-  auto get_styles() -> map<str,str> {
-    auto result = map<str,str>();
+  /** @brief Combine all active styles into one umap. */
+  auto get_styles() -> umap<str,str> {
+    auto result = umap<str,str>();
 
     for (auto& [key, val]: stack)
       result[key] = val;
@@ -50,14 +50,14 @@ class RichText {
   public:
 
   // ------ Class variables ------
-  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]+?)\])");
+  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]*?)\])");
   static inline auto ESC_LB      = regex(R"(\\\[)");
   static inline auto ESC_RB      = regex(R"(\\\])");
   static inline auto PLACE_LB    = "\x01";
   static inline auto PLACE_RB    = "\x02";
   static inline auto ANSI_RESET  = "\033[0m";
 
-  static inline auto STYLES = map<str,str>{
+  static inline auto STYLES = umap<str,str>{
     {"bold",      "1"}, 
     {"dim",       "2"}, 
     {"italic",    "3"},
@@ -65,7 +65,7 @@ class RichText {
     {"strike",    "9"},
   };
 
-  static inline auto COLORS = map<str,str>{
+  static inline auto COLORS = umap<str,str>{
     {"black",     "#000000"}, 
     {"red",       "#ff0000"}, 
     {"green",     "#00ff00"},
@@ -81,7 +81,7 @@ class RichText {
     {"darkblue",  "#000088"},
   };
 
-  static inline auto ALIASES = map<str,str>{
+  static inline auto ALIASES = umap<str,str>{
     {"b", "bold"}, 
     {"i", "italic"}, 
     {"u", "underline"},
@@ -101,7 +101,7 @@ class RichText {
   
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Streams the rendered text to an output stream (e.g., std::cout). */
@@ -128,9 +128,6 @@ class RichText {
 
   /** @brief Converts a hex color string or named color to an RGB tuple. */
   auto hex_to_rgb(str value) -> tuple<uint,uint,uint> {
-    if (COLORS.contains(value))
-      value = COLORS.at(value);
-
     value.erase(0, 1); // remove leading #
     auto r = stoul(value.substr(0, 2), nullptr, 16);
     auto g = stoul(value.substr(2, 2), nullptr, 16);
@@ -138,20 +135,32 @@ class RichText {
     return { r, g, b };
   }
 
-  /** @brief Converts a style map to an ANSI escape code string. */
-  auto to_ansi(const map<str,str>& styles) -> str {
+  auto is_valid_hex_color(const str& value) -> bool {
+    return value.size() == 7
+      && value[0] == '#'
+      && all_of(value.begin()+1, value.end(), ::isxdigit);
+  }
+
+  /** @brief Converts a style umap to an ANSI escape code string. */
+  auto to_ansi(const umap<str,str>& styles) -> str {
     auto codes = vec<str>();
 
     for (auto& [key, value]: styles) {
-      if (STYLES.count(key)) {
+      if (STYLES.contains(key)) {
         codes.push_back(STYLES.at(key));
 
       } else if (key == "fg") {
-        auto [r, g, b] = hex_to_rgb(value);
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+
+        auto [r, g, b] = hex_to_rgb(hex);
         codes.push_back(format("38;2;{};{};{}", r, g, b));
 
       } else if (key == "bg") {
-        auto [r, g, b] = hex_to_rgb(value);
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+        
+        auto [r, g, b] = hex_to_rgb(hex);
         codes.push_back(format("48;2;{};{};{}", r, g, b));
       }
     }
@@ -159,32 +168,21 @@ class RichText {
     return codes.empty() ? "" : format("\033[{}m", join(codes, ';'));
   }
 
-  auto join(vec<str>& parts, char delim) -> str {
-    if (parts.empty()) return "";
-
-    auto oss = osstream();
-    oss << parts[0];        // Add first element without delimiter
-
-    for (auto i = 1u; i < parts.size(); ++i)
-      oss << delim << parts[i];
-    return oss.str();
-  }
-
   auto resolve_tag(str& tag) -> str {
     return ALIASES.contains(tag) ? ALIASES.at(tag) : tag;
   }
 
-  auto parse_to_styles(str& tag) -> map<str,str> {
-    auto result = map<str,str>();
+  auto parse_to_styles(str& tag) -> umap<str,str> {
+    auto result = umap<str,str>();
     auto stream = isstream(tag);
     auto token = ""s;
 
     while (stream >> token) {
       auto eq = token.find('=');
       
-      if (eq == NPOS) {
+      if (eq == npos) {
         auto key = resolve_tag(token);
-        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": ""})
+        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
         continue;
       }
 
@@ -210,7 +208,7 @@ class RichText {
       out += text.substr(index, match.position());  // Add all plain text before the tag
 
       auto is_closing = match[1].str() == "/";
-      auto tag = match[2].str();  // raw tag content
+      auto tag = trim(match[2].str());  // raw tag content
 
       if (is_closing) {           // Handle [/], which resets all styles
         if (tag.empty()) {                          

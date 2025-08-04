@@ -2,6 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
 #include "core/execution/CoreManager.hpp"
+#include "core/memory/MemoryManager.hpp"
 #include "types.hpp"
 
 
@@ -15,13 +16,14 @@ class SchedulerData {
   public:
   
   SchedulerData():
-    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    proc_table    (umap<uint,uptr<Process>>()), // Container for all processes
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
     wqueue        (list<uint>()),               // Ready queue of processes waiting to be scheduled
     next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
-    config        (Config()),          // Runtime configuration settings
-    cores         (CoreManager()) {}            // Owned instance of scheduler core manager
+    config        (Config()),                   // Runtime configuration settings
+    cores         (CoreManager()),              // Owned instance of core manager
+    memory        (MemoryManager()) {}          // Owned instance of memory manager
 
   /** @brief Returns a unique, incrementing process ID. */
   auto new_pid() -> uint { return next_pid++; }
@@ -49,17 +51,17 @@ class SchedulerData {
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
   // ------ Instance variables ------
-
-  map<uint, uptr<Process>> proc_table;
+  umap<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  Config config;             
-  CoreManager cores;                  
   atomic_uint next_pid;           
+  Config config;
+  CoreManager cores;
+  MemoryManager memory;
+
 
   // ------ Internal logic ------
-
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */

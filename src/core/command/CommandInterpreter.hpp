@@ -14,7 +14,7 @@ class CommandInterpreter {
   public: 
 
   CommandInterpreter():
-    handlers (map<str,CommandHandler>()) {} // Registry of available command handlers
+    handlers (umap<str,CommandHandler>()) {} // Registry of available command handlers
   
   /** @brief Returns the global singleton get of the CommandInterpreter. */
   static CommandInterpreter& get() {
@@ -65,7 +65,7 @@ class CommandInterpreter {
 
   // ------- Instance variables -------
   
-  map<str,CommandHandler> handlers; 
+  umap<str,CommandHandler> handlers; 
 
   // ------- Internal logic -------
 

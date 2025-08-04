@@ -1,11 +1,6 @@
 ﻿# === GPT System Overview Request ===
 
 You are a senior developer reviewing this project for a new team member.
-
-> Note: This codebase uses the macro #define let auto&& as a syntactic shorthand
-> to mimic dynamic-language style in function parameters. When you see let, 
-> interpret it as uto&&.
-
 Please do the following:
 
 1. **Give an overview** of what this project does and its main components.
@@ -50,19 +45,30 @@ int main() {
 #include "core/common/imports/_all.hpp"
 
 
-/** @brief Represents a parsed command-line input. */
+/** 
+ * @brief Represents a parsed command-line input.
+ * 
+ * A Command encapsulates all components of a parsed input string,
+ * including the command name, original argument input (excluding the command),
+ * tokenized parts, positional arguments, and named flags.
+ */
 class Command {
   public:
 
   Command():
-    name  (""s),              // The command name (e.g., "screen", "exit")
-    args  (vec<str>()),       // Positional arguments for the command
-    flags (map<str,str>()) {} // Map of flags and their associated values (if any)
+    name   (""s),           // The command name (e.g., "screen", "exit")
+    input  (""s),           // Original input string after the command name
+    tokens (vec<str>()),    // All space-delimited tokens after the command name
+    args   (vec<str>()),    // Positional arguments for the command
+    flags  (set<str>()) {}  // Set of flags (automatically deduplicated)
 
   // ------- Instance variables -------
-  str name;    
-  vec<str> args;    
-  map<str,str> flags;   
+
+  str name;
+  str input;
+  vec<str> tokens;
+  vec<str> args;
+  set<str> flags;
 };
 
 ------------------------------
@@ -73,7 +79,6 @@ class Command {
 #pragma once 
 #include "core/common/imports/_all.hpp"
 #include "Command.hpp"
-#include "types.hpp"
 
 
 /** Represents a single command entry in the interpreter. */
@@ -86,7 +91,7 @@ class CommandHandler {
     desc     (""s),         // Description for help or documentation
     min_args (0u),          // Minimum number of required arguments
     max_args (UINT_MAX),    // Maximum number of allowed arguments
-    flags    (vec<Flag>()), // Valid flags for this command
+    flags    (set<str>()),  // Valid flags for this command
     disabled (true),        // Commands are disabled by default
     validate (nullptr),     // Optional validation hook
     execute  (nullptr) {}   // Main handler for executing the command
@@ -96,7 +101,7 @@ class CommandHandler {
   auto set_desc(const str& value) -> CommandHandler& { return desc = value, *this; }
   auto set_min_args(uint value) -> CommandHandler& { return min_args = value, *this; }
   auto set_max_args(uint value) -> CommandHandler& { return max_args = value, *this; }
-  auto add_flag(const Flag& value) -> CommandHandler& { return flags.push_back(value), *this; }
+  auto add_flag(str value) -> CommandHandler& { return flags.insert(move(value)), *this; }
   auto set_disabled(bool value) -> CommandHandler& { return disabled = value, *this; }
   auto set_validate(func<optional<str>(Command&, Shell&)> value) -> CommandHandler& { return validate = value, *this; }
   auto set_execute(func<void(Command&, Shell&)> value) -> CommandHandler& { return execute = value, *this; }
@@ -107,7 +112,7 @@ class CommandHandler {
   str desc;                        
   uint min_args;                
   uint max_args;              
-  vec<Flag> flags;                       
+  set<str> flags;                       
   bool disabled;
   func<optional<str>(Command&,Shell&)> validate; 
   func<void(Command&,Shell&)> execute;
@@ -148,7 +153,7 @@ class CommandInterpreter {
   }
 
   /** @brief Executes a command in the shell context. */ 
-  void execute(const str& line, Shell& shell) {
+  void execute(str& line, Shell& shell) {
 
     // Parse the command line into a Command (name, args, flags)
     auto command = CommandParser::parse(line);  
@@ -191,13 +196,10 @@ class CommandInterpreter {
 
   private:
 
-  /** @brief Returns true if any flag is invalid or misused. */
+  /** @brief Returns true if any flag doesn't exist. */
   static auto invalid_flags(Command& command, CommandHandler& handler) -> bool {
-    // If any user flag has no valid match (in name and usage), then the set of flags is invalid.
-    return any_of(command.flags, [&](auto& flag) {
-      return none_of(handler.flags, [&](Flag& f) {
-        return f.name == flag.first && f.has_arg == !flag.second.empty();
-      });
+    return any_of(command.flags, [&](const str& flag) {
+      return !handler.flags.contains(flag);
     });
   }
 
@@ -208,7 +210,7 @@ class CommandInterpreter {
   }
 
   /** Runs the handler's custom validator and returns an optional error message. */
-  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> Str {
+  static auto custom_validation(Command& command, CommandHandler& handler, Shell& shell) -> optional<str> {
     if (!handler.validate) return nullopt;
     if (auto err = handler.validate(command, shell))
       return err->empty() ? "CommandHandler disabled or invalid." : *err;
@@ -227,62 +229,52 @@ class CommandInterpreter {
 
 
 /**
- * @class Parser
+ * @class CommandParser
  * @brief Utility class for tokenizing and parsing command lines.
  */
 class CommandParser {
   public:
 
-  /** @brief A helper that parses a handler line string into a Handler Command object. */
-  static auto parse(const str& line) -> Command {
+  /** @brief Parses a line into a Command object (name, args, flags, etc.). */
+  static auto parse(str& line) -> Command {
     auto tokens = tokenize(line);
     if (tokens.empty()) return {};
 
     auto cmd = Command();
-    cmd.name = move(tokens[0]);
+    cmd.name = tokens[0];
 
-    for (uint i=1; i < tokens.size(); ++i) {
-      str token = move(tokens[i]);
-      if (token[0] != '-') {
-        cmd.args.emplace_back(move(token));
-        continue;
-      }
-      bool next_is_arg = (i+1 < tokens.size() && tokens[i+1][0] != '-');
-      cmd.flags.emplace(move(token), next_is_arg ? move(tokens[++i]) : "");
+    for (auto i = 1u; i < tokens.size(); ++i) {
+      auto& token = tokens[i];
+
+      if (token.empty()) continue;  // skip empty tokens just in case
+      cmd.tokens.push_back(token);  // store all meaningful tokens after name
+
+      if (token[0] == '-')
+        cmd.flags.insert(token);
+      else
+        cmd.args.push_back(token);
     }
 
+    // Save input string (everything after the command name)
+    auto pos = line.find_first_not_of(' ', cmd.name.size());
+    cmd.input = (pos != npos) ? line.substr(pos) : "";
     return cmd;
   }
 
   // ------ Internal logic ------
 
   private:
-  
-  /** @brief A helper that splits a string into whitespace-separated tokens. */
-  static auto tokenize(const str& line) -> vec<str> {
+
+  /** @brief Splits a line into space-delimited tokens. */
+  static auto tokenize(str& line) -> vec<str> {
     if (line.empty()) return {};
     auto stream = isstream(line);
-    auto tokens = vec<str>(); 
+    auto tokens = vec<str>();
 
     for (str token; stream >> token; )
-      tokens.emplace_back(move(token));
+      tokens.push_back(move(token));
     return tokens;
   }
-};
-
-------------------------------
- FILE:  types.hpp
- PATH:  core\command\types.hpp
-------------------------------
-
-#pragma once 
-#include "core/common/imports/_all.hpp"
-
-
-/** @brief Contains the flag name and whether it requires an argument. */
-struct Flag {
-  str name = "";        // Flag name (e.g., "-s", "-r", "-ls")
-  bool has_arg = false; // Whether the flag requires an argument
 };
 
 ------------------------------
@@ -305,8 +297,17 @@ auto make_cls() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_execute([](Command&, Shell&) {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
+       auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
+
+      return nullopt;
+    })
+
+    .set_execute([](Command&, Shell& shell) {
       system("cls");
+      cout << shell.banner.get();
     });
 }
 
@@ -361,6 +362,10 @@ auto make_config() -> CommandHandler {
 
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/process/ProcessProgram.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
@@ -368,23 +373,49 @@ auto make_config() -> CommandHandler {
 auto make_demo() -> CommandHandler {
   return CommandHandler()
     .set_name("demo")
-    .set_desc("Creates and steps a demo process with random instructions.")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    
-    .set_execute([](Command&, Shell& shell) {
+    .add_flag("-r")
+
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
-      if (!storage.has("demo.counter")) {
-        cout << "Counter created! Run demo again to increment counter.\n";
-        cout << "Counter: 0\n";
-        storage.set("demo.counter", 0u);
+      // 0. Reset process if requested
+      if (command.flags.contains("-r")) {
+        shell.storage.remove("demo.process");
+        cout << "[demo] Dummy process reset.\n";
         return;
       }
 
-      auto counter = storage.get<uint>("demo.counter") + 1;
-      storage.set("demo.counter", counter);
-      cout << format("Counter: {}\n", counter);
+      // 1. Spawn process if not already present
+      if (!storage.has("demo.process")) {
+        auto process = Process(0, "demo.process", 10);
+        storage.set("demo.process", move(process));
+        cout << "[demo] Process created.\n";
+        return;
+      }
+
+      // 2. Access process
+      auto& process = storage.get<Process>("demo.process");
+      auto& program = process.data.program;
+
+      if (program.finished())
+        return void(cout << "[demo] Process already finished.");
+
+      // === Debug: Show context stack ===
+      cout << "[demo] Context Stack:\n";
+      cout << program.render_context() << '\n';
+
+      // === Debug: Show instruction list with pointer ===
+      cout << "[demo] Instruction List:\n";
+      cout << program.render_script() << '\n';
+
+      // 3. Step the process
+      auto done = process.step();
+      cout << "[demo] Process stepped.\n";
+      cout << (done ? "Finished." : "Still running.") << '\n';
     });
 }
 
@@ -394,7 +425,7 @@ auto make_demo() -> CommandHandler {
 ------------------------------
 
 #pragma once
-#include "core/common/utility/Text.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
@@ -404,17 +435,16 @@ auto make_echo() -> CommandHandler {
   return CommandHandler()
     .set_name("echo")
     .set_desc("Print arguments.")
+    .add_flag("--rich")
     .set_min_args(1)
     .set_max_args(UINT_MAX)
     .set_disabled(false)
 
     .set_execute([](Command& command, Shell&) {
-      auto out = osstream();
-
-      for (auto& arg: command.args)
-        out << arg << ' ';
-
-      cout << Text(out.str())["gr"]<< '\n';
+      if (!command.flags.contains("--rich"))
+        cout << RichText(join(command.args)) << '\n';
+      else 
+        cout << join(command.args) << '\n';
     });
 }
 
@@ -468,7 +498,7 @@ auto make_initialize() -> CommandHandler {
     .set_max_args(0)
     .set_disabled(false)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
       
       // Check if the scheduler has already been initialized
@@ -530,7 +560,7 @@ auto make_process_smi() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
 
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (shell.screen.is_main())
         return "Not in a process screen.";
 
@@ -583,7 +613,7 @@ auto make_report_util() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
@@ -654,6 +684,7 @@ auto make_report_util() -> CommandHandler {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/process/Process.hpp"
@@ -667,9 +698,9 @@ auto make_scheduler_start() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
-      
+
       // Check if the scheduler has already been initialized
       if (!config.getb("initialized"))
         return "Scheduler not initialized. Please run 'initialize' first.";
@@ -679,10 +710,10 @@ auto make_scheduler_start() -> CommandHandler {
 
       return nullopt;
     })
-    
+
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(true);
-      cout << "[Shell] Dummy process generation started.\n";
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#88a17a]started[/].\n");
     });
 }
 
@@ -692,6 +723,8 @@ auto make_scheduler_start() -> CommandHandler {
 ------------------------------
 
 #pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 #include "core/shell/internal/Shell.impl.hpp"
@@ -704,7 +737,7 @@ auto make_scheduler_stop() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       auto config = shell.scheduler.data.config;
       
       // Check if the scheduler has already been initialized
@@ -719,7 +752,7 @@ auto make_scheduler_stop() -> CommandHandler {
     
     .set_execute([](Command&, Shell& shell) {
       shell.scheduler.generate(false);
-      cout << "[Shell] Dummy process generation stopped.\n";
+      cout << RichText("\\[Shell\\] Dummy process generation [u fg=#bc8f8f]stopped[/].\n");
     });
 }
 
@@ -794,12 +827,13 @@ auto make_screen() -> CommandHandler {
     .set_name("screen")
     .set_desc("Creates and switches through existing screens.")
     .set_min_args(0)
-    .set_max_args(0)
-    .add_flag({ "-s", true })
-    .add_flag({ "-r", true })
-    .add_flag({ "-ls", false })
+    .set_max_args(UINT_MAX)
+    .add_flag("-s")
+    .add_flag("-r")
+    .add_flag("-ls")
+    .add_flag("-c")
     
-    .set_validate([](Command& command, Shell& shell) -> Str {
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
       auto has_s = command.flags.contains("-s");
       auto has_r = command.flags.contains("-r");
@@ -846,19 +880,23 @@ auto make_screen() -> CommandHandler {
           auto& process = data.get_process(pid);
           cout << render_line(process, "Finished");
         }
-
+        
         cout << Text("â”€", line_width)[blue];
+        cout << '\n';
       }
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        auto& name = command.flags.at("-s");
+        
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
 
+        auto& name = command.args[0];
         if (process_exists(name, scheduler))
           return void(cout << format("Process '{}' already exists\n", name));
 
         scheduler.generate_process(name);
-        cout << format("\nWaiting for process creation: {}", name);
+        cout << format("Waiting for process creation: {}", name);
 
         // Wait until process queues
         if (!process_queued(name, scheduler))
@@ -883,7 +921,11 @@ auto make_screen() -> CommandHandler {
 
       // === -r: Resume process by name
       else if (command.flags.contains("-r")) {
-        auto& name = command.flags.at("-r");
+        
+        if (command.args.empty()) 
+          return void(cout << "Missing process name.\n");
+
+        auto& name = command.args[0];
         auto& data = scheduler.data;
 
         if (!data.has_process(name))
@@ -903,107 +945,18 @@ auto make_screen() -> CommandHandler {
         cout << format("Current instruction line: {}\n", process.data.program.ip);
         cout << format("Lines of code: {}\n", process.data.program.size());
       }
-    });
-}
 
-------------------------------
- FILE:  test.hpp
- PATH:  core\command\handlers\test.hpp
-------------------------------
-
-#pragma once
-#include "core/shell/internal/Shell.impl.hpp"
-#include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionInterpreter.hpp"
-#include "core/process/Process.hpp"
-#include "core/process/ProcessProgram.hpp"
-#include "core/command/Command.hpp"
-#include "core/command/CommandHandler.hpp"
-
-auto make_test() -> CommandHandler {
-  return CommandHandler()
-    .set_name("test")
-    .set_desc("Spawn and manually step a dummy FOR loop process.")
-    .set_min_args(0)
-    .set_max_args(0)
-    .add_flag({ "-r", false })
-
-    .set_execute([](Command& command, Shell& shell) {
-      auto& interpreter = InstructionInterpreter::get();
-      auto& storage = shell.storage;
-
-      // 0. Reset process if requested
-      if (command.flags.contains("-r")) {
-        shell.storage.remove("test.process");
-        cout << "[loop-test] Dummy process reset.\n";
-        return;
+      else if (command.flags.contains("-c")) {
+        /** 
+         * Hi Raine! Here's the new changes:
+         * 
+         * @c command.input  -- raw input (without the command name)
+         * @c command.tokens -- list of all args and flags in order of the input
+         * @c command.flags  -- set of tokens with a dash `-` at the beginning
+         * @c command.args   -- list of arguments
+         * 
+         */ 
       }
-
-      // 1. Spawn process if not already present
-      if (!storage.has("test.process")) {
-        auto process = Process(0, "test.process", 10);
-        storage.set("test.process", move(process));
-        cout << "[loop-test] Process created.\n";
-        return;
-      }
-
-      // 2. Access process
-      auto& process = storage.get<Process>("test.process");
-      auto& program = process.data.program;
-
-      if (program.finished())
-        return void(cout << "[loop-test] Process already finished.");
-
-      // === Debug: Show context stack ===
-      cout << "[loop-test] Context Stack:\n";
-      cout << program.render_context() << '\n';
-
-      // === Debug: Show instruction list with pointer ===
-      cout << "[loop-test] Instruction List:\n";
-      cout << program.render_script() << '\n';
-
-      // 3. Step the process
-      const bool done = process.step();
-      cout << "[loop-test] Process stepped.\n";
-      cout << (done ? "Finished." : "Still running.") << '\n';
-    });
-}
-
-------------------------------
- FILE:  text.hpp
- PATH:  core\command\handlers\text.hpp
-------------------------------
-
-#pragma once
-#include "core/common/utility/Text.hpp"
-#include "core/shell/internal/Shell.impl.hpp"
-#include "core/command/Command.hpp"
-#include "core/command/CommandHandler.hpp"
-
-
-auto make_text() -> CommandHandler {
-  return CommandHandler()
-    .set_name("text")
-    .set_desc("Print arguments.")
-    .set_min_args(1)
-    .set_max_args(UINT_MAX)
-    .add_flag({ "-s", true })  // expects a value like: -s gr+b
-    .set_disabled(false)
-
-    .set_execute([](Command& command, Shell&) {
-      auto style = "fg245"s;    // Default: soft gray
-      if (command.flags.contains("-s"))
-        style = command.flags.at("-s");
-
-      auto out = osstream();
-      for (auto& arg: command.args)
-        out << arg << ' ';
-
-      auto msg = out.str();
-      if (!msg.empty())
-        msg.pop_back();
-
-      cout << Text(msg)[style] << '\n';
     });
 }
 
@@ -1026,7 +979,7 @@ auto make_util() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
 
-    .set_validate([](Command&, Shell& shell) -> Str {
+    .set_validate([](Command&, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
       return nullopt;
@@ -1085,6 +1038,40 @@ auto make_util() -> CommandHandler {
 }
 
 ------------------------------
+ FILE:  vmstat.hpp
+ PATH:  core\command\handlers\vmstat.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+
+
+auto make_vmstat() -> CommandHandler {
+  return CommandHandler()
+    .set_name("vmstat")
+    .set_desc("Provides a detailed view of the active/inactive processes, available/used memory, and pages.")
+    .set_min_args(0)
+    .set_max_args(0)
+    
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+
+      auto config = shell.scheduler.data.config;
+      if (!config.getb("initialized"))
+        return "Scheduler not initialized. Please run 'initialize' first.";
+
+      return nullopt;
+    })
+
+    .set_execute([](Command& command, Shell& shell) {
+      cout << "To be implemented.\n";
+    });
+}
+
+------------------------------
  FILE:  _all.hpp
  PATH:  core\command\handlers\_all.hpp
 ------------------------------
@@ -1103,10 +1090,9 @@ auto make_util() -> CommandHandler {
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
-#include "test.hpp"
-#include "text.hpp"
+#include "vmstat.hpp"
 
-  
+
 auto get_command_handlers() -> vec<CommandHandler> {
   return {
     make_cls(),
@@ -1120,8 +1106,7 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
-    make_test(),
-    make_text(),
+    make_vmstat(),
   };
 }
 
@@ -1147,31 +1132,17 @@ using std::stof;
 using std::stoul;
 using std::to_string;
 
-// === Generic any cast function ===
-template <typename Type, typename From>
-auto cast(From&& x) -> Type {
-  using Raw = std::decay_t<From>;
 
-  if constexpr (std::is_same_v<Raw, std::any>)
-    return std::any_cast<Type>(x);
+/** 
+ * @brief Generic cast utility. 
+ * Use `cast<T>(x)` freely â€” auto-selects `any_cast` or `static_cast` as needed.
+ */
+template <typename Target, typename Source>
+auto cast(Source&& x) -> Target {
+  if constexpr (std::is_same_v<std::decay_t<Source>, std::any>)
+    return std::any_cast<Target>(x);
   else
-    return static_cast<Type>(std::forward<From>(x));
-}
-
-// === Aliases for clarity ===
-template <typename From> 
-auto cast_int(From&& x) -> int { 
-  return cast<int>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_uint(From&& x) -> std::uint32_t { 
-  return cast<uint32_t>(std::forward<From>(x)); 
-}
-
-template <typename From> 
-auto cast_str(From&& x) -> std::string {
-  return cast<std::string>(std::forward<From>(x)); 
+    return static_cast<Target>(std::forward<Source>(x));
 }
 
 ------------------------------
@@ -1220,54 +1191,39 @@ auto timestamp(std::optional<Time> tp=std::nullopt, const std::string& fmt="%m/%
 ------------------------------
 
 #pragma once
-#include <array>
+#include <deque>
 #include <list>
 #include <map>
 #include <queue>
+#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 #include <utility>
 #include <vector>
 
-
-using std::array;
+using std::deque;
 using std::list;
 using std::make_pair;
 using std::out_of_range;
 using std::pair;
 using std::queue;
+using std::set;
+using std::tuple;
 using std::unordered_map;
-using std::unordered_set;
 using std::vector;
 
 // === Aliases ===
 template <typename Type>
 using vec = vector<Type>;
 
-template <typename Type>
-using set = unordered_set<Type>;
+template <typename... Types>
+using tup = tuple<Types...>;
 
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
 
 template <typename Key, typename Val>
 using map = unordered_map<Key, Val>;
-
-------------------------------
- FILE:  conventions.hpp
- PATH:  core\common\imports\conventions.hpp
-------------------------------
-
-#pragma once
-#include <utility> // for std::forward
-
-#define let auto&&
-
-
-template <typename Type>
-constexpr decltype(auto) forward(Type&& x) noexcept {
-  return std::forward<Type>(x);
-}
 
 ------------------------------
  FILE:  helpers.hpp
@@ -1303,7 +1259,6 @@ constexpr auto pad_left(const std::string& s, uint32_t width, char fill=' ') -> 
 #include <sstream>
 #include <vector>
 
-  
 // I/O utility aliases
 using std::cin;
 using std::cout;
@@ -1317,7 +1272,8 @@ using std::ofstream;
 using std::ostream;
 using std::runtime_error;
 
-// === Utility functions ===
+
+/** @brief Reads all lines from a text file into a vector of strings. */
 auto read_lines(const std::string& path) -> std::vector<std::string> {
   auto file = std::ifstream(path);
   if (!file) return {};
@@ -1327,13 +1283,37 @@ auto read_lines(const std::string& path) -> std::vector<std::string> {
 
   auto in = std::istringstream(buffer.str());
   auto lines = std::vector<std::string>();
-  lines.reserve(8);
 
   for (std::string line; std::getline(in, line); )
     lines.emplace_back(std::move(line));
 
   return lines;
 }
+
+------------------------------
+ FILE:  iterator.hpp
+ PATH:  core\common\imports\iterator.hpp
+------------------------------
+
+#pragma once
+#include <iterator>   // for std::next
+#include <ranges>     // for ranges algorithms
+#include <algorithm>  // for std::replace, std::erase_if
+
+// Iterator utilities
+using std::next;
+
+// Range-based algorithms
+using std::ranges::all_of;
+using std::ranges::any_of;
+using std::ranges::count_if;
+using std::ranges::find_if;
+using std::ranges::none_of;
+using std::ranges::replace_if;
+
+// STL container utility
+using std::erase_if;
+using std::replace;
 
 ------------------------------
  FILE:  locks.hpp
@@ -1400,7 +1380,6 @@ decltype(auto) with_unlocked(Func&& fn) {
 #include <functional>
 #include <limits>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -1414,40 +1393,30 @@ using std::function;
 using std::optional;
 using byte = uint8_t;
 using uint = uint32_t;
+using uint64 = uint64_t;
 using uchar = unsigned char;
 using Uint = std::optional<uint>;
 
 // === Aliases ===
+template <typename Type>
+using opt = optional<Type>;
+
 template <typename... Args> 
 using func = std::function<Args...>;
 
 template <typename Type> 
 using ref = std::reference_wrapper<Type>;
 
-template <typename Type> 
-using Ref = optional<ref<Type>>;
-
 // === Constants ===
 using std::nullopt;
 
 // === STL Utility Aliases ===
-using std::ranges::all_of;
-using std::ranges::any_of;
-using std::ranges::count_if;
-using std::ranges::find_if;
-using std::ranges::none_of;
 using std::any_cast;
 using std::cref;
 using std::erase_if;
 using std::move;
 using std::forward;
 using std::swap;
-
-// Iterators
-template <typename Type>
-auto move_iter(Type it) { 
-  return std::make_move_iterator(it); 
-}
 
 ------------------------------
  FILE:  platform.hpp
@@ -1477,8 +1446,19 @@ using std::string;
   #include <codecvt>    // std::wstring_convert
 #endif
 
-// === Unicode output ===
-void enable_unicode() {
+
+/**
+ * @brief Configures the terminal for ANSI and UTF-8 output.
+ *
+ * On Windows, enables virtual terminal processing (ANSI escape codes)
+ * and sets the output code page to UTF-8 for proper Unicode rendering.
+ *
+ * On Unix-like systems, disables stream synchronization for performance,
+ * sets the global locale to the user's environment, and enables wide string output.
+ *
+ * Call this once at startup before any styled or Unicode terminal output.
+ */
+void initialize_terminal() {
   #if defined(_WIN32)
     // Enable ANSI escape sequences
     auto h = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -1497,7 +1477,14 @@ void enable_unicode() {
   #endif
 }
 
-// === Terminal width detection ===
+/**
+ * @brief Returns the current terminal width in columns.
+ *
+ * Uses platform-specific system calls to detect the width of the terminal window.
+ * Falls back to 80 columns if the query fails.
+ *
+ * @return Number of columns in the terminal (default: 80 if unknown).
+ */
 auto get_terminal_width() -> uint32_t {
   #if defined(_WIN32)
     auto csbi = CONSOLE_SCREEN_BUFFER_INFO{};
@@ -1511,7 +1498,18 @@ auto get_terminal_width() -> uint32_t {
     return 80; // fallback
 }
 
-// === Unicode-aware visual width of a string ===
+/**
+ * @brief Calculates the visual width of a UTF-8 string in terminal columns.
+ *
+ * Converts the string to wide characters and estimates the number of columns it will occupy,
+ * accounting for fullwidth Unicode characters (e.g., CJK, symbols).
+ *
+ * On Windows, uses `MultiByteToWideChar` and manual width rules.
+ * On Unix, uses `wcwidth` with locale awareness.
+ *
+ * @param utf8 A UTF-8 encoded string.
+ * @return Number of display columns the string visually occupies.
+ */
 auto len(const std::string& utf8) -> int {
   #if defined(_WIN32)
     // Convert UTF-8 â†’ UTF-16 wide string
@@ -1543,7 +1541,7 @@ auto len(const std::string& utf8) -> int {
     auto conv = std::wstring_convert<std::codecvt_utf8<wchar_t>>{};
     auto wstr = conv.from_bytes(utf8);
 
-    int width = 0;
+    auto width = 0;
     for (wchar_t wc : wstr) {
       int w = wcwidth(wc);
       width += (w >= 0) ? w : 0;
@@ -1569,8 +1567,6 @@ using std::make_shared;
 template <typename Type>
 using uptr = std::unique_ptr<Type>;
 
-template <typename Type>
-using sptr = std::shared_ptr<Type>;
 
 ------------------------------
  FILE:  random.hpp
@@ -1639,6 +1635,20 @@ public:
 };
 
 ------------------------------
+ FILE:  regex.hpp
+ PATH:  core\common\imports\regex.hpp
+------------------------------
+
+#pragma once
+#include <regex>
+
+
+using std::regex;
+using std::smatch;
+using std::regex_search;
+using std::regex_replace;
+
+------------------------------
  FILE:  string.hpp
  PATH:  core\common\imports\string.hpp
 ------------------------------
@@ -1657,10 +1667,9 @@ public:
 // === String Aliases ===
 using std::string;
 using str = std::string;
-using Str = std::optional<string>;
 using std::literals::string_literals::operator""s;
 
-// === Character Utilities ===
+// === Utilities ===
 using std::isalpha;
 using std::isalnum;
 
@@ -1678,7 +1687,7 @@ using std::format;
 using std::from_chars;
 
 // === Constants ===
-constexpr auto NPOS = string::npos;
+constexpr auto npos = string::npos;
 
 // === Validation ===
 
@@ -1689,7 +1698,7 @@ auto is_digits(const std::string& s) -> bool {
   });
 }
 
-// === Case conversions ===
+// === Utility functions ===
 
 /** @brief Returns a lowercase copy of the given string. */
 auto lowercase(str raw) -> str {
@@ -1697,6 +1706,25 @@ auto lowercase(str raw) -> str {
     c = tolower(c);
   return raw;
 }
+
+/** @brief Joins a vector of strings using the given delimiter. */
+auto join(vec<str>& args, char delim=' ') -> str {
+  if (args.empty()) return "";
+  
+  auto oss = osstream();
+  oss << args[0];
+  for (auto i = 1u; i < args.size(); ++i)
+    oss << delim << args[i];
+  return oss.str();
+}
+
+/** @brief Returns a copy of the string with leading and trailing whitespace removed. */
+auto trim(const str& s) -> str {
+  auto start = s.find_first_not_of(" \t\n\r");
+  if (start == npos) return "";  // all whitespace
+  auto end = s.find_last_not_of(" \t\n\r");
+  return s.substr(start, end - start + 1);
+};
 
 ------------------------------
  FILE:  thread.hpp
@@ -1717,8 +1745,6 @@ using std::atomic_bool;
 using std::atomic_int;
 using std::atomic_uint;
 using std::atomic_bool;
-using aint = std::atomic_int;
-using auint = std::atomic_uint;
 
 // === Locking & Threading Aliases ===
 using std::lock_guard;
@@ -1728,35 +1754,6 @@ using std::shared_mutex;
 using std::this_thread::sleep_for;
 using std::unique_lock;
 using Thread = std::thread;
-using convar = std::condition_variable;
-
-// === Scoped Lock Execution Context ===
-struct Context {
-  /**
-   * @brief Acquires an exclusive lock using std::mutex.
-   * @param mtx The mutex to lock.
-   * @param fn The function to execute within the lock.
-   */
-  template <typename Func>
-  void lock(mutex& mtx, Func&& fn) const {
-    auto guard = lock_guard(mtx);
-    std::forward<Func>(fn)();
-  }
-
-  /**
-   * @brief Acquires an exclusive lock using std::mutex and passes the lock to the function.
-   * @param mtx The mutex to lock.
-   * @param fn The function to execute with the lock passed as argument.
-   */
-  template <typename Func>
-  void unique(mutex& mtx, Func&& fn) const {
-    auto lock = unique_lock(mtx);
-    std::forward<Func>(fn)(lock);
-  }
-};
-
-// === Scoped Context Instance ===
-inline constexpr Context with;
 
 ------------------------------
  FILE:  _all.hpp
@@ -1768,13 +1765,14 @@ inline constexpr Context with;
 #include "casts.hpp"
 #include "chrono.hpp"
 #include "containers.hpp"
-#include "conventions.hpp"
 #include "helpers.hpp"
 #include "io.hpp"
+#include "iterator.hpp"
 #include "misc.hpp"
 #include "platform.hpp"
 #include "pointers.hpp"
 #include "random.hpp"
+#include "regex.hpp"
 #include "string.hpp"
 #include "thread.hpp"
 
@@ -1833,177 +1831,282 @@ class Ansi {
 };
 
 ------------------------------
- FILE:  EventEmitter.hpp
- PATH:  core\common\utility\EventEmitter.hpp
+ FILE:  RichText.hpp
+ PATH:  core\common\utility\RichText.hpp
 ------------------------------
 
 #pragma once
 #include "core/common/imports/_all.hpp"
 
-struct EventHandler {
-  using func = function<void(const any&)>;
-  uint id;
-  func fn;
-};
 
-/**
- * @class EventEmitter
- * @brief Thread-safe event emitter system.
- * 
- * Enables multiple threads to register event handlers, emit named events 
- * with optional data, and process the queued events. Supports blocking wait 
- * for event availability.
- */
-class EventEmitter {
-  using atomic = atomic_uint;
-  using pair = pair<str, any>;
-  using list = vector<pair>;
-  using obj  = EventHandler;
-  using func = EventHandler::func;
-  using task = function<void()>;
-  using objs = vector<obj>;
-  using map  = unordered_map<str, objs>;
-
-  map    listeners;   ///< Map of event name to handlers
-  list   events;      ///< Queue of emitted events
-  convar cv;          ///< Condition variable for blocking waits
-  atomic next_id = 1; ///< Atomic counter for unique handler IDs
-  mutex  mtx;         ///< Mutex for thread safety
-
+class StyleStack {
   public:
-  
-  /**
-   * @brief Register a handler for a named event.
-   * @param name The event name.
-   * @param handler A function to call when the event is dispatched.
-   * @return uint The unique handler ID assigned to the registered handler.
-   */
-  uint on(str name, func handler) {
-    uint id = next_id++;
-    return on(id, move(name), move(handler));
+
+  StyleStack():
+    stack(vec<pair<str,str>>()) {}  // Start with an empty list of style layers
+
+  /** @brief Add all styles (as separate layers) to the stack. */
+  void push(map<str,str> styles) {
+    for (auto& [key, val]: styles)
+      stack.emplace_back(move(key), move(val));
   }
 
-  /**
-   * @brief Register a simple handler for a named event with no payload.
-   * @param name The event name.
-   * @param handler A function to call when the event is dispatched (ignores any payload).
-   * @return The unique handler ID assigned to this registration.
-   */
-  uint on(str name, task handler) {
-    return on(move(name), [handler=move(handler)](const any&) { 
-      handler(); 
-    });
-  }
+  /** @brief Remove the most recent layer containing a given style tag. */
+  void pop(str tag) {
+    for (auto rit = stack.rbegin(); rit != stack.rend(); ++rit) {
+      if (rit->first != tag)
+        continue;
 
-  /**
-   * @brief Register a one-time handler for a named event.
-   * The handler will be called once, then automatically unregistered.
-   * 
-   * @param name The event name.
-   * @param handler The function to call once.
-   */
-  void once(str name, func handler) {
-    uint id = next_id++; 
-    on(id, name, [this, id, name=move(name), handler=move(handler)](const any& payload) {
-      off(name, id);    // passes name by value to on(), 
-      handler(payload); // then moves into lambda capture
-    });
-  }
-
-  /**
-   * @brief Unregister a handler by ID for a specific event.
-   * @param name The event name.
-   * @param id The handler ID to remove.
-   */
-  void off(const str& name, uint id) {
-    with.lock(mtx, [&] {
-      auto it = listeners.find(name);
-      if (it != listeners.end())
-        erase_if(it->second, [&](const obj& h) { return h.id == id; });
-    });
-  }
-
-  /**
-   * @brief Unregister all handlers for a specific event.
-   * @param name The event name for which all handlers will be removed.
-   */
-  void off(const str& name) {
-    with.lock(mtx, [&] {
-      auto it = listeners.find(name);
-      if (it != listeners.end())
-        listeners.erase(it);          // Remove key and its values from map completely O(1) avg
-    });
-  }
-
-  /**
-   * @brief Emit an event with data.
-   * Queues the event and notifies any thread waiting for events.
-   * 
-   * @param name The event name.
-   * @param payload The data to pass to handlers.
-   */
-  void emit(str name, any payload={}) {
-    with.lock(mtx, [&] { 
-      events.emplace_back(move(name), move(payload));
-    });
-    cv.notify_one();
-  }
-
-  /**
-   * @brief Dispatches all queued events to their registered handlers.
-   * 
-   * Safely callable from any thread. This method swaps out the event queue
-   * under a lock and proc_table a copy of it outside the lock to avoid
-   * blocking other operations. For each event, the list of handlers is
-   * also copied under a lock to prevent concurrent modification during
-   * dispatch. This ensures thread-safe and non-blocking execution of
-   * handler callbacks, even if new handlers are added or removed during dispatch.
-   */
-  void dispatch() {
-    list local;
-    with.lock(mtx, [&] { local.swap(events); });
-
-    for (const auto& [name, data]: local) {
-      objs handlers;
-
-      with.lock(mtx, [&] {
-        auto it = listeners.find(name);
-        if (it != listeners.end() && !it->second.empty()) // Second condition avoids copying empty list
-          handlers = it->second;      // Cant pass by reference cuz handlers is unsafe after lock
-      });
-
-      if (handlers.empty()) continue; // Skip if there are no handlers
-      for (const auto& handler: handlers) 
-        handler.fn(data);
+      auto it = next(rit).base();  // convert to forward iterator
+      stack.erase(it);
+      break;
     }
   }
 
-  /**
-   * @brief Block until at least one event is queued, then dispatch it.
-   * Uses a condition variable to efficiently wait until work is available.
-   */
-  void wait_dispatch() {
-    with.unique(mtx, [&](auto& lock) {
-      cv.wait(lock, [&] { return !events.empty(); });
-    });
-    dispatch();
+  /** @brief Clear all styles from the stack. */
+  void reset() { 
+    stack.clear(); 
+    stack.shrink_to_fit();
   }
 
+  /** @brief Combine all active styles into one map. */
+  auto get_styles() -> map<str,str> {
+    auto result = map<str,str>();
+
+    for (auto& [key, val]: stack)
+      result[key] = val;
+    return result;
+  }
+
+  // ------ Instance variables ------
+  vec<pair<str, str>> stack;
+};
+
+
+class RichText {
+  public:
+
+  // ------ Class variables ------
+  static inline auto TAG_PATTERN = regex(R"(\[(/?)([^\[\]]*?)\])");
+  static inline auto ESC_LB      = regex(R"(\\\[)");
+  static inline auto ESC_RB      = regex(R"(\\\])");
+  static inline auto PLACE_LB    = "\x01";
+  static inline auto PLACE_RB    = "\x02";
+  static inline auto ANSI_RESET  = "\033[0m";
+
+  static inline auto STYLES = map<str,str>{
+    {"bold",      "1"}, 
+    {"dim",       "2"}, 
+    {"italic",    "3"},
+    {"underline", "4"}, 
+    {"strike",    "9"},
+  };
+
+  static inline auto COLORS = map<str,str>{
+    {"black",     "#000000"}, 
+    {"red",       "#ff0000"}, 
+    {"green",     "#00ff00"},
+    {"yellow",    "#ffff00"}, 
+    {"blue",      "#0000ff"}, 
+    {"magenta",   "#ff00ff"},
+    {"cyan",      "#00ffff"}, 
+    {"white",     "#ffffff"}, 
+    {"gray",      "#808080"},
+    {"lightgray", "#cccccc"}, 
+    {"darkred",   "#880000"},
+    {"darkgreen", "#008800"}, 
+    {"darkblue",  "#000088"},
+  };
+
+  static inline auto ALIASES = map<str,str>{
+    {"b", "bold"}, 
+    {"i", "italic"}, 
+    {"u", "underline"},
+    {"s", "strike"}, 
+    {"d", "dim"},
+  };
+
+  RichText(str input):
+    raw   (move(input)),  // Store the raw input string with markup tags
+    text  (""s),          // Initialize rendered ANSI-formatted text (to be set by render())
+    size  (0u),           // Number of visible characters (excluding ANSI codes)
+    stack (StyleStack())  // Initialize the style stack for nested formatting
+  {
+    text = render();                // Immediately render text
+    size = strip_ansi(text).size(); // Only count visible characters
+  }
+  
+  /** @brief Enables ANSI and Unicode output (once at startup). */
+  static void enable() {
+    initialize_terminal();
+  }
+
+  /** @brief Streams the rendered text to an output stream (e.g., std::cout). */
+  friend ostream& operator<<(ostream& os, const RichText& rt) {
+    return os << rt.text;
+  }
+
+  // ------ Instance variables ------
+  
+  str raw;
+  str text;
+  uint size;
+  StyleStack stack;
+
+  // ------ Internal helpers ------
+
   private:
-  /**
-   * @brief Internal registration helper to associate a handler with an explicit ID.
-   * @param id A preassigned handler ID.
-   * @param name The event name.
-   * @param handler The function to register.
-   * @return The same ID passed in.
-   */
-  uint on(uint id, str name, func handler) {
-    with.lock(mtx, [&] { 
-      listeners[move(name)].emplace_back(id, move(handler)); 
-    });
-    return id;
+
+  /** @brief Removes ANSI escape codes from the given string. */
+  auto strip_ansi(str& text) -> str {
+    static auto ansi_re = regex(R"(\x1B\[[0-9;]*m)");
+    return regex_replace(text, ansi_re, "");
+  }
+
+  /** @brief Converts a hex color string or named color to an RGB tuple. */
+  auto hex_to_rgb(str value) -> tuple<uint,uint,uint> {
+    value.erase(0, 1); // remove leading #
+    auto r = stoul(value.substr(0, 2), nullptr, 16);
+    auto g = stoul(value.substr(2, 2), nullptr, 16);
+    auto b = stoul(value.substr(4, 2), nullptr, 16);
+    return { r, g, b };
+  }
+
+  auto is_valid_hex_color(const str& value) -> bool {
+    return value.size() == 7
+      && value[0] == '#'
+      && all_of(value.begin()+1, value.end(), ::isxdigit);
+  }
+
+  /** @brief Converts a style map to an ANSI escape code string. */
+  auto to_ansi(const map<str,str>& styles) -> str {
+    auto codes = vec<str>();
+
+    for (auto& [key, value]: styles) {
+      if (STYLES.contains(key)) {
+        codes.push_back(STYLES.at(key));
+
+      } else if (key == "fg") {
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+
+        auto [r, g, b] = hex_to_rgb(hex);
+        codes.push_back(format("38;2;{};{};{}", r, g, b));
+
+      } else if (key == "bg") {
+        auto hex = COLORS.contains(value) ? COLORS.at(value) : value;
+        if (!is_valid_hex_color(hex)) continue; // skip if not valid hex color
+        
+        auto [r, g, b] = hex_to_rgb(hex);
+        codes.push_back(format("48;2;{};{};{}", r, g, b));
+      }
+    }
+
+    return codes.empty() ? "" : format("\033[{}m", join(codes, ';'));
+  }
+
+  auto resolve_tag(str& tag) -> str {
+    return ALIASES.contains(tag) ? ALIASES.at(tag) : tag;
+  }
+
+  auto parse_to_styles(str& tag) -> map<str,str> {
+    auto result = map<str,str>();
+    auto stream = isstream(tag);
+    auto token = ""s;
+
+    while (stream >> token) {
+      auto eq = token.find('=');
+      
+      if (eq == npos) {
+        auto key = resolve_tag(token);
+        result[key] = "";   // Flag tag with no value ([bold] becomes {"bold": "-"})
+        continue;
+      }
+
+      auto key = token.substr(0, eq);
+      auto val = token.substr(eq+1);
+      key = resolve_tag(key);
+      result[key] = val;
+    }
+
+    return result;
+  }
+
+  auto render() -> str {
+    auto out = ""s;
+    auto index = 0u;
+
+    // Escape literal brackets (\[ and \]) so they are not parsed as tags
+    auto text = regex_replace(raw, ESC_LB, PLACE_LB);
+    text = regex_replace(text, ESC_RB, PLACE_RB);
+
+    auto match = smatch();
+    while (regex_search(text.cbegin() + index, text.cend(), match, TAG_PATTERN)) {
+      out += text.substr(index, match.position());  // Add all plain text before the tag
+
+      auto is_closing = match[1].str() == "/";
+      auto tag = trim(match[2].str());  // raw tag content
+
+      if (is_closing) {           // Handle [/], which resets all styles
+        if (tag.empty()) {                          
+          stack.reset();
+          out += ANSI_RESET;
+        
+        } else {                  // Handle [/<tag>] - pop specific style
+          stack.pop(resolve_tag(tag));
+          out += ANSI_RESET + to_ansi(stack.get_styles());
+        }
+
+      } else {                    // Handle [tag ...] â€” parse and push new style(s)
+        stack.push(parse_to_styles(tag));
+        out += to_ansi(stack.get_styles());
+      }
+
+      index += match.position() + match.length();  // Move index forward to just after the matched tag
+    }
+
+    // Append remaining raw text and unescape any \[ or \]
+    out += text.substr(index);
+    replace(out.begin(), out.end(), *PLACE_LB, '[');
+    replace(out.begin(), out.end(), *PLACE_RB, ']');
+
+
+    // Only append reset if styling was ever applied
+    if (!stack.get_styles().empty())
+      out += ANSI_RESET;
+
+    stack.reset();  // To free memory once text has been rendered
+    return out;
   }
 };
+
+
+// int main() {
+//   auto t1 = RichText("Hello [b]World[/b]");
+//   auto t2 = RichText("[i]Italic[/i] text");
+//   auto t3 = RichText("[u]Underlined[/u] content");
+//   auto t4 = RichText("[strike]Struck[/strike] out");
+//   auto t5 = RichText("Mix: [b]Bold[/] then [i]Italic[/] and [u]Underline[/]");
+//   auto t6 = RichText("Color test: [fg=red]Red[/fg], [fg=#00ff00]Green[/fg]");
+//   auto t7 = RichText("Background test: [bg=yellow]Yellow Background[/bg]");
+//   auto t8 = RichText("[b fg=blue]Bold Blue [fg=green]Green[/fg] Back to Blue[/b]");
+//   auto t9 = RichText("Escaped: \\[b\\]not bold\\[/b\\]");
+//   auto t10 = RichText("[b fg=red]Red Bold[/] Normal");
+//   auto t11 = RichText("[b]123[/]456");
+
+//   cout << "Test 1:  " << t1 << "\n";
+//   cout << "Test 2:  " << t2 << "\n";
+//   cout << "Test 3:  " << t3 << "\n";
+//   cout << "Test 4:  " << t4 << "\n";
+//   cout << "Test 5:  " << t5 << "\n";
+//   cout << "Test 6:  " << t6 << "\n";
+//   cout << "Test 7:  " << t7 << "\n";
+//   cout << "Test 8:  " << t8 << "\n";
+//   cout << "Test 9:  " << t9 << "\n";
+//   cout << "Test 10: " << t10 << "\n";
+//   cout << "Test 11: " << t11 << " (size = " << t11.size << ")\n";
+//   return 0;
+// }
 
 ------------------------------
  FILE:  Table.hpp
@@ -2232,7 +2335,7 @@ class Text {
 
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Returns the fully formatted output string. */
@@ -2351,26 +2454,36 @@ class Core {
   /** @brief Constructs a core with the given ID and starts the thread. */
   Core(uint id=0): 
     id          (id),                 // Core ID
-    job_ticks   (0),                  // Number of ticks the current process has been running
+    job_ticks   (0u),                 // Number of ticks the current process has been running
+    delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
-    preempt     (nullptr),            // Optional strategy-injected logic
+    preempt     (nullptr),            // For injecting a preemption handler (optional).
     active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
     thread      ()                    // Background ticking thread
   { 
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
+      auto counter = 0u;
+
       while (active) {
-        with_locked([&] {
-          tick();
-        });
-        sleep_for(1ms);
+        if (counter-- == 0) {
+          with_locked([&] { tick(); });
+          counter = delay;
+        }
+        sleep_for(1ms);  // always happens
       }
     });
   }
 
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
+
+  /** @brief Initializes core with a given delay and optional preemp handler. */
+  void init(uint ticks, func handler=nullptr) {
+    delay = ticks;
+    preempt = handler;
+  }
 
   /** @brief Called by scheduller to assign a process to this core. */
   void assign(Process& process) { set_job(&process, id); }
@@ -2385,15 +2498,13 @@ class Core {
   auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
-  }
-
-  /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }     
+  } 
 
   // ------ Instance variables ------
 
   uint id;                      
   uint job_ticks;       
+  uint delay;       
   bool can_release;   
   Process* job; 
   func preempt;    
@@ -2418,8 +2529,12 @@ class Core {
       if (job->data.program.finished())
         can_release = true;
 
+      // Mark release if process is sleeping
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS
+        can_release = true;
+
       // If the process has finished all its instructions, mark for release
-      if (preempt && preempt(*this))
+      else if (preempt && preempt(*this))
         can_release = true;
 
     } catch (exception& e) {
@@ -2467,7 +2582,7 @@ class Core {
  * - Handles core lifecycle: creation, reset, and safe iteration.
  * 
  * Key Behaviors:
- * - `resize(size)`: Replaces all cores with a new set of N fresh cores.
+ * - `init(size)`: Replaces all cores with a new set of N fresh cores.
  * - `get_busy()` / `get_idle()`: Filters out cores by status for use in scheduling logic.
  * - `get_usage()`: Returns a float utilization ratio (busy / total cores).
  * - `get_running_pids()` and `get_busy_core_ids()`: Extract diagnostic metadata from active cores.
@@ -2475,7 +2590,7 @@ class Core {
  * Design Notes:
  * - vec<uptr<Core>> are stored as `uptr<Core>` to ensure clean ownership and destruction.
  * - Always use reference-returning accessors (`vec<ref<Core>>`) instead of raw pointer access.
- * - Guards against null pointers even though `resize()` always populates all slots.
+ * - Guards against null pointers even though `init()` always populates all slots.
  * - Scheduler is the only component expected to use this class directly.
  */
 class CoreManager {
@@ -2484,11 +2599,11 @@ class CoreManager {
   CoreManager():
     cores (vec<uptr<Core>>()) {}  // Vector contianer for cores
 
-  /** @brief Clears and reinitializes the core list with the specified number of cores */
-  void resize(uint size) {
-    cores.clear();                // Destroys all existing cores
-    cores.reserve(size);          // Preallocate to avoid reallocations
-    for (uint i=0; i < size; ++i)
+  /** @brief Clears and initializes the core list with the specified number of cores */
+  void init(uint size) {
+    cores.clear();        // Destroys all existing cores (just in case)
+    cores.reserve(size);  // Preallocate to avoid reallocations
+    for (auto i=0u; i < size; ++i)
       cores.emplace_back(make_unique<Core>(i+1));
   }
 
@@ -2573,16 +2688,14 @@ class CoreManager {
 
 /** Represents a single process instruction. */
 struct Instruction {
-  using Script = vec<Instruction>;
-
-  str opcode;     ///< Operation name, e.g., `FOR`, `PRINT`, etc.
-  vec<str> args;      ///< List of string arguments
+  str opcode;     // Operation name, e.g., `FOR`, `PRINT`, etc.
+  vec<str> args;  // List of string arguments
 
   /**
    * Metadata: cached exit address for control-flow blocks, e.g., `FOR`, `IF`.
    * Set dynamically to allow skipping. A value of 0 means unset.
    */
-  mutable uint exit = 0;
+  uint exit = 0;
 };
 
 ------------------------------
@@ -2631,7 +2744,7 @@ class InstructionHandler {
   /** @brief Returns true if this instruction begins a exit control block (e.g., FOR). */
   auto is_control_exit() -> bool { return !open_opcode.empty(); }
 
-  /** Generates a random instruction based on the signature. */
+  /** @brief Generates a random instruction based on the signature. */
   auto generate() -> Instruction {
     auto inst = Instruction(opcode);
     if (signatures.empty()) return inst;
@@ -2696,18 +2809,18 @@ class InstructionInterpreter {
 
   public:
 
-  /** Returns the global singleton get of the InstructionInterpreter. */
+  /** @brief Returns the global singleton get of the InstructionInterpreter. */
   static auto get() -> InstructionInterpreter& {
     static auto inst = InstructionInterpreter();
     return inst;
   }
 
-  /** Registers a handler by opcode. */
+  /** @brief Registers a handler by opcode. */
   void register_instruction(InstructionHandler handler) {
     handlers[handler.opcode] = move(handler);
   }
 
-  /** Execute an instruction using its handler. */
+  /** @brief Execute an instruction using its handler. */
   void execute(Instruction& inst, ProcessData& proc) {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
@@ -2716,22 +2829,20 @@ class InstructionInterpreter {
     it->second.execute(inst, proc);
   }
 
-  /**
-   * Generates a random list of up to `size` instructions with proper block closure.
-   * May exceed size due to necessary ENDFOR-like closures.
-   */
-  auto generate_script(uint size, uint max_depth=3) -> Instruction::Script {
-    auto script = Instruction::Script();
-    auto stack = vec<ref<InstructionHandler>>();  // Tracks opened control blocks
+  /** @brief Generates a random list of up to `size` instructions with proper block closure. */
+  auto generate_script(uint size, uint max_depth=3) -> vec<Instruction> {
+    auto script = vec<Instruction>();
+    auto stack = vec<ref<InstructionHandler>>();                      // Tracks opened control blocks
+    auto inst_count = [&]() { return script.size() + stack.size(); }; // actual + pending ENDFORS
 
-    while (script.size() < size) {
-      if (should_open(stack, max_depth))          // For opening control instructions
+    while (inst_count() < size) {
+      if (should_open(stack, max_depth) && inst_count()+2 <= size)    // For opening control instructions
         open_control_block(script, stack);
       
-      else if (should_close(stack))               // For closing control instructions
+      else if (should_close(stack))                       // For closing control instructions
         close_control_block(script, stack);
 
-      if (!flat_handlers.empty())                 // For adding flat instructions
+      if (!flat_handlers.empty() && inst_count() < size)  // For adding flat instructions
         script.push_back(Rand::pick(flat_handlers).get().generate());
     }
 
@@ -2751,25 +2862,25 @@ class InstructionInterpreter {
 
   // ------ Internal helpers ------
 
-  /** Returns true if a control block can be opened (depth-limited, random chance). */
+  /** @brief Returns true if a control block can be opened (depth-limited, random chance). */
   bool should_open(vec<ref<InstructionHandler>>& stack, uint max_depth) { 
     return !control_handlers.empty() && (stack.size() < max_depth) && Rand::chance(4); 
   }
 
-  /** Returns true if a control block can be closed (if any open, random chance). */
+  /** @brief Returns true if a control block can be closed (if any open, random chance). */
   bool should_close(vec<ref<InstructionHandler>>& stack) { 
     return !stack.empty() && Rand::chance(4); 
   }
 
-  /** Emits a random control-opener instruction and pushes it to the stack. */
-  void open_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  /** @brief Emits a random control-opener instruction and pushes it to the stack. */
+  void open_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     auto& handler = Rand::pick(control_handlers);
     script.push_back(handler.get().generate());
     stack.push_back(handler);
   }
 
-  /** Emits the matching end-opcode of the current open control block. */
-  void close_control_block(Instruction::Script& script, vec<ref<InstructionHandler>>& stack) {
+  /** @brief Emits the matching end-opcode of the current open control block. */
+  void close_control_block(vec<Instruction>& script, vec<ref<InstructionHandler>>& stack) {
     if (stack.empty())
       throw runtime_error("Attempted to emit ENDFOR with empty control stack!");
     
@@ -2874,26 +2985,23 @@ class Signature {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_add() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "ADD",
-    .signatures = {
-      { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
-      { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
-      { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
-    },
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint lhs = proc.get_memory().get(inst.args[1]);
-      uint rhs = proc.get_memory().resolve(inst.args[2]);
-      proc.get_memory().set(inst.args[0], lhs + rhs);
-    },
-  };
+auto make_add() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("ADD")
+    .add_signature(Signature().Var().Var().Var())
+    .add_signature(Signature().Var().Var().Uint16())
+    .add_signature(Signature().Var().Uint16().Uint16())
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& memory = process.memory;
+      auto lhs = memory.get(inst.args[1]);
+      auto rhs = memory.resolve(inst.args[2]);
+      memory.set(inst.args[0], lhs + rhs);
+    });
 }
 
 ------------------------------
@@ -2907,19 +3015,16 @@ inline InstructionHandler make_add() {
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_declare() {
-  using Param = InstructionParam;
-  using list = vector<str>;
-  return {
-    .opcode = "DECLARE",
-    .signatures = {{ Param::Var(), Param::UInt16() }},
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint value = stoul(inst.args[1]);
-      proc.get_memory().set(inst.args[0], value);
-    },
-  };
+auto make_declare() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("DECLARE")
+    .add_signature(Signature().Var().Uint16())
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto var = inst.args[0];
+      auto value = stoul(inst.args[1]);
+      process.memory.set(var, value);
+    });
 }
-
 
 ------------------------------
  FILE:  endfor.hpp
@@ -2978,19 +3083,16 @@ auto make_for() -> InstructionHandler {
   // === Skips ahead to the matching ENDFOR. ===
   auto skip_block = [](auto& program, auto& inst) { 
 
-    cout << "Before: inst.exit = " << inst.exit << "\n";
-    
     // Use cached exit if available
     if (inst.exit != 0)
       return void(program.set_ip(inst.exit));
       
     auto& script = program.script;
-    uint start = program.ip;
-    uint depth = 1;
-
+    auto start = program.ip;
+    auto depth = 1u;
 
     // Otherwise, scan ahead to find the matching ENDFOR
-    for (uint i = start+1; i < script.size(); ++i) {
+    for (auto i = start+1u; i < script.size(); ++i) {
       auto& opcode = script[i].opcode;
       int delta = (opcode == "FOR") - (opcode == "ENDFOR");
       depth += delta;
@@ -2999,7 +3101,6 @@ auto make_for() -> InstructionHandler {
       if (depth == 0) {
         inst.exit = i + 1;
         program.set_ip(inst.exit);
-        cout << "After: inst.exit = " << inst.exit << "\n";
         return;
       }
     }
@@ -3010,7 +3111,7 @@ auto make_for() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("FOR")
     .set_exit("ENDFOR")
-    .add_signature(Signature().Uint(1, 5))
+    .add_signature(Signature().Uint(1,5))
 
     .set_execute([&](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
@@ -3063,27 +3164,27 @@ auto make_print() -> InstructionHandler {
 auto make_sleep() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SLEEP")
-    .add_signature(Signature().Uint(0, 3))
+    .add_signature(Signature().Uint(0,3))
 
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto ticks = stoul(inst.args[0]);
+
+      // Case 0: Skip sleep if duration is zero
+      if (ticks == 0)
+        return;
+
       auto& program = process.program;
       auto& control = process.control;
-      auto& context = program.context;
 
-      // Phase 1: First-time setup
-      if (!context.top_ip_is(program.ip)) {
-        context.push(program.ip);               // Mark SLEEP as active on the context stack
-        control.sleep_for(stoul(inst.args[0])); // Start sleep for given duration (in ticks)
-      }
+      // Case 1: Begin or continue sleeping
+      if (!control.sleeping())
+        control.sleep_for(ticks);
+      else 
+        control.tick();
 
-      // Phase 2: Sleep body
-      if (!control.sleeping())                  // Done sleeping, remove context frame
-        context.pop();        
-
-      else {                                    
-        control.tick();                         // Still sleeping, consume one tick
-        program.set_ip(program.ip);             // Block ip auto-increment by setting manually
-      }
+      // Case 2: Still sleeping
+      if (control.sleeping())
+        program.set_ip(program.ip);  // Block auto-increment
     });
 }
 
@@ -3095,26 +3196,23 @@ auto make_sleep() -> InstructionHandler {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "core/instruction/InstructionParam.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
 
-inline InstructionHandler make_subtract() {
-  using Param = InstructionParam;
-  return {
-    .opcode = "SUBTRACT",
-    .signatures = {
-      { Param::Var(), Param::Var(),    Param::Var() },    // ADD var, var, var
-      { Param::Var(), Param::Var(),    Param::UInt16() }, // ADD var, var, val
-      { Param::Var(), Param::UInt16(), Param::UInt16() }, // ADD var, val, val
-    },
-    .execute = [](Instruction& inst, ProcessData& proc) {
-      uint lhs = proc.get_memory().get(inst.args[1]);
-      uint rhs = proc.get_memory().resolve(inst.args[2]);
-      proc.get_memory().set(inst.args[0], (lhs > rhs) ? (lhs-rhs) : 0);
-    },
-  };
+auto make_subtract() -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("SUBTRACT")
+    .add_signature(Signature().Var().Var().Var())
+    .add_signature(Signature().Var().Var().Uint16())
+    .add_signature(Signature().Var().Uint16().Uint16())
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& memory = process.memory;
+      auto lhs = memory.get(inst.args[1]);
+      auto rhs = memory.resolve(inst.args[2]);
+      memory.set(inst.args[0], lhs > rhs ? lhs - rhs : 0);
+    });
 }
 
 ------------------------------
@@ -3124,32 +3222,1127 @@ inline InstructionHandler make_subtract() {
 
 #pragma once
 #include "core/instruction/InstructionHandler.hpp"
-// #include "add.hpp"
-// #include "declare.hpp"
+#include "add.hpp"
+#include "declare.hpp"
 #include "endfor.hpp"
 #include "for.hpp"
 #include "print.hpp"
 #include "sleep.hpp"
-// #include "subtract.hpp"
+#include "subtract.hpp"
 
 
 auto get_instruction_handlers() -> vec<InstructionHandler> {
   return {
-    // make_add(),
-    // make_declare(),
+    make_add(),
+    make_declare(),
     make_endfor(),
     make_for(),
     make_print(),
     make_sleep(),
-    // make_subtract(),
+    make_subtract(),
   };
 }
 
 ------------------------------
- FILE:  .gitkeep
- PATH:  core\memory\.gitkeep
+ FILE:  main.py
+ PATH:  core\memory\main.py
 ------------------------------
 
+from MemoryManager2 import *
+
+
+class Process:
+    def __init__(self, pid, manager):
+        vmemory = manager.get_vmemory(pid)
+        self.memory = ProcessMemory(vmemory)
+
+
+class CommandRegistry:
+    def __init__(self, mm: MemoryManager, process: Process):
+        self.mm = mm
+        self.process = process
+        self.commands = {
+            "write": self._write,
+            "read": self._read,
+            "declare": self._declare,
+            "add": self._add,
+            "vmstat": self._vmstat,
+            "process-smi": self._process_smi,
+            "write-raw": self._write_raw,
+        }
+
+    def execute(self, line):
+        tokens = line.strip().split()
+        if not tokens: return
+        cmd, args = tokens[0], tokens[1:]
+
+        if cmd not in self.commands:
+            print(f"[shell] Unknown command: {cmd}")
+            return
+
+        try:
+            self.commands[cmd](args)
+        except Exception as e:
+            print(f"[error] {e}")
+
+    # Command Handlers
+
+    def _write_raw(self, args):
+        if len(args) != 2:
+            print("[write-raw] Usage: write-raw <vaddr> <value>")
+            return
+
+        vaddr = int(args[0])
+        value = int(args[1])
+        print(f"[exec] WRITE-RAW vaddr={hex(vaddr)} = {value}")
+
+        is_violation, is_page_fault = self.process.memory.view.write(vaddr, value)
+        if is_violation:
+            print("[write-raw] Invalid address (violation)")
+        elif is_page_fault:
+            print("[write-raw] Page fault occurred â€” retry later")
+        else:
+            print("[write-raw] Write successful")
+
+    def _write(self, args):
+        var, value = args[0], int(args[1])
+        print(f"[exec] WRITE {var} = {value}")
+        success = self.process.memory.set(var, value)
+        if not success:
+            print("[write] Page fault occurred â€” retry later")
+
+    def _read(self, args):
+        var = args[0]
+        print(f"[exec] READ {var}")
+        value, is_violation, is_page_fault = self.process.memory.get(var)
+
+        if is_violation:
+            print(f"[read] '{var}' is undeclared â€” cannot read")
+        elif is_page_fault:
+            print("[read] Page fault occurred â€” retry later")
+
+    def _declare(self, args):
+        if len(args) != 2:
+            print("[declare] Usage: declare <var> <value>")
+            return
+
+        var, value = args[0], int(args[1])
+        print(f"[exec] DECLARE {var} = {value}")
+        success = self.process.memory.set(var, value)
+        if not success:
+            print(f"[declare] Page fault occurred during declaration â€” retry later")
+
+    def _add(self, args):
+        if len(args) != 3:
+            print("[add] Usage: add <dst> <src1> <src2>")
+            return
+        dst, src1, src2 = args
+        print(f"[exec] ADD {dst} {src1} {src2}")
+
+        val1, inv1, pf1 = self.process.memory.get(src1)
+        val2, inv2, pf2 = self.process.memory.get(src2)
+
+        if inv1 or inv2:
+            print("[add] One or more variables undeclared â€” aborting")
+            return
+        if pf1 or pf2:
+            print("[add] Page fault occurred â€” retry later")
+            return
+
+        result = (val1 + val2) & 0xFFFF
+        success = self.process.memory.set(dst, result)
+        if not success:
+            print("[add] Destination write page fault â€” retry later")
+
+    def _vmstat(self, args):
+        if not args:
+            print("[vmstat] Usage: vmstat <pid>")
+            return
+
+        pid = int(args[0])
+        if pid not in self.mm.data.page_table_map:
+            print(f"[vmstat] No page table found for pid={pid}")
+            return
+
+        print(f"[vmstat] Process {pid}:")
+        table = self.mm.data.page_table_map[pid]
+        for page_num in sorted(table.pages()):
+            entry = table.get(page_num)
+            if entry.is_loaded():
+                print(f"  Page {page_num:<2} â†’ Frame {entry.frame_num}")
+            else:
+                print(f"  Page {page_num:<2} â†’ Not Loaded")
+
+    def _process_smi(self, args):
+        mm = self.mm
+        print("=== PROCESS-SMI: Memory Summary ===")
+        print(f"Total frames:     {mm.data.frame_count}")
+        print(f"Free frames:      {len(mm.data.free_frames)}")
+        print(f"Used frames:      {mm.data.frame_count - len(mm.data.free_frames)}\n")
+
+        for pid, page_table in mm.data.page_table_map.items():
+            print(f"Process PID: {pid}")
+            loaded = 0
+            for page_num in sorted(page_table.pages()):
+                page = page_table.get(page_num)
+                if page.is_loaded():
+                    print(f"  Page {page_num:02} â†’ Frame {page.frame_num}")
+                    loaded += 1
+                else:
+                    print(f"  Page {page_num:02} â†’ Not loaded")
+            print(f"  Total pages: {len(page_table.pages())}, Loaded: {loaded}")
+            print()
+
+
+if __name__ == "__main__":
+    mm = MemoryManager()
+    mm.init(capacity=64, page_size=64)
+    mm.alloc(pid=1, bytes_needed=128)        # 2 pages
+    process = Process(pid=1, manager=mm)
+    registry = CommandRegistry(mm, process)
+
+    registry.execute("write-raw 0 111")      ; print()  # page 0 â†’ frame 0
+    registry.execute("write-raw 64 222")     ; print()  # page 1 â†’ frame 0
+    registry.execute("write-raw 0 333")      ; print()  # will fail naturally
+
+
+------------------------------
+ FILE:  MemoryManager.hpp
+ PATH:  core\memory\MemoryManager.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "MemoryManagerData.hpp"
+#include "MemoryView.hpp"
+#include "types.hpp"
+
+
+class MemoryManager {
+  public:
+
+  MemoryManager():
+    data (MemoryManagerData()) {}
+
+  void init(uint capacity, uint page_size) {    
+    data.page_size = page_size;
+    data.frame_count = capacity / page_size;
+    data.memory = vec<uint>(capacity, 0);
+  
+    // Reset and repopulate the free frame list
+    data.free_frames.clear(); 
+    for (auto i=0u; i < data.frame_count; ++i)
+      data.free_frames.push_back(i);
+
+    // Clear all process page tables
+    data.page_table_map.clear();
+  }
+
+  auto alloc(uint pid, uint bytes_needed) -> bool {
+    auto pages_needed = (bytes_needed + data.page_size - 1) / data.page_size;
+    auto page_table = PageTable();
+
+    for (auto page_num=0; page_num < pages_needed; ++page_num)
+      page_table.add(page_num, PageEntry());
+
+    data.page_table_map[pid] = move(page_table);
+    return true;
+  }
+
+  auto create_memory_view_for(uint pid) -> MemoryView {
+    return MemoryView(pid, data, [this](uint pid, uint page_num) {
+      return this->page_in(pid, page_num);
+    });
+  }
+
+  // ------ Member variables ------
+  MemoryManagerData data;
+  
+  // ------ Internal helpers ------
+  private:
+
+  /** Fills the given frame in memory using the provided filler function. */
+  void fill_frame(uint frame_num, func<uint(uint)> filler) {
+    auto maddr = frame_num * data.page_size;
+    for (auto i = 0u; i < data.page_size; ++i)
+      data.memory[maddr + i] = filler(i);
+  }
+
+  /**
+   * Loads the given virtual page into memory for a process.
+   * May evict another page if no free frame is available (side effect).
+   */
+  auto page_in(uint pid, uint page_num) -> bool {
+    auto& free_frames = data.free_frames;
+    auto frame_num = opt<uint>();
+    
+    // Try to get a free frame
+    if (!data.free_frames.empty()) {
+      frame_num = free_frames.front();
+      free_frames.pop_front();
+    } 
+    // Try to evict a page
+    else
+      frame_num = page_out(); // <- side effect
+
+    // Failed to allocate a frame (no evictable page)  
+    if (!frame_num)
+      return false;
+
+    // Fetch page table and page metadata
+    auto& table = data.page_table_map[pid];
+    auto& page = table.get(page_num);
+
+    // Assign physical frame to page
+    page.frame_num = frame_num;
+    data.equeue.push_back({ pid, page_num });
+
+    // Fill frame with content from backing store or zero-fill
+    auto key = make_key(pid, page_num);
+    if (data.store.contains(key)) {
+      auto bytes = move(data.store.at(key));
+      data.store.erase(key);
+      fill_frame(*frame_num, [&](uint i) { return bytes[i]; });
+    }
+    else
+      fill_frame(*frame_num, [](uint) { return 0; });
+
+    return true;
+  }
+
+  /**
+    * Evicts one loaded page from memory and returns its freed frame number.
+    * This simulates basic page replacement when memory is full.
+    * Also known as: "evict_page".
+    */
+  auto page_out() -> opt<uint> {
+    while (!data.equeue.empty()) {
+      auto [pid, page_num] = data.equeue.front();
+      data.equeue.pop_front();   
+
+      auto& table = data.page_table_map[pid];
+      auto& page = table.get(page_num);
+
+      auto frame_num = page.frame();
+      page.frame_num = nullopt;
+      data.free_frames.push_back(frame_num);
+
+      auto maddr = frame_num * data.page_size;
+      auto start = data.memory.begin() + maddr;
+      auto end = start + data.page_size;
+      auto bytes_out = vec<uint>(start, end);
+      data.store[make_key(pid, page_num)] = move(bytes_out);
+      return frame_num;
+    }
+    return nullopt;
+  }
+
+  /**
+   * Computes a unique 64-bit key for a process-page pair.
+   * Used as the backing store index for evicted pages.
+   */
+  auto make_key(uint pid, uint page_num) -> uint64 {
+    return (cast<uint64>(pid) << 32) | page_num;
+  }
+};
+
+------------------------------
+ FILE:  MemoryManager.py
+ PATH:  core\memory\MemoryManager.py
+------------------------------
+
+class PageEntry:
+    """
+    Represents the metadata of a virtual page (not the actual content).
+
+    This object tracks:
+      - which physical frame it's loaded in (if any)
+      - whether the page is currently loaded into memory
+
+    Note:
+        This does NOT contain the page's data. Content is stored in the
+        memory array (RAM) and/or the backing store.
+    """
+
+    def __init__(self, frame_num=None):
+        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
+
+    def is_loaded(self):
+        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
+        return self.frame_num is not None
+
+
+class PageTable:
+    def __init__(self):
+        self.entries = {}  # Maps virtual page number â†’ PageEntry
+
+    def has_page(self, page_num):
+        return page_num in self.entries
+
+    def get(self, page_num):
+        return self.entries[page_num]
+
+    def add(self, page_num, page):
+        self.entries[page_num] = page
+
+    def pages(self):
+        return self.entries.keys()
+
+    def mark_unloaded(self, page_num):
+        self.entries[page_num].frame_num = None
+
+    def is_loaded(self, page_num):
+        return self.entries[page_num].is_loaded()
+
+    def get_frame(self, page_num):
+        return self.entries[page_num].frame_num
+
+
+class MemoryManager:
+    def __init__(self):
+        # Config and memory state
+        self.page_size = 0          # Bytes per page/frame
+        self.frame_count = 0        # Total number of frames
+
+        self.memory = []            # Physical memory: flat list of bytes
+        self.free_frames = []       # Tracks available frame indices
+        self.page_table_map = {}    # Page tables: maps pid â†’ PageTable object
+        self.equeue = []            # Tracks (pid, page_num) in load order
+        self.store = {}             # Backing store: (pid, page_num) â†’ byte array
+
+    def init(self, capacity, page_size):
+        """Initialize the memory manager with total capacity and page size."""
+        self.page_size = page_size
+        self.frame_count = capacity // page_size
+        self.memory = [0] * capacity
+        self.free_frames = list(range(self.frame_count))
+        self.page_table_map.clear()
+
+    def alloc(self, pid, bytes_needed):
+        """
+        Reserves virtual pages for a process without loading them.
+        Pages are created but not assigned frames until accessed.
+
+        Args:
+            pid (int): Process ID.
+            bytes_needed (int): Bytes to alloc.
+
+        Returns:
+            bool: True if allocation succeeded.
+        """
+        pages_needed = (bytes_needed + self.page_size - 1) // self.page_size
+        page_table = PageTable()
+        for page_num in range(pages_needed):
+            page_table.add(page_num, PageEntry())
+        self.page_table_map[pid] = page_table
+        return True
+
+    def write(self, pid, vaddr, value):
+        """Write a 2-byte value at the virtual address of a process."""
+        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
+            raise Exception(f"Access violation (WRITE) at address {hex(vaddr)}")
+        maddr1 = self._maddr_of(pid, vaddr)
+        maddr2 = self._maddr_of(pid, vaddr + 1)
+        self.memory[maddr1] = value & 0xFF
+        self.memory[maddr2] = (value >> 8) & 0xFF
+
+    def read(self, pid, vaddr):
+        """Read a 2-byte value at the virtual address of a process."""
+        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
+            raise Exception(f"Access violation (READ) at address {hex(vaddr)}")
+        maddr1 = self._maddr_of(pid, vaddr)
+        maddr2 = self._maddr_of(pid, vaddr + 1)
+        lo = self.memory[maddr1]
+        hi = self.memory[maddr2] << 8
+        return lo | hi
+
+    # ------ PRIVATE METHODS ------
+
+    def _owns_vaddr(self, pid, vaddr, num_bytes=1):
+        """
+        Checks whether a range of virtual addresses is allocated to the given process.
+        Validates that [addr, addr + bytes - 1] fits entirely within
+        the set of reserved pages (regardless of load state).
+
+        Args:
+            pid (int): Process ID.
+            addr (int): Starting virtual address.
+            bytes (int): Number of bytes to check (default: 1).
+
+        Returns:
+            bool: True if all pages in range are reserved by the process.
+        """
+        if pid not in self.page_table_map:
+            return False
+        table = self.page_table_map[pid]
+        start = vaddr // self.page_size
+        end = (vaddr + num_bytes - 1) // self.page_size
+        return all(table.has_page(p) for p in range(start, end + 1))
+
+    def _maddr_of(self, pid, vaddr):
+        """
+        Translates a virtual address to a physical memory index.
+        Triggers page-in if the page is not yet loaded.
+
+        Args:
+            pid (int): Process ID.
+            addr (int): Virtual address.
+
+        Returns:
+            int: Index in physical memory array.
+        """
+        page_num = vaddr // self.page_size
+        offset = vaddr % self.page_size
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        if not page.is_loaded():
+            self._page_in(pid, page_num)
+        return page.frame_num * self.page_size + offset
+
+    def _fill_frame(self, frame_num, filler):
+        """
+        Fills the given frame in memory using the provided filler function.
+
+        Args:
+            frame_num (int): Frame number to fill.
+            filler (Callable[[int], int]): Function taking index (0..page_size-1) and returning a byte.
+        """
+        maddr = frame_num * self.page_size
+        for i in range(self.page_size):
+            self.memory[maddr + i] = filler(i)
+
+    def _page_in(self, pid, page_num):
+        """
+        Loads a page into memory by assigning a free frame.
+        Also known as: "load_page".
+
+        Case 0: If the page is not loaded, this assigns a frame and zero-fills it.
+        Simulates demand paging (no actual disk access).
+        
+        Case 1: If memory is full, this triggers page replacement via FIFO eviction.
+
+        Args:
+            pid (int): Process ID.
+            page_num (int): Virtual page number to load.
+
+        Raises:
+            Exception: If no free frames are available.
+        """
+        frame_num = self.free_frames.pop(0) if self.free_frames else self._page_out()
+        table = self.page_table_map[pid]
+        page = table.get(page_num)
+        page.frame_num = frame_num
+        self.equeue.append((pid, page_num))
+
+        key = (pid, page_num)
+        if key in self.store:
+            data = self.store.pop(key)
+            self._fill_frame(frame_num, lambda i: data[i])
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (restored from store)")
+        else:
+            self._fill_frame(frame_num, lambda i: 0)
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (zero-filled)")
+
+    def _page_out(self):
+        """
+        Evicts one loaded page from memory and returns its freed frame number.
+        This simulates basic page replacement when memory is full.
+        Also known as: "evict_page".
+
+        Returns:
+            int: A frame number that was reclaimed.
+        """
+        while self.equeue:
+            pid, page_num = self.equeue.pop(0)
+            table = self.page_table_map[pid]
+            page = table.get(page_num)
+            
+            if not page.is_loaded():
+                continue
+            
+            frame_num = page.frame_num
+            page.frame_num = None
+            self.free_frames.append(frame_num)
+            
+            print(f"[MemoryManager._page_out()] EVICT pid={pid} â†’ page={page_num:<2} â†’ freed frame={frame_num}")
+            return frame_num
+        raise Exception("Eviction failed: no pages available to evict")
+
+
+class VirtualMemory:
+    """
+    Represents the virtual memory view for a specific process.
+    Provides read/write access using virtual addresses,
+    delegating to the system-wide MemoryManager.
+    """
+    def __init__(self, pid, manager):
+        self.pid = pid
+        self.manager = manager
+
+    def read(self, vaddr):
+        """Read a 2-byte value from the process's virtual memory."""
+        return self.manager.read(self.pid, vaddr)
+
+    def write(self, vaddr, value):
+        """Write a 2-byte value to the process's virtual memory."""
+        self.manager.write(self.pid, vaddr, value)
+
+class ProcessMemory:
+    def __init__(self, vmemory):
+        self.vmemory = vmemory
+        self.symbol_table = {}    # var name â†’ virtual address
+        self.next_offset = 0      # Next offset within symbol table
+        self.symbol_limit = 64    # Max 64 bytes (â†’ 32 symbol_table)
+
+    def set(self, var, value):
+        if var in self.symbol_table:
+            addr = self.symbol_table[var]
+        elif self.next_offset + 2 <= self.symbol_limit:
+            addr = self.next_offset
+            self.symbol_table[var] = addr
+            self.next_offset += 2
+            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
+        else:
+            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
+            return
+        self.vmemory.write(addr, value)
+
+    def get(self, var):
+        if var not in self.symbol_table:
+            print(f"[ProcessMemory.get()] '{var}' not declared â€” returning 0")
+            return 0
+        addr = self.symbol_table[var]
+        print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
+        return self.vmemory.read(addr)
+
+
+# mm = MemoryManager()
+# mm.init(capacity=128, page_size=64)       # Creates 2 frames
+# mm.alloc(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
+
+# vmemory = VirtualMemory(pid=1, manager=mm)
+# process = Process()
+# process.memory = ProcessMemory(vmemory)
+
+# DECLARE(Instruction(["a", "100"]), process)
+# DECLARE(Instruction(["b", "250"]), process)
+# ADD(Instruction(["c", "a", "b"]), process)
+
+------------------------------
+ FILE:  MemoryManager2.py
+ PATH:  core\memory\MemoryManager2.py
+------------------------------
+
+# This version uses MemoryView instead of VirtualMemory for process memory abstraction.
+
+class PageEntry:
+    """
+    Represents the metadata of a virtual page (not the actual content).
+
+    This object tracks:
+      - which physical frame it's loaded in (if any)
+      - whether the page is currently loaded into memory
+
+    Note:
+        This does NOT contain the page's data. Content is stored in the
+        memory array (RAM) and/or the backing store.
+    """
+
+    def __init__(self, frame_num=None):
+        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
+
+    def is_loaded(self):
+        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
+        return self.frame_num is not None
+
+
+class PageTable:
+    def __init__(self):
+        self.entries = {}  # Maps virtual page number â†’ PageEntry
+
+    def has_page(self, page_num):
+        return page_num in self.entries
+
+    def get(self, page_num):
+        return self.entries[page_num]
+
+    def add(self, page_num, page):
+        self.entries[page_num] = page
+
+    def pages(self):
+        return self.entries.keys()
+
+
+class MemoryManagerData:
+    def __init__(self):
+        self.page_size = 0          # Bytes per page/frame
+        self.frame_count = 0        # Total number of frames
+        self.memory = []            # Physical memory (flat byte array)
+        self.free_frames = []       # List of available frame indices
+        self.page_table_map = {}    # pid â†’ PageTable
+        self.equeue = []            # FIFO eviction queue: (pid, page_num)
+        self.store = {}             # Backing store: uint64 key â†’ byte array
+
+
+class MemoryView:
+    """
+    Represents the virtual memory view for a specific process.
+    Provides read/write access using virtual addresses.
+
+    This object handles:
+      - Ownership and access checks
+      - Demand paging (pages are loaded into RAM on first access)
+      - Read/write of 2-byte values
+
+    âš ï¸ WARNING:
+        The methods `read()` and `write()` will automatically
+        trigger a page-in if the requested virtual address resides
+        on a page that is not yet loaded in memory.
+        
+        This means these methods can:
+          - Modify physical memory state (RAM usage)
+          - Trigger evictions (if memory is full)
+          - Load pages from the backing store
+    """
+    def __init__(self, pid, data, page_in):
+        self.pid = pid
+        self.data = data
+        self.page_in = page_in
+
+    def read(self, vaddr) -> tuple[int, bool, bool]:
+        """
+        Read a 2-byte value from virtual memory.
+
+        Automatically triggers paging if the page(s) are not loaded.
+
+        Args:
+            vaddr (int): The starting virtual address (2 bytes will be read).
+
+        Returns:
+            (value, is_violation, is_page_fault)
+            - value: The read value (0 if failed)
+            - is_violation: True if the address was invalid (out-of-bounds or unmapped)
+            - is_page_fault: True if a page fault occurred during read
+        """
+        
+        if not self._owns_vaddr(vaddr, num_bytes=2):
+            return 0, True, False  # Treat as access violation (bad symbol), ignore is_pagefault
+
+        maddr1 = self._maddr_of(vaddr)
+        maddr2 = self._maddr_of(vaddr+1)
+        if maddr1 is None or maddr2 is None:
+            return 0, False, True  # Page fault
+
+        lower_byte = self.data.memory[maddr1]
+        upper_byte = self.data.memory[maddr2] << 8
+        return lower_byte | upper_byte, False, False
+
+    def write(self, vaddr, value) -> tuple[bool, bool]:
+        """
+        Write a 2-byte value to virtual memory.
+
+        Automatically triggers paging if the page(s) are not loaded.
+
+        Args:
+            vaddr (int): Starting virtual address to write to
+            value (int): 2-byte unsigned integer (0â€“65535)
+
+        Returns:
+            (is_violation, is_page_fault)
+            - is_violation: True if write was to an invalid address
+            - is_page_fault: True if a page fault occurred during write
+        """
+        if not self._owns_vaddr(vaddr, num_bytes=2):
+            return True, False  # Access violation
+
+        maddr1 = self._maddr_of(vaddr)
+        maddr2 = self._maddr_of(vaddr+1)
+        if maddr1 is None or maddr2 is None:
+            return False, True  # Page fault
+
+        self.data.memory[maddr1] = value & 0xFF
+        self.data.memory[maddr2] = (value >> 8) & 0xFF
+        return False, False
+
+    # ------ PRIVATE METHODS ------
+
+    def _owns_vaddr(self, vaddr, num_bytes=1):
+        page_table = self.data.page_table_map.get(self.pid)
+        if not page_table:
+            return False
+
+        start = vaddr // self.data.page_size
+        end = (vaddr + num_bytes - 1) // self.data.page_size
+        return all(page_table.has_page(p) for p in range(start, end + 1))
+
+    def _maddr_of(self, vaddr):
+        """
+        Translate virtual address to physical address.
+        Triggers demand paging if page not loaded.
+        Returns None only if page_in() fails.
+        """
+        page_num = vaddr // self.data.page_size
+        offset   = vaddr % self.data.page_size
+        
+        page_table = self.data.page_table_map[self.pid]
+        page = page_table.get(page_num)
+
+        if not page.is_loaded():
+            success = self.page_in(self.pid, page_num)
+            if not success:
+                return None
+            # Refresh the page reference after page_in()
+            page = page_table.get(page_num) # Refresh in case of mutation
+
+        return page.frame_num * self.data.page_size + offset
+
+
+class MemoryManager:
+    def __init__(self):
+        self.data = MemoryManagerData()
+
+    def init(self, capacity, page_size):
+        """Initialize the memory manager with total capacity and page size."""
+        self.data.page_size = page_size
+        self.data.frame_count = capacity // page_size
+        self.data.memory = [0] * capacity
+        self.data.free_frames = list(range(self.data.frame_count))
+        self.data.page_table_map.clear()
+
+    def alloc(self, pid, bytes_needed):
+        """
+        Reserves virtual pages for a process without loading them.
+        Pages are created but not assigned frames until accessed.
+        """
+        pages_needed = (bytes_needed + self.data.page_size - 1) // self.data.page_size
+
+        page_table = PageTable()
+        for page_num in range(pages_needed):
+            page_table.add(page_num, PageEntry())
+        self.data.page_table_map[pid] = page_table
+        return True
+
+    def get_vmemory(self, pid):
+        """Returns a MemoryView for the given process."""
+        return MemoryView(
+            pid,
+            self.data,
+            page_in=lambda pid, page_num: self._page_in(pid, page_num)
+        )
+
+    # ------ PRIVATE METHODS ------
+
+    def _fill_frame(self, frame_num, filler):
+        """Fills the given frame in memory using the provided filler function."""
+        maddr = frame_num * self.data.page_size
+        for i in range(self.data.page_size):
+            self.data.memory[maddr + i] = filler(i)
+
+    def _page_in(self, pid, page_num):
+        """
+        Loads a page into memory by assigning a free frame.
+        Also known as: "load_page".
+        """
+        frame_num = (
+            self.data.free_frames.pop(0)
+            if self.data.free_frames
+            else self._page_out()
+        )
+
+        if frame_num is False: ########################
+            return False
+
+        page_table = self.data.page_table_map[pid]
+        page = page_table.get(page_num)
+        
+        # Sanity check, the current page should not be in memory before page_in is called!
+        assert not page.is_loaded(), "page_in() called on already-loaded page"
+        
+        page.frame_num = frame_num
+        self.data.equeue.append((pid, page_num))
+
+        key = self._make_key(pid, page_num)
+        if key in self.data.store:
+            bytes = self.data.store.pop(key)
+            self._fill_frame(frame_num, lambda i: bytes[i])
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (restored from store)")
+        else:
+            self._fill_frame(frame_num, lambda i: 0)
+            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (zero-filled)")
+        return True
+
+    def _page_out(self):
+        """
+        Evicts one loaded page from memory and returns its freed frame number.
+        This simulates basic page replacement when memory is full.
+        Also known as: "evict_page".
+        """
+        while self.data.equeue:
+            pid, page_num = self.data.equeue.pop(0)
+            table = self.data.page_table_map[pid]
+            page = table.get(page_num)
+
+            # âœ… This *should* be loaded, otherwise we have stale data
+            assert page.is_loaded(), "page_out() called on an already-evicted page"
+
+            frame_num = page.frame_num
+            page.frame_num = None
+            self.data.free_frames.append(frame_num)
+
+            # Save to store
+            maddr = frame_num * self.data.page_size
+            bytes_out = self.data.memory[maddr: maddr + self.data.page_size]
+
+            key = self._make_key(pid, page_num)
+            self.data.store[key] = list(bytes_out)
+
+            print(f"[MemoryManager._page_out()] EVICT pid={pid} â†’ page={page_num:<2} â†’ freed frame={frame_num}")
+            return frame_num
+
+        raise Exception("Eviction failed: no pages available to evict") ########################
+
+    def _make_key(self, pid, page_num):
+        return (pid << 32) | page_num
+
+
+class ProcessMemory:
+    def __init__(self, view):
+        self.view = view
+        self.symbol_table = {}    # var name â†’ virtual address
+        self.next_offset = 0      # Next offset within symbol table
+        self.symbol_limit = 64    # Max 64 bytes (â†’ 32 variables)
+
+    def set(self, var, value) -> tuple[bool, bool]:
+        """
+        Writes a 2-byte value to a variable.
+
+        Returns:
+            is_violation (bool): True if address assignment was invalid (e.g. symbol table full)
+            is_page_fault (bool): True if the write triggered a page fault
+        """
+        if var in self.symbol_table:
+            addr = self.symbol_table[var]
+
+        elif self.next_offset + 2 <= self.symbol_limit:
+            addr = self.next_offset
+            self.symbol_table[var] = addr
+            self.next_offset += 2
+            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
+
+        else:
+            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
+            return True, False  # Violation, but no page fault
+
+        return self.view.write(addr, value) # Returns (is_violation, is_page_fault)
+    
+    def get(self, var) -> tuple[int, bool, bool]:
+        """
+        Returns:
+            value (int): the variable's value or 0
+            is_violation (bool): True if address was invalid (e.g. undeclared or out of bounds)
+            is_page_fault (bool): True if a page fault occurred
+        """
+        if var not in self.symbol_table:
+            print(f"[ProcessMemory.get()] '{var}' not declared")
+            return 0, False, True ######################## CREATE VARIABLE IF NOT CREATED   
+
+        addr = self.symbol_table[var]
+        print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
+        
+        return self.view.read(addr) # Returns (value, is_violation, is_page_fault)
+
+------------------------------
+ FILE:  MemoryManagerData.hpp
+ PATH:  core\memory\MemoryManagerData.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "types.hpp"
+
+
+class MemoryManagerData {
+  public:
+
+  MemoryManagerData():
+    page_size      (0u),    
+    frame_count    (0u),
+    memory         (vec<uint>()),
+    free_frames    (deque<uint>()),
+    // page_table_map (map<uint,PageTable>()),
+    // equeue         (deque<tup<uint, uint>>()),
+    // store          (map<uint64,vec<uint>>()) {}
+
+  // ------ Member variables ------
+  uint page_size;
+  uint frame_count;
+  vec<uint> memory;
+  deque<uint> free_frames;
+  map<uint,PageTable> page_table_map;
+  deque<tup<uint, uint>> equeue;
+  map<uint64,vec<uint>> store;
+};
+
+------------------------------
+ FILE:  MemoryView.hpp
+ PATH:  core\memory\MemoryView.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "MemoryManagerData.hpp"
+#include "types.hpp"
+
+
+class MemoryView {
+  public:
+
+  MemoryView(uint pid, MemoryManagerData& data, func<bool(uint, uint)> page_in):
+    pid     (pid),        // Process ID owning this memory view
+    data    (data),       // Reference to shared memory manager state (frames, tables, store, etc.)
+    page_in (page_in) {}  // Page-in callback: loads (pid, page_num) into memory if not present
+
+  /**
+   * @brief Reads a 2-byte value from virtual memory.
+   * @return (value, is_violation, is_page_fault)
+   *         - value: the uint16 read from memory (or 0 if failed)
+   *         - is_violation: true if address is invalid or unmapped
+   *         - is_page_fault: true if a page fault occurred
+   */
+  auto read(uint vaddr) -> tup<int, bool, bool> {
+    if (!has_pages_for(vaddr, 2))
+      return {0, true, false}; // access violation
+
+    auto m1 = maddr_of(vaddr);      
+    auto m2 = maddr_of(vaddr + 1);
+    if (!m1 || !m2)
+      return {0, false, true}; // page fault
+
+    auto lower_byte = data.memory[*m1];
+    auto upper_byte = data.memory[*m2] << 8;
+    return {lower_byte | upper_byte, false, false};
+  }
+    
+  /**
+   * @brief Writes a 2-byte value to virtual memory.
+   * @return (is_violation, is_page_fault)
+   *        - is_violation: true if address is invalid or unmapped
+   *        - is_page_fault: true if a page fault occurred
+   */
+  auto write(uint vaddr, uint value) -> tup<bool, bool> {
+    if (!has_pages_for(vaddr, 2))
+      return {true, false}; // access violation
+
+    auto m1 = maddr_of(vaddr);
+    auto m2 = maddr_of(vaddr+1);
+    if (!m1 || !m2)
+      return {false, true}; // page fault
+
+    data.memory[*m1] = value & 0xFF;
+    data.memory[*m2] = (value >> 8) & 0xFF;
+    return {false, false};
+  }
+
+  // ------ Member variables ------
+  uint pid;
+  MemoryManagerData& data;
+  func<bool(uint,uint)> page_in;
+  
+  // ------ Internal Helpers ------
+  private:
+
+  /** @brief Checks whether the process has declared all pages needed for a virtual memory access. */
+  auto has_pages_for(uint vaddr, uint num_bytes=1) -> bool {
+    auto it = data.page_table_map.find(pid);
+    if (it == data.page_table_map.end())
+      return false;
+    
+    auto& page_table = it->second;
+    auto start = vaddr / data.page_size;
+    auto end = (vaddr + num_bytes - 1) / data.page_size;
+
+    for (auto page_num=start; page_num <= end; ++page_num)
+      if (!page_table.has_page(page_num))
+        return false;
+    return true;
+  }
+
+  /**
+   * @brief Translates a virtual address to a physical memory address for the current process.
+   * Triggers a page-in if the page is not loaded; returns nullopt on failure.
+   * Returns the physical address (frame * page_size + offset) if successful.
+   */
+  auto maddr_of(uint vaddr) -> opt<uint> {
+    auto page_num = vaddr / data.page_size;
+    auto offset   = vaddr % data.page_size;
+    auto& page_table = data.page_table_map.at(pid);
+    auto& page = page_table.get(page_num);
+
+    if (!page.is_loaded() && !page_in(pid, page_num)) // Note: page_in method has side effects
+      return nullopt;
+    return page.frame() * data.page_size + offset;
+  }
+};
+
+------------------------------
+ FILE:  types.hpp
+ PATH:  core\memory\types.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+
+
+/** @brief Represents the metadata of a virtual page (not the actual content). */
+class PageEntry {
+  public:
+
+  PageEntry():
+  frame_num (nullopt) {} // The physical frame index (nullopt if not loaded)
+  
+  /** @brief Returns true if this page is loaded in a physical frame. */
+  auto is_loaded() -> bool { return frame_num.has_value(); }
+  
+  /** @brief Returns the physical frame number. Throws if not loaded. */
+  auto frame() -> uint { return frame_num.value(); }
+  
+  // ------ Member variables ------
+  opt<uint> frame_num;
+};
+
+
+/**
+ * @brief Represents the page table for a process.
+ * Maps virtual page numbers to their PageEntry metadata.
+ */
+class PageTable {
+  public:
+
+  PageTable(): 
+    entries (map<uint,PageEntry>()) {}  // Virtual page number: metadata
+
+  /** @brief Returns true if this table tracks the given virtual page. */
+  auto has_page(uint page_num) -> bool { return entries.contains(page_num); }
+
+  /** @brief Returns a reference to the PageEntry for the given page. */
+  auto get(int page_num) -> PageEntry& { return entries.at(page_num); }
+
+  /** @brief Adds a PageEntry to the table for the given page number. */
+  void add(uint page_num, PageEntry page) { entries[page_num] = page; }
+
+  /** @brief Returns a view of all stored virtual page numbers. */
+  auto pages() -> vec<uint> {
+    auto keys = vec<uint>();
+    keys.reserve(entries.size());
+
+    for (auto& [key, _]: entries)
+      keys.push_back(key);
+    return keys;
+  }
+
+  // ------ Member variables ------
+  map<uint,PageEntry> entries;
+};
 
 ------------------------------
  FILE:  Maze.hpp
@@ -3301,7 +4494,6 @@ namespace csopesy::Position {
 
 class Process {
   public:  
-
   // ------ Class variables ------
   inline static auto& interpreter = InstructionInterpreter::get();
 
@@ -3314,9 +4506,6 @@ class Process {
         move(interpreter.generate_script(size))
       )
     ) {}
-  
-  /** @brief Appends a log message (e.g. from PRINT instruction). */
-  void log(str line) { data.log(move(line)); }
 
   /** @brief Executes a single instruction step for the given process. */
   auto step() -> bool {
@@ -3400,7 +4589,7 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, Instruction::Script script): 
+  ProcessData(uint id, str name, vec<Instruction> script): 
     id      (id),                     // Unique process ID
     name    (move(name)),             // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),             // Output logs collected from PRINT instructions
@@ -3485,8 +4674,8 @@ class ProcessProgram {
   public:
 
   /** @brief Loads an instruction script. */
-  ProcessProgram(Instruction::Script script): 
-    script     (Instruction::Script(move(script))),  // Flat list of all program instructions
+  ProcessProgram(vec<Instruction> script): 
+    script     (vec<Instruction>(move(script))),  // Flat list of all program instructions
     context    (ContextStack()),                     // Stack of active loop contexts
     ip_was_set (false),                              // For blocking instruction pointer advancing
     ip         (0) {}                                // Current instruction pointer
@@ -3535,7 +4724,7 @@ class ProcessProgram {
 
   // ------ Instance variables ------
 
-  Instruction::Script script;
+  vec<Instruction> script;
   ContextStack context;
   bool ip_was_set;
   uint ip;
@@ -3699,15 +4888,18 @@ class Scheduler {
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
     strategy = get_scheduler_strategy(config.gets("scheduler"));
-    data.cores.resize(config.getu("num-cpu"));                        
+    auto core_size = config.getu("num-cpu");
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto delay = config.getu("delays-per-exec");
+    
+    // Resizes number of cores (destroys old ones if any)
+    data.cores.init(core_size);
 
-    // Create the preempt handler from the factory method
-    auto preempt_handler = strategy.get_preempt_handler(data);
-
-    // Inject in each core the preemption handler from strategy
-    if (preempt_handler != nullptr)
-      for (auto& ref: data.cores.get_all())                       
-        ref.get().set_preempt(preempt_handler);
+    // Configure cores with the tick delay and preempt handler (if any)
+    for (auto& ref: data.cores.get_all()) {
+      auto& core = ref.get();
+      core.init(delay, preempt_handler);
+    }
 
     data.config = move(config); // Must come last                               
   }
@@ -3773,13 +4965,12 @@ class Scheduler {
       auto& process = data.get_process(*it);
       process.step();           // decrement sleep_ticks
 
-      if (!process.data.control.sleeping()) {
+      if (process.data.control.sleeping())
+        ++it;                   // still sleeping
+      else {
         data.rqueue.push(*it);  // ready again
-        it = wqueue.erase(it);  // remove from wqueue
-        continue;
+        it = wqueue.erase(it);  // remove from wqueue  
       }
-
-      ++it;                     // still sleeping
     }
   }
 };
@@ -3845,7 +5036,7 @@ class SchedulerData {
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  Config config;             
+  Config config;
   CoreManager cores;                  
   atomic_uint next_pid;           
 
@@ -4123,7 +5314,6 @@ auto get_scheduler_strategy(const str& name) -> SchedulerStrategy {
 
 #include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
 #include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
-#include "core/common/utility/EventEmitter.hpp"
 
   
 /**
@@ -4144,13 +5334,14 @@ void Shell::register_commands() {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/common/utility/Text.hpp"
 
 /** @brief Renders and styles the shell banner using a vertical gradient. */
 class ShellBanner {
   public:
 
-  /** @brief Returns the full banner with vertical gradient applied. */
+  /** @brief Returns the full banner as a string with vertical gradient applied. */
   auto get() -> str {
     auto mint = vec<int>{201, 254, 221};
     auto coral = vec<int>{249, 121, 121};
@@ -4165,6 +5356,12 @@ class ShellBanner {
 
     out << '\n';
     out << Text(names)[format("pc+fg{}", rgb_to_ansi256(mint))] << "\n\n";
+
+    // Add onboarding message
+    out << RichText("[fg=#88a17a]To get started:[/]\n");
+    out << RichText("  1. Type [b fg=#d39c6a]demo[/] to see a sample process in action.\n");
+    out << RichText("  2. Then [b fg=#d39c6a]exit[/] to leave the shell.\n");
+    out << RichText("  3. Use [b fg=#d39c6a]help[/] for more information on commands.\n\n\n");
     return out.str();
   }
 
@@ -4297,7 +5494,7 @@ class ShellStorage {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/common/utility/Ansi.hpp"
-#include "core/common/utility/Text.hpp"
+#include "core/common/utility/RichText.hpp"
 #include "core/command/CommandInterpreter.hpp"
 #include "core/scheduler/Scheduler.hpp"
 
@@ -4325,11 +5522,10 @@ class Shell {
   /** @brief Starts shell and system threads and blocks until shutdown. */
   void start() {
     initialize();
-    system("cls");
-    cout << '\n'; // Leave line 1 blank
 
     // Start shell (input) and system (scheduler) threads
     shell_thread  = Thread([&] { 
+      cout << RichText("Type [fg=#d39c6a]initialize[/] to start...\n\n");
       while (shell_active)  
         tick_shell(); 
     });
@@ -4378,8 +5574,12 @@ class Shell {
 
   /** @brief Initializes terminal and registers all event listeners. */
   void initialize() {
-    Text::enable();       // Prepare terminal settings for output
-    register_commands();  // Initialize command handlers
+    RichText::enable();                 // Prepare terminal settings for output
+    register_commands();                // Initialize command handlers
+    storage.set("initialized", false);  // Set initialized to false (to be changed by initialize command later)
+    
+    system("cls");
+    cout << '\n';                       // Leave line 1 blank
   }
 
   /** @brief Executes one shell input cycle. Called repeatedly by shell thread. */
@@ -4387,7 +5587,7 @@ class Shell {
     cout << ">>> " << flush;
     if (str input; getline(cin, input)) {
       with_locked([&]{
-        interpreter.execute(move(input), *this);  // Executes commands
+        interpreter.execute(input, *this);  // Executes commands
         cout << '\n';
       });
 

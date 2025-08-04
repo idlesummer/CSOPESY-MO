@@ -10,5 +10,3 @@ using std::make_shared;
 template <typename Type>
 using uptr = std::unique_ptr<Type>;
 
-template <typename Type>
-using sptr = std::shared_ptr<Type>;

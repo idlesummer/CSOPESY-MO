@@ -21,6 +21,12 @@ class Config {
     set("max-ins", 1u);
     set("delays-per-exec", 0u);
     set("initialized", false);
+
+    // === NEW: From MCO2 ===
+    set("max-overall-mem", 1024u);   // Total memory available
+    set("mem-per-frame", 64u);       // Frame/page size in bytes
+    set("min-mem-per-proc", 128u);   // Lower bound for process allocation
+    set("max-mem-per-proc", 256u);   // Upper bound for process allocation
   }
 
   /** @brief Sets the value of a configuration key. */

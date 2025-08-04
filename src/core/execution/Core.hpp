@@ -32,26 +32,36 @@ class Core {
   /** @brief Constructs a core with the given ID and starts the thread. */
   Core(uint id=0): 
     id          (id),                 // Core ID
-    job_ticks   (0),                  // Number of ticks the current process has been running
+    job_ticks   (0u),                 // Number of ticks the current process has been running
+    delay       (0u),                 // Target delay per instruction (delay_per_exec)
     can_release (false),              // Whether the process is eligible for release by the Scheduler
     job         (nullptr),            // Pointer to the currently assigned process (if any)
-    preempt     (nullptr),            // Optional strategy-injected logic
+    preempt     (nullptr),            // For injecting a preemption handler (optional).
     active      (atomic_bool{true}),  // Atomic flag for tick loop, mark the core as active/busy
     thread      ()                    // Background ticking thread
   { 
     // Launch the background thread that ticks continuously
     thread = Thread([this] { 
+      auto counter = 0u;
+
       while (active) {
-        with_locked([&] {
-          tick();
-        });
-        sleep_for(1ms);
+        if (counter-- == 0) {
+          with_locked([&] { tick(); });
+          counter = delay;
+        }
+        sleep_for(1ms);  // always happens
       }
     });
   }
 
   /** @brief Destructor stops the tick thread cleanly. */
   ~Core() { stop(); }
+
+  /** @brief Initializes core with a given delay and optional preemp handler. */
+  void init(uint ticks, func handler=nullptr) {
+    delay = ticks;
+    preempt = handler;
+  }
 
   /** @brief Called by scheduller to assign a process to this core. */
   void assign(Process& process) { set_job(&process, id); }
@@ -66,15 +76,13 @@ class Core {
   auto get_job() -> Process& {
     if (job) return *job;
     throw runtime_error("Core::get_job: No job is currently assigned");
-  }
-
-  /** @brief Injects a preemption handler (optional). */
-  void set_preempt(func handler) { preempt = handler; }     
+  } 
 
   // ------ Instance variables ------
 
   uint id;                      
   uint job_ticks;       
+  uint delay;       
   bool can_release;   
   Process* job; 
   func preempt;    
@@ -96,11 +104,15 @@ class Core {
       ++job_ticks;
 
       // If the process has finished all its instructions, mark for release
-      if (job->data.program.finished())
+      if (process.data.program.finished())
         can_release = true;
 
-      // If the process has finished all its instructions, mark for release
-      if (preempt && preempt(*this))
+      // Mark release if process is sleeping
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS!!!
+        can_release = true;
+
+      // Release if the preemption logic says so
+      else if (preempt && preempt(*this))
         can_release = true;
 
     } catch (exception& e) {

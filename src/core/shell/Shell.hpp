@@ -1,6 +1,5 @@
 #include "internal/Shell.impl.hpp"        // Must be included first to fully define Shell
 #include "core/command/handlers/_all.hpp" // Must be included after since handlers use Shell&
-#include "core/common/utility/EventEmitter.hpp"
 
   
 /**

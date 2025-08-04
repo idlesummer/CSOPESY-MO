@@ -1,28 +1,59 @@
 #pragma once
 #include "core/shell/internal/Shell.impl.hpp"
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionInterpreter.hpp"
+#include "core/process/Process.hpp"
+#include "core/process/ProcessProgram.hpp"
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
-
 
 auto make_demo() -> CommandHandler {
   return CommandHandler()
     .set_name("demo")
-    .set_desc("Creates and steps a demo process with random instructions.")
+    .set_desc("Spawn and manually step a dummy FOR loop process.")
     .set_min_args(0)
     .set_max_args(0)
-    
-    .set_execute([](Command&, Shell& shell) {
+    .add_flag("-r")
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
-      if (!storage.has("demo.counter")) {
-        cout << "Counter created! Run demo again to increment counter.\n";
-        cout << "Counter: 0\n";
-        storage.set("demo.counter", 0u);
+      // Reset demo process
+      if (command.flags.contains("-r")) {
+        shell.storage.remove("demo.process");
+        cout << "[demo] Dummy process reset.\n";
         return;
       }
 
-      auto counter = storage.get<uint>("demo.counter") + 1;
-      storage.set("demo.counter", counter);
-      cout << format("Counter: {}\n", counter);
+      // Create process if not yet spawned
+      if (!storage.has("demo.process")) {
+        auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
+        auto process = Process(0, "demo.process", 10, move(view));
+        storage.set("demo.process", move(process));
+        cout << "[demo] Process created.\n";
+      }
+
+      // Access process
+      auto& process = storage.get<Process>("demo.process");
+      auto& program = process.data.program;
+      auto& memory = process.data.memory;
+
+      // Show context, symbol table, and instruction list
+      cout << "[demo] ==============================\n";
+      cout << format("Context Stack:\n{}\n", program.render_context());
+      cout << format("Symbol Table:\n{}\n", memory.render_symbol_table());
+      cout << format("Instruction List:\n{}\n", program.render_script());
+
+      // Check if process is finished before stepping
+      if (program.finished())
+        cout << "[demo] Process already finished.\n";
+      
+      else {
+        // Step
+        auto done = process.step();
+        cout << "[demo] Process stepped.\n";
+        cout << (done ? "Finished." : "Still running.") << '\n';
+      }
+      cout << "=====================================\n";
     });
 }

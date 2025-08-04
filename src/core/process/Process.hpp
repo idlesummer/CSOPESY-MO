@@ -2,6 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
+#include "core/memory/MemoryView.hpp"
 #include "ProcessData.hpp"
 
 
@@ -11,12 +12,13 @@ class Process {
   inline static auto& interpreter = InstructionInterpreter::get();
 
   /** @brief Creates a process with a random instruction script. */
-  Process(uint pid, str name, uint size): 
+  Process(uint pid, str name, uint size, MemoryView view): 
     data(           // Data container of process
       ProcessData(
         pid,
         move(name),
-        move(interpreter.generate_script(size))
+        move(interpreter.generate_script(size)),
+        move(view)
       )
     ) {}
 

@@ -7,26 +7,26 @@
 auto make_sleep() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SLEEP")
-    .add_signature(Signature().Uint(0, 3))
+    .add_signature(Signature().Uint(0,3))
 
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto ticks = stoul(inst.args[0]);
+
+      // Case 0: Skip sleep if duration is zero
+      if (ticks == 0)
+        return;
+
       auto& program = process.program;
       auto& control = process.control;
-      auto& context = program.context;
 
-      // Phase 1: First-time setup
-      if (!context.top_ip_is(program.ip)) {
-        context.push(program.ip);               // Mark SLEEP as active on the context stack
-        control.sleep_for(stoul(inst.args[0])); // Start sleep for given duration (in ticks)
-      }
+      // Case 1: Begin or continue sleeping
+      if (!control.sleeping())
+        control.sleep_for(ticks);
+      else 
+        control.tick();
 
-      // Phase 2: Sleep body
-      if (!control.sleeping())                  // Done sleeping, remove context frame
-        context.pop();        
-
-      else {                                    
-        control.tick();                         // Still sleeping, consume one tick
-        program.set_ip(program.ip);             // Block ip auto-increment by setting manually
-      }
+      // Case 2: Still sleeping
+      if (control.sleeping())
+        program.set_ip(program.ip);  // Block auto-increment
     });
 }

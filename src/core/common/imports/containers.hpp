@@ -1,5 +1,5 @@
 #pragma once
-#include <array>
+#include <deque>
 #include <list>
 #include <map>
 #include <queue>
@@ -9,8 +9,7 @@
 #include <utility>
 #include <vector>
 
-
-using std::array;
+using std::deque;
 using std::list;
 using std::make_pair;
 using std::out_of_range;
@@ -25,8 +24,11 @@ using std::vector;
 template <typename Type>
 using vec = vector<Type>;
 
+template <typename... Types>
+using tup = tuple<Types...>;
+
 template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
 
 template <typename Key, typename Val>
-using map = unordered_map<Key, Val>;
+using umap = unordered_map<Key, Val>;

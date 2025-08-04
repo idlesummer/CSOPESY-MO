@@ -89,6 +89,7 @@
     "random": "cpp",
     "bitset": "cpp",
     "codecvt": "cpp",
-    "regex": "cpp"
+    "regex": "cpp",
+    "set": "cpp"
   }
 }

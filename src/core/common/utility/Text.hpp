@@ -122,7 +122,7 @@ class Text {
 
   /** @brief Enables ANSI and Unicode output (once at startup). */
   static void enable() {
-    enable_unicode();
+    initialize_terminal();
   }
 
   /** @brief Returns the fully formatted output string. */
