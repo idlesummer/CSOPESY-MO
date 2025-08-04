@@ -1,6 +1,7 @@
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/command/CommandHandler.hpp"
+#include "args.hpp"
 #include "cls.hpp"
 #include "config.hpp"
 #include "demo.hpp"
@@ -17,6 +18,7 @@
 
 auto get_command_handlers() -> vec<CommandHandler> {
   return {
+    make_args(),
     make_cls(),
     make_config(),
     make_demo(),

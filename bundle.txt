@@ -139,7 +139,7 @@ class CommandInterpreter {
   public: 
 
   CommandInterpreter():
-    handlers (map<str,CommandHandler>()) {} // Registry of available command handlers
+    handlers (umap<str,CommandHandler>()) {} // Registry of available command handlers
   
   /** @brief Returns the global singleton get of the CommandInterpreter. */
   static CommandInterpreter& get() {
@@ -190,7 +190,7 @@ class CommandInterpreter {
 
   // ------- Instance variables -------
   
-  map<str,CommandHandler> handlers; 
+  umap<str,CommandHandler> handlers; 
 
   // ------- Internal logic -------
 
@@ -369,7 +369,6 @@ auto make_config() -> CommandHandler {
 #include "core/command/Command.hpp"
 #include "core/command/CommandHandler.hpp"
 
-
 auto make_demo() -> CommandHandler {
   return CommandHandler()
     .set_name("demo")
@@ -377,45 +376,47 @@ auto make_demo() -> CommandHandler {
     .set_min_args(0)
     .set_max_args(0)
     .add_flag("-r")
-
     .set_execute([](Command& command, Shell& shell) {
       auto& interpreter = InstructionInterpreter::get();
       auto& storage = shell.storage;
 
-      // 0. Reset process if requested
+      // Reset demo process
       if (command.flags.contains("-r")) {
         shell.storage.remove("demo.process");
         cout << "[demo] Dummy process reset.\n";
         return;
       }
 
-      // 1. Spawn process if not already present
+      // Create process if not yet spawned
       if (!storage.has("demo.process")) {
-        auto process = Process(0, "demo.process", 10);
+        auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
+        auto process = Process(0, "demo.process", 10, move(view));
         storage.set("demo.process", move(process));
         cout << "[demo] Process created.\n";
-        return;
       }
 
-      // 2. Access process
+      // Access process
       auto& process = storage.get<Process>("demo.process");
       auto& program = process.data.program;
+      auto& memory = process.data.memory;
 
+      // Show context, symbol table, and instruction list
+      cout << "[demo] ==============================\n";
+      cout << format("Context Stack:\n{}\n", program.render_context());
+      cout << format("Symbol Table:\n{}\n", memory.render_symbol_table());
+      cout << format("Instruction List:\n{}\n", program.render_script());
+
+      // Check if process is finished before stepping
       if (program.finished())
-        return void(cout << "[demo] Process already finished.");
-
-      // === Debug: Show context stack ===
-      cout << "[demo] Context Stack:\n";
-      cout << program.render_context() << '\n';
-
-      // === Debug: Show instruction list with pointer ===
-      cout << "[demo] Instruction List:\n";
-      cout << program.render_script() << '\n';
-
-      // 3. Step the process
-      auto done = process.step();
-      cout << "[demo] Process stepped.\n";
-      cout << (done ? "Finished." : "Still running.") << '\n';
+        cout << "[demo] Process already finished.\n";
+      
+      else {
+        // Step
+        auto done = process.step();
+        cout << "[demo] Process stepped.\n";
+        cout << (done ? "Finished." : "Still running.") << '\n';
+      }
+      cout << "=====================================\n";
     });
 }
 
@@ -1223,7 +1224,7 @@ template <typename Key, typename Val>
 using ordered_map = std::map<Key, Val>;
 
 template <typename Key, typename Val>
-using map = unordered_map<Key, Val>;
+using umap = unordered_map<Key, Val>;
 
 ------------------------------
  FILE:  helpers.hpp
@@ -1846,7 +1847,7 @@ class StyleStack {
     stack(vec<pair<str,str>>()) {}  // Start with an empty list of style layers
 
   /** @brief Add all styles (as separate layers) to the stack. */
-  void push(map<str,str> styles) {
+  void push(umap<str,str> styles) {
     for (auto& [key, val]: styles)
       stack.emplace_back(move(key), move(val));
   }
@@ -1869,9 +1870,9 @@ class StyleStack {
     stack.shrink_to_fit();
   }
 
-  /** @brief Combine all active styles into one map. */
-  auto get_styles() -> map<str,str> {
-    auto result = map<str,str>();
+  /** @brief Combine all active styles into one umap. */
+  auto get_styles() -> umap<str,str> {
+    auto result = umap<str,str>();
 
     for (auto& [key, val]: stack)
       result[key] = val;
@@ -1894,7 +1895,7 @@ class RichText {
   static inline auto PLACE_RB    = "\x02";
   static inline auto ANSI_RESET  = "\033[0m";
 
-  static inline auto STYLES = map<str,str>{
+  static inline auto STYLES = umap<str,str>{
     {"bold",      "1"}, 
     {"dim",       "2"}, 
     {"italic",    "3"},
@@ -1902,7 +1903,7 @@ class RichText {
     {"strike",    "9"},
   };
 
-  static inline auto COLORS = map<str,str>{
+  static inline auto COLORS = umap<str,str>{
     {"black",     "#000000"}, 
     {"red",       "#ff0000"}, 
     {"green",     "#00ff00"},
@@ -1918,7 +1919,7 @@ class RichText {
     {"darkblue",  "#000088"},
   };
 
-  static inline auto ALIASES = map<str,str>{
+  static inline auto ALIASES = umap<str,str>{
     {"b", "bold"}, 
     {"i", "italic"}, 
     {"u", "underline"},
@@ -1978,8 +1979,8 @@ class RichText {
       && all_of(value.begin()+1, value.end(), ::isxdigit);
   }
 
-  /** @brief Converts a style map to an ANSI escape code string. */
-  auto to_ansi(const map<str,str>& styles) -> str {
+  /** @brief Converts a style umap to an ANSI escape code string. */
+  auto to_ansi(const umap<str,str>& styles) -> str {
     auto codes = vec<str>();
 
     for (auto& [key, value]: styles) {
@@ -2009,8 +2010,8 @@ class RichText {
     return ALIASES.contains(tag) ? ALIASES.at(tag) : tag;
   }
 
-  auto parse_to_styles(str& tag) -> map<str,str> {
-    auto result = map<str,str>();
+  auto parse_to_styles(str& tag) -> umap<str,str> {
+    auto result = umap<str,str>();
     auto stream = isstream(tag);
     auto token = ""s;
 
@@ -2526,14 +2527,14 @@ class Core {
       ++job_ticks;
 
       // If the process has finished all its instructions, mark for release
-      if (job->data.program.finished())
+      if (process.data.program.finished())
         can_release = true;
 
       // Mark release if process is sleeping
-      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS
+      else if (process.data.control.sleeping()) // COMMENT OUT IF SLEEPING DOESN'T PREEMPT A PROCESS!!!
         can_release = true;
 
-      // If the process has finished all its instructions, mark for release
+      // Release if the preemption logic says so
       else if (preempt && preempt(*this))
         can_release = true;
 
@@ -2784,7 +2785,7 @@ class InstructionInterpreter {
    * Initializes and registers all handlers once. 
    */
   InstructionInterpreter():
-    handlers         (map<str,InstructionHandler>()),   // opcode -> handler
+    handlers         (umap<str,InstructionHandler>()),   // opcode -> handler
     all_handlers     (vec<ref<InstructionHandler>>()),  // cached reference list for introspection
     flat_handlers    (vec<ref<InstructionHandler>>()),  // Handlers for non-control instructions
     control_handlers (vec<ref<InstructionHandler>>())   // Handlers for control instructions
@@ -2855,7 +2856,7 @@ class InstructionInterpreter {
 
   // ------ Instance variables ------
 
-  map<str,InstructionHandler> handlers;           
+  umap<str,InstructionHandler> handlers;           
   vec<ref<InstructionHandler>> all_handlers;      
   vec<ref<InstructionHandler>> flat_handlers;     
   vec<ref<InstructionHandler>> control_handlers;
@@ -2966,11 +2967,10 @@ class Signature {
   vec<Arg> args;
 
   // ------ Constants ------
-  inline static  auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
-  inline static  auto vars = vec<str>{ "x", "y", "z" };
+  inline static auto messages = vec<str>{ "hello", "world", "lorem", "ipsum", "test" };
+  inline static auto vars = vec<str>{ "_x", "_y", "_z" };
 
   // ------ Internal Helpers ------
-  
   /** @brief Adds a generic argument of given type and optional bounds. */
   auto add(str type, uint min=0, uint max=0) -> Signature& { 
     return args.emplace_back(move(type), min, max), *this; 
@@ -2983,24 +2983,57 @@ class Signature {
 ------------------------------
 
 #pragma once
-#include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionHandler.hpp"
 #include "core/process/ProcessData.hpp"
 
-
+/**
+ * @brief Implements the ADD instruction.
+ * 
+ * Syntax: `ADD x y z` â†’ `x = y + z`
+ * - Resolves both operands (y and z) via resolve().
+ * - Adds the two 16-bit values.
+ * - Stores the result in x via set().
+ * 
+ * Behavior:
+ * - If x is undeclared, attempts to declare it (if space is available).
+ * - All memory accesses may cause page faults or violations.
+ */
 auto make_add() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("ADD")
     .add_signature(Signature().Var().Var().Var())
     .add_signature(Signature().Var().Var().Uint16())
     .add_signature(Signature().Var().Uint16().Uint16())
-
+    
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
       auto& memory = process.memory;
-      auto lhs = memory.get(inst.args[1]);
-      auto rhs = memory.resolve(inst.args[2]);
-      memory.set(inst.args[0], lhs + rhs);
+      auto& args = inst.args;
+
+      auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
+      auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
+
+      // "Variables are automatically declared with a value of 0 
+      // if they have not yet been declared beforehand."
+      if (lundeclared)
+        memory.set(args[1], 0u);
+
+      if (rundeclared)
+        memory.set(args[2], 0u);
+
+      auto sum = lval + rval;
+      auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], sum);
+
+      // Optional logs for debugging or trace output
+      if (lfault || rfault || is_page_fault) {
+        process.log("[ADD] Unable to resolve page fault on first try.");
+        program.set_ip(program.ip);
+      }
+      else if (lviolation || rviolation || is_violation)
+        process.log("[ADD] Violation during operand or result write.");
+      else if (is_symbol_limit)
+        process.log("[ADD] Symbol table full â€” could not DECLARE target variable.");
     });
 }
 
@@ -3019,10 +3052,22 @@ auto make_declare() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("DECLARE")
     .add_signature(Signature().Var().Uint16())
+
     .set_execute([](Instruction& inst, ProcessData& process) {
-      auto var = inst.args[0];
+      auto& program = process.program;
+      auto var   = inst.args[0];
       auto value = stoul(inst.args[1]);
-      process.memory.set(var, value);
+      auto [is_violation, is_page_fault, is_full] = process.memory.set(var, value);
+
+      if (is_page_fault) {
+        process.log(format("[DECLARE] Unable to resolve page fault on first try for '{}'", var));
+        program.set_ip(program.ip);
+        return;
+      }
+      else if (is_full)
+        process.log(format("[DECLARE] failed: symbol table full â†’ '{}'", var));
+      else if (is_violation)
+        process.log(format("[DECLARE] write violation for '{}'", var));
     });
 }
 
@@ -3142,11 +3187,11 @@ auto make_for() -> InstructionHandler {
 auto make_print() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("PRINT")
-    .add_signature(Signature().Str())
-    .add_signature(Signature().Str().Var())
-    
+    // .add_signature(Signature().Str())
+    // .add_signature(Signature().Str().Var())
+
     .set_execute([](Instruction& inst, ProcessData& process) {
-      process.log(inst.args[0]);
+      process.log(format("Hello world from {}!", process.name));
     });
 }
 
@@ -3200,6 +3245,18 @@ auto make_sleep() -> InstructionHandler {
 #include "core/process/ProcessData.hpp"
 
 
+/**
+ * @brief Implements the SUBTRACT instruction.
+ * 
+ * Syntax: `SUBTRACT x y z` â†’ `x = max(0, y - z)`
+ * - Resolves both operands (y and z) via resolve().
+ * - Clamps result to 0 (no negative values for uint16).
+ * - Stores the result in x via set().
+ * 
+ * Behavior:
+ * - If y or z is undeclared, declares them with 0.
+ * - Memory accesses may cause page faults or violations.
+ */
 auto make_subtract() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("SUBTRACT")
@@ -3208,10 +3265,30 @@ auto make_subtract() -> InstructionHandler {
     .add_signature(Signature().Var().Uint16().Uint16())
 
     .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
       auto& memory = process.memory;
-      auto lhs = memory.get(inst.args[1]);
-      auto rhs = memory.resolve(inst.args[2]);
-      memory.set(inst.args[0], lhs > rhs ? lhs - rhs : 0);
+      auto& args = inst.args;
+
+      auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
+      auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
+
+      if (lundeclared)
+        memory.set(args[1], 0u);
+
+      if (rundeclared)
+        memory.set(args[2], 0u);
+
+      auto diff = (lval > rval) ? (lval - rval) : 0u;
+      auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], diff);
+
+      if (lfault || rfault || is_page_fault) {
+        process.log("[SUBTRACT] Unable to resolve page fault on first try.");
+        program.set_ip(program.ip); // Retry on next tick
+      }
+      else if (lviolation || rviolation || is_violation)
+        process.log("[SUBTRACT] Violation during operand or result write.");
+      else if (is_symbol_limit)
+        process.log("[SUBTRACT] Symbol table full â€” could not DECLARE target variable.");
     });
 }
 
@@ -3424,10 +3501,10 @@ class MemoryManager {
   MemoryManager():
     data (MemoryManagerData()) {}
 
-  void init(uint capacity, uint page_size) {    
+  void init(uint memory_capacity, uint page_size) {    
     data.page_size = page_size;
-    data.frame_count = capacity / page_size;
-    data.memory = vec<uint>(capacity, 0);
+    data.frame_count = memory_capacity / page_size;
+    data.memory = vec<uint>(memory_capacity, 0);
   
     // Reset and repopulate the free frame list
     data.free_frames.clear(); 
@@ -3437,6 +3514,26 @@ class MemoryManager {
     // Clear all process page tables
     data.page_table_map.clear();
   }
+
+  auto create_memory_view_for(uint pid, uint bytes_needed=64u) -> MemoryView {
+    // Enforce minimum size of 64 bytes (symbol table)
+    if (bytes_needed < 64u)
+      bytes_needed = 64u;
+
+    // Auto-allocate if not yet allocated
+    if (!data.page_table_map.contains(pid))
+      alloc(pid, bytes_needed);  // Auto-alloc with minimum default
+
+    return MemoryView(pid, data, [this](uint pid, uint page_num) {
+      return this->page_in(pid, page_num);
+    });
+  }
+
+  // ------ Member variables ------
+  MemoryManagerData data;
+  
+  // ------ Internal helpers ------
+  private:
 
   auto alloc(uint pid, uint bytes_needed) -> bool {
     auto pages_needed = (bytes_needed + data.page_size - 1) / data.page_size;
@@ -3448,18 +3545,6 @@ class MemoryManager {
     data.page_table_map[pid] = move(page_table);
     return true;
   }
-
-  auto create_memory_view_for(uint pid) -> MemoryView {
-    return MemoryView(pid, data, [this](uint pid, uint page_num) {
-      return this->page_in(pid, page_num);
-    });
-  }
-
-  // ------ Member variables ------
-  MemoryManagerData data;
-  
-  // ------ Internal helpers ------
-  private:
 
   /** Fills the given frame in memory using the provided filler function. */
   void fill_frame(uint frame_num, func<uint(uint)> filler) {
@@ -3473,26 +3558,19 @@ class MemoryManager {
    * May evict another page if no free frame is available (side effect).
    */
   auto page_in(uint pid, uint page_num) -> bool {
-    auto& free_frames = data.free_frames;
-    auto frame_num = opt<uint>();
-    
     // Try to get a free frame
-    if (!data.free_frames.empty()) {
-      frame_num = free_frames.front();
-      free_frames.pop_front();
-    } 
-    // Try to evict a page
-    else
-      frame_num = page_out(); // <- side effect
-
-    // Failed to allocate a frame (no evictable page)  
-    if (!frame_num)
-      return false;
+    if (data.free_frames.empty())
+      if (!page_out())
+        return false;   // Couldn't evict a page!
+    
+    // Retrieve free frame
+    auto frame_num = data.free_frames.front();
+    data.free_frames.pop_front();
 
     // Fetch page table and page metadata
     auto& table = data.page_table_map[pid];
     auto& page = table.get(page_num);
-
+    
     // Assign physical frame to page
     page.frame_num = frame_num;
     data.equeue.push_back({ pid, page_num });
@@ -3502,10 +3580,13 @@ class MemoryManager {
     if (data.store.contains(key)) {
       auto bytes = move(data.store.at(key));
       data.store.erase(key);
-      fill_frame(*frame_num, [&](uint i) { return bytes[i]; });
+      fill_frame(frame_num, [&](uint i) -> uint { return bytes[i]; });
+      // cout << format("  [restore] pid={} page={} â†’ frame={} â† restored from store\n", pid, page_num, frame_num);
     }
-    else
-      fill_frame(*frame_num, [](uint) { return 0; });
+    else {
+      fill_frame(frame_num, [](uint) -> uint { return 0; });
+      // cout << format("  [zero]    pid={} page={} â†’ frame={} â† filled with zeros\n", pid, page_num, frame_num);
+    }
 
     return true;
   }
@@ -3515,7 +3596,7 @@ class MemoryManager {
     * This simulates basic page replacement when memory is full.
     * Also known as: "evict_page".
     */
-  auto page_out() -> opt<uint> {
+  auto page_out() -> bool {
     while (!data.equeue.empty()) {
       auto [pid, page_num] = data.equeue.front();
       data.equeue.pop_front();   
@@ -3532,9 +3613,15 @@ class MemoryManager {
       auto end = start + data.page_size;
       auto bytes_out = vec<uint>(start, end);
       data.store[make_key(pid, page_num)] = move(bytes_out);
-      return frame_num;
+
+      // cout << format("  [evict]   pid={} page={} â†’ freed frame={} â†’ saved to store\n",
+      //                pid, page_num, frame_num);
+
+      return true;  // Evicted a page to backing store!
     }
-    return nullopt;
+
+    // cout << "  [evict]   page_out FAILED â†’ no pages available to evict\n";
+    return false;   // Nothing to evict
   }
 
   /**
@@ -4169,18 +4256,18 @@ class MemoryManagerData {
     frame_count    (0u),
     memory         (vec<uint>()),
     free_frames    (deque<uint>()),
-    // page_table_map (map<uint,PageTable>()),
-    // equeue         (deque<tup<uint, uint>>()),
-    // store          (map<uint64,vec<uint>>()) {}
+    page_table_map (umap<uint,PageTable>()),
+    equeue         (deque<tup<uint, uint>>()),
+    store          (umap<uint64,vec<uint>>()) {}
 
   // ------ Member variables ------
   uint page_size;
   uint frame_count;
   vec<uint> memory;
   deque<uint> free_frames;
-  map<uint,PageTable> page_table_map;
+  umap<uint,PageTable> page_table_map;
   deque<tup<uint, uint>> equeue;
-  map<uint64,vec<uint>> store;
+  umap<uint64,vec<uint>> store;
 };
 
 ------------------------------
@@ -4319,7 +4406,7 @@ class PageTable {
   public:
 
   PageTable(): 
-    entries (map<uint,PageEntry>()) {}  // Virtual page number: metadata
+    entries (umap<uint,PageEntry>()) {}  // Virtual page number: metadata
 
   /** @brief Returns true if this table tracks the given virtual page. */
   auto has_page(uint page_num) -> bool { return entries.contains(page_num); }
@@ -4341,7 +4428,7 @@ class PageTable {
   }
 
   // ------ Member variables ------
-  map<uint,PageEntry> entries;
+  umap<uint,PageEntry> entries;
 };
 
 ------------------------------
@@ -4489,6 +4576,7 @@ namespace csopesy::Position {
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/instruction/InstructionInterpreter.hpp"
+#include "core/memory/MemoryView.hpp"
 #include "ProcessData.hpp"
 
 
@@ -4498,12 +4586,13 @@ class Process {
   inline static auto& interpreter = InstructionInterpreter::get();
 
   /** @brief Creates a process with a random instruction script. */
-  Process(uint pid, str name, uint size): 
+  Process(uint pid, str name, uint size, MemoryView view): 
     data(           // Data container of process
       ProcessData(
         pid,
         move(name),
-        move(interpreter.generate_script(size))
+        move(interpreter.generate_script(size)),
+        move(view)
       )
     ) {}
 
@@ -4549,7 +4638,7 @@ class ProcessControl {
   public:
 
   ProcessControl():
-    sleep_ticks (0) {}
+    sleep_ticks (0u) {}
   
   /** @brief Returns true if the process is currently sleeping. */
   auto sleeping() const -> bool { return sleep_ticks > 0; }    
@@ -4572,7 +4661,8 @@ class ProcessControl {
 #pragma once
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
-#include "ProcessMemory.hpp"
+#include "core/memory/MemoryView.hpp"
+#include "ProcessMemory2.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessControl.hpp"
 #include "types.hpp"
@@ -4589,15 +4679,15 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, vec<Instruction> script): 
-    id      (id),                     // Unique process ID
-    name    (move(name)),             // Human-readable process name (e.g. p01, p02)
-    logs    (vec<str>()),             // Output logs collected from PRINT instructions
-    core_id (0u),                     // ID of the core this process is assigned to (0 if unassigned)
-    stime   (Clock::now()),           // Timestamp of when the process was created
-    program (ProcessProgram(script)), // List of instructions and execution context
-    control (ProcessControl()),       // Sleep controller of the process
-    memory  (ProcessMemory()) {}      // Key-value variable store (e.g. for DECLARE, ADD, etc.)
+  ProcessData(uint id, str name, vec<Instruction> script, MemoryView view): 
+    id      (id),                         // Unique process ID
+    name    (move(name)),                 // Human-readable process name (e.g. p01, p02)
+    logs    (vec<str>()),                 // Output logs collected from PRINT instructions
+    core_id (0u),                         // ID of the core this process is assigned to (0 if unassigned)
+    stime   (Clock::now()),               // Timestamp of when the process was created
+    memory  (ProcessMemory(move(view))),  // TODO: docs
+    program (ProcessProgram(script)),     // List of instructions and execution context
+    control (ProcessControl()) {}         // Sleep controller of the process
 
   /** @brief Append a log message (used for PRINT instructions) */
   void log(str line) { logs.push_back(move(line)); }
@@ -4608,9 +4698,9 @@ class ProcessData {
   vec<str> logs;         
   uint core_id;       
   Time stime;        
+  ProcessMemory memory;   
   ProcessProgram program; 
   ProcessControl control; 
-  ProcessMemory memory;   
 };
 
 ------------------------------
@@ -4620,14 +4710,16 @@ class ProcessData {
 
 #pragma once
 #include "core/common/imports/_all.hpp"
+#include "core/memory/MemoryView.hpp"
 #include "types.hpp"
 
 
 class ProcessMemory { 
   public:
   
-  ProcessMemory():
-    symbol_table (map<str,uint>()) {}
+  ProcessMemory(MemoryView& view):
+    symbol_table (umap<str,uint>()),  // TODO: docs
+    view         (view) {}            // TODO: docs
 
   /** Memory mutators */
   void set(str key, uint value) {
@@ -4646,12 +4738,139 @@ class ProcessMemory {
   }
   
   /** Exposes internal variable bindings */
-  auto get_symbol_table() -> map<str,uint>& {
+  auto get_symbol_table() -> umap<str,uint>& {
     return symbol_table;
   }
 
   // ------ Instance variables ------
-  map<str,uint> symbol_table;
+  umap<str,uint> symbol_table;
+  MemoryView& view;
+};
+
+------------------------------
+ FILE:  ProcessMemory2.hpp
+ PATH:  core\process\ProcessMemory2.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/memory/MemoryView.hpp"
+#include "types.hpp"
+
+/**
+ * @brief Simulates per-process variable memory with virtual paging.
+ * 
+ * This class acts as the variable storage system for a process.
+ * It maps variable names (like `x`, `y`) to virtual addresses,
+ * and delegates all memory access to an underlying `MemoryView`
+ * which supports paging, page faults, and memory protection.
+ * 
+ * It simulates a symbol table of up to 32 variables (64 bytes total),
+ * where each variable takes up 2 bytes (16-bit values).
+ * 
+ * @note Use `set()` and `get()` to safely write and read memory.
+ *       Use `resolve()` to decode literals or variables.
+ */
+class ProcessMemory {
+  public:
+
+  /** Constructs a process memory system with a backing memory view. */
+  ProcessMemory(MemoryView view):
+    symbol_table(umap<str,uint>()), // Maps variable names to virtual addresses
+    virtual_memory (view),          // Reference to the process's virtual memory (MemoryView)
+    next_addr      (0u),            // Next available address for a new variable (2-byte aligned)
+    symbol_limit   (32u) {}         // Maximum number of variables allowed (2 bytes each)
+
+  /**
+   * @brief Writes a 2-byte (16-bit) value to a declared or new variable.
+   * 
+   * If the variable already exists, it overwrites its value in memory.
+   * If it doesn't exist and the symbol table has space, it declares it.
+   * 
+   * @param var   The variable name (e.g. "x", "y")
+   * @param value The 16-bit value to store
+   * @return Tuple:
+   *         - is_violation (bool): true if any memory access violation occurred
+   *         - is_page_fault (bool): true if a page fault occurred
+   *         - is_symbol_limit (bool): true if variable couldn't be declared (table full)
+   */
+  auto set(const str& var, uint value) -> tup<bool, bool, bool> {
+    if (symbol_table.contains(var)) {
+      auto addr = symbol_table[var];
+      auto [is_violation, is_page_fault] = virtual_memory.write(addr, value);
+      return {is_violation, is_page_fault, false};
+    }
+
+    if (symbol_table.size() < symbol_limit) {
+      auto addr = next_addr;
+      symbol_table[var] = addr;
+      next_addr += 2;
+      auto [is_violation, is_page_fault] = virtual_memory.write(addr, value);
+      return {is_violation, is_page_fault, false};
+    }
+
+    // Could not declare â€” symbol table full
+    return {true, false, true};
+  }
+
+  /**
+   * @brief Reads a 2-byte (16-bit) value from a declared variable.
+   * 
+   * @param var The variable name to look up
+   * @return Tuple:
+   *         - value (uint): Value stored (or 0 if undeclared)
+   *         - is_violation (bool): true if variable not declared
+   *         - is_page_fault (bool): true if page fault occurred
+   *         - is_undeclared (bool): true if variable is undeclared
+   */
+  auto get(const str& var) -> tup<uint,bool,bool,bool> {
+    if (!symbol_table.contains(var))
+      return {0, true, false, true}; // undeclared = true
+
+    auto addr = symbol_table[var];
+    auto [value, is_violation, is_page_fault] = virtual_memory.read(addr);
+    return {value, is_violation, is_page_fault, false}; // undeclared = false
+  }
+
+  /**
+   * @brief Resolves a token as either a numeric literal or a variable lookup.
+   * 
+   * If the token is numeric, returns its value directly.
+   * Otherwise, looks it up as a variable via `get()`.
+   * 
+   * @param token The input string (e.g. "42", "x")
+   * @return Tuple:
+   *         - value (uint): Resolved value
+   *         - violation (bool): true if undeclared variable
+   *         - page_fault (bool): true if page fault occurred
+   */
+  auto resolve(const str& token) -> tup<uint, bool, bool, bool> {
+    if (is_digits(token))
+      return {stoul(token), false, false, false};
+    return get(token);
+  }
+
+  /** @brief Renders a formatted view of the symbol table with virtual address and value. */
+  auto render_symbol_table() -> str {
+    if (symbol_table.empty())
+      return "  <empty>\n";
+    
+    auto out = osstream();
+    for (auto& [var, vaddr] : symbol_table) {
+      auto [value, violation, fault] = virtual_memory.read(vaddr);
+      out << format("  {:<6} â†’ vaddr={:#06x} = {:<5}", var, vaddr, value);
+      if (violation) out << "  [VIOLATION]";
+      if (fault)     out << "  [PAGE FAULT]";
+      out << '\n';
+    }
+    return out.str();
+  }
+
+  // ------ Member variables ------
+  umap<str,uint> symbol_table;
+  MemoryView virtual_memory;
+  uint next_addr;  
+  uint symbol_limit;
 };
 
 ------------------------------
@@ -4675,17 +4894,21 @@ class ProcessProgram {
 
   /** @brief Loads an instruction script. */
   ProcessProgram(vec<Instruction> script): 
-    script     (vec<Instruction>(move(script))),  // Flat list of all program instructions
-    context    (ContextStack()),                     // Stack of active loop contexts
-    ip_was_set (false),                              // For blocking instruction pointer advancing
-    ip         (0) {}                                // Current instruction pointer
+    script        (vec<Instruction>(move(script))), // Flat list of all program instructions
+    context       (ContextStack()),                 // Stack of active loop contexts
+    is_terminated (false),                          // For terminating process
+    ip_was_set    (false),                          // For blocking instruction pointer advancing
+    ip            (0) {}                            // Current instruction pointer
 
   /** @brief Returns the size of the script. */
   auto size() -> uint { return script.size(); }
   
   /** @brief Check if the program has completed execution. */
-  auto finished() -> bool { return ip >= script.size(); }
-
+  auto finished() -> bool { return ip >= script.size() || is_terminated; }
+  
+  /** @brief Terminate a program prematurely. */
+  void terminate() { is_terminated = true; }
+  
   /** @brief Manually sets the instruction pointer to a specific address. */
   void set_ip(uint addr) {
     ip_was_set = true;
@@ -4695,13 +4918,12 @@ class ProcessProgram {
   /** @brief Returns a formatted view of all instructions with the current IP highlighted. */
   auto render_script() -> str {
     // Compute the width needed to align inst indices
-    uint width = count_digits(script.size()-1);
+    auto width = count_digits(script.size()-1);
     auto out = osstream();
     
     // Render each instruction line, marking the current IP with a '>'
-    for (uint i=0; i < script.size(); ++i)
+    for (auto i=0u; i < script.size(); ++i)
       out << render_line(i, width);
-
     return out.str();
   }
 
@@ -4718,19 +4940,17 @@ class ProcessProgram {
     // Render each loop frame (used by nested FOR instructions)
     for (uint i=0; i < context.size(); ++i)
       out << render_frame(i, width);
-
     return out.str();
   }
 
   // ------ Instance variables ------
-
   vec<Instruction> script;
   ContextStack context;
+  bool is_terminated;
   bool ip_was_set;
   uint ip;
 
   // ------ Internal logic ------
-
   private:
 
   /** @brief Helper to renders a single instruction line from the script with formatting. */
@@ -4743,7 +4963,6 @@ class ProcessProgram {
     for (auto& arg: script[idx].args)
       line << ' ' << arg;
     line << '\n';
-
     return line.str();
   }
 
@@ -4869,9 +5088,6 @@ class Scheduler {
       // Release finished or preempted cores
       release_processes();
       
-      /** TODO: Clean/update paging info. */ 
-      // memory.tick(data);
-      
       // Tick sleeping processes in the waiting queue
       tick_sleeping_processes();
 
@@ -4887,15 +5103,19 @@ class Scheduler {
 
   /** @brief Applies a new configuration and resizes core state accordingly. */
   void set_config(Config config) {
-    strategy = get_scheduler_strategy(config.gets("scheduler"));
-    auto core_size = config.getu("num-cpu");
-    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
-    auto delay = config.getu("delays-per-exec");
     
-    // Resizes number of cores (destroys old ones if any)
+    // Initialize memory manager
+    auto memory_capacity = config.getu("max-overall-mem");
+    auto page_size = config.getu("mem-per-frame");
+    data.memory.init(memory_capacity, page_size);
+    
+    // Initialize CPU cores
+    strategy = get_scheduler_strategy(config.gets("scheduler"));
+    auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
+    auto core_size = config.getu("num-cpu");
+    auto delay = config.getu("delays-per-exec");
     data.cores.init(core_size);
 
-    // Configure cores with the tick delay and preempt handler (if any)
     for (auto& ref: data.cores.get_all()) {
       auto& core = ref.get();
       core.init(delay, preempt_handler);
@@ -4924,13 +5144,25 @@ class Scheduler {
 
   /** @brief Helper that generates user and scheduler-enqueued processes. */
   void generate_processes() {
-    auto make_process = [&](uint pid, str name="") {
+    auto make_process = [&](uint pid, str name = "") {
+      auto& config = data.config;
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
-      auto min = data.config.getu("min-ins");
-      auto max = data.config.getu("max-ins");
-      auto size = Rand::num(min, max);
 
-      data.add_process(Process(pid, move(pname), size));
+      // === Generate instruction count
+      auto min_ins = config.getu("min-ins");
+      auto max_ins = config.getu("max-ins");
+      auto ins_size = Rand::num(min_ins, max_ins);
+
+      // === Generate memory size for process (clamped to â‰¥64 automatically)
+      auto min_mem = config.getu("min-mem-per-proc");
+      auto max_mem = config.getu("max-mem-per-proc");
+      auto mem_size = Rand::num(min_mem, max_mem);
+
+      // === Auto-alloc and get view (failsafe inside create_memory_view_for)
+      auto view = data.memory.create_memory_view_for(pid, mem_size);
+
+      // === Add to process table and ready queue
+      data.add_process(Process(pid, move(pname), ins_size, move(view)));
       data.rqueue.push(pid);
     };
 
@@ -4984,6 +5216,7 @@ class Scheduler {
 #include "core/common/imports/_all.hpp"
 #include "core/process/Process.hpp"
 #include "core/execution/CoreManager.hpp"
+#include "core/memory/MemoryManager.hpp"
 #include "types.hpp"
 
 
@@ -4997,13 +5230,14 @@ class SchedulerData {
   public:
   
   SchedulerData():
-    proc_table    (map<uint,uptr<Process>>()),  // Container for all processes
+    proc_table    (umap<uint,uptr<Process>>()), // Container for all processes
     finished_pids (vec<uint>()),                // PIDs of Finished processes 
     rqueue        (queue<uint>()),              // Ready queue of processes waiting to be scheduled
     wqueue        (list<uint>()),               // Ready queue of processes waiting to be scheduled
     next_pid      (atomic_uint{1}),             // PID counter for generating unique process IDs
-    config        (Config()),          // Runtime configuration settings
-    cores         (CoreManager()) {}            // Owned instance of scheduler core manager
+    config        (Config()),                   // Runtime configuration settings
+    cores         (CoreManager()),              // Owned instance of core manager
+    memory        (MemoryManager()) {}          // Owned instance of memory manager
 
   /** @brief Returns a unique, incrementing process ID. */
   auto new_pid() -> uint { return next_pid++; }
@@ -5031,17 +5265,17 @@ class SchedulerData {
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
   // ------ Instance variables ------
-
-  map<uint, uptr<Process>> proc_table;
+  umap<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
   queue<uint> rqueue;                 
   list<uint> wqueue;                 
-  Config config;
-  CoreManager cores;                  
   atomic_uint next_pid;           
+  Config config;
+  CoreManager cores;
+  MemoryManager memory;
+
 
   // ------ Internal logic ------
-
   private:
 
   /** @brief Returns a pointer to a process given a name, or throws if not found (if enabed). */
@@ -5144,6 +5378,12 @@ class Config {
     set("max-ins", 1u);
     set("delays-per-exec", 0u);
     set("initialized", false);
+
+    // === NEW: From MCO2 ===
+    set("max-overall-mem", 1024u);   // Total memory available
+    set("mem-per-frame", 64u);       // Frame/page size in bytes
+    set("min-mem-per-proc", 128u);   // Lower bound for process allocation
+    set("max-mem-per-proc", 256u);   // Upper bound for process allocation
   }
 
   /** @brief Sets the value of a configuration key. */
@@ -5456,7 +5696,7 @@ class ShellStorage {
   public:
 
   ShellStorage():
-    storage (map<str,any>()) {}
+    storage (umap<str,any>()) {}
 
   /** Get a reference to a stored value. Throws if key/type is incorrect. */
   template <typename Type>
@@ -5483,7 +5723,7 @@ class ShellStorage {
   void remove(const str& key) { storage.erase(key); }
 
   // ------ Instance variables ------
-  map<str,any> storage;
+  umap<str,any> storage;
 };
 
 ------------------------------
