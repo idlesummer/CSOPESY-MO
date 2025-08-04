@@ -36,6 +36,5 @@ inline Instruction parse_instruction(const str& line) {
     if (inside_quote) {
         instr.args.push_back(quoted);
     }
-
     return instr;
 }

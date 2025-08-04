@@ -143,7 +143,6 @@ auto make_screen() -> CommandHandler {
         //   return void(cout << format("Invalid Memory allocation: {}. Must be power of 2 between 64 and 65536.\n"));
         // }
 
-
         // auto view = scheduler.data.memory.create_memory_view_for(0, mem_size); // - added this - raine
         // auto process = Process(0, name, 10, move(view)); // - added this - raine
 
