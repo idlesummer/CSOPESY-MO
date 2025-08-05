@@ -2,7 +2,7 @@
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/memory/MemoryView.hpp"
-#include "ProcessMemory2.hpp"
+#include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessControl.hpp"
 #include "types.hpp"
@@ -19,7 +19,7 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, vec<Instruction> script, MemoryView view): 
+  ProcessData(uint id, str name, MemoryView view, vec<Instruction> script): 
     id      (id),                         // Unique process ID
     name    (move(name)),                 // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),                 // Output logs collected from PRINT instructions

@@ -63,6 +63,35 @@ class Signature {
     return result;
   }
 
+  /** @brief Returns true if the given argument list matches this signature. */
+  auto matches(const vec<str>& inputs) -> bool {
+    if (inputs.size() != args.size())
+      return false;
+
+    for (auto i = 0u; i < args.size(); ++i) {
+      auto& expected = args[i];
+      auto& actual = inputs[i];
+
+      if (expected.type == "uint") {
+        auto value =  stoui(actual);
+        if (value < expected.min || value > expected.max)
+          return false;
+
+      } else if (expected.type == "str") {
+        if (actual.empty()) return false;  // or remove if empty is okay
+
+      } else if (expected.type == "var") {
+        if (actual.empty() || !isalpha(actual[0])) return false;
+        for (char c : actual)
+          if (!isalnum(c) && c != '_') return false;
+
+      } else {
+        return false; // unknown type
+      }
+    }
+    return true;
+  }
+
   private:
 
   // ------ Instance variables ------

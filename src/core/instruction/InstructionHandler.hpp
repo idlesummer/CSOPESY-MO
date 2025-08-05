@@ -49,6 +49,21 @@ class InstructionHandler {
     return inst;
   }
 
+  /**
+   * @brief Checks if any of the handler's signatures match the given arguments.
+   * 
+   * This dispatch-level check is used during instruction parsing to verify that
+   * a provided argument list matches at least one defined Signature for this opcode.
+   * 
+   * @param inputs The argument strings to validate.
+   * @return true if any signature matches the input list.
+   */
+  auto matches(const vec<str>& inputs) -> bool {
+    return any_of(signatures, [&](Signature& sig) {
+      return sig.matches(inputs);
+    });
+  }
+
   // ------ Instance variables ------
 
   str opcode;                                     

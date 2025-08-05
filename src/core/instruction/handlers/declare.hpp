@@ -12,7 +12,7 @@ auto make_declare() -> InstructionHandler {
     .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto var   = inst.args[0];
-      auto value = stoul(inst.args[1]);
+      auto value = stoul(inst.args[1], nullptr, 0);
       auto [is_violation, is_page_fault, is_full] = process.memory.set(var, value);
 
       if (is_page_fault) {
