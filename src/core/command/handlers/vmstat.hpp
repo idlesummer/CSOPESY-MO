@@ -22,6 +22,7 @@ auto make_vmstat() -> CommandHandler {
       auto& scheduler = shell.scheduler;
       auto& memory    = scheduler.data.memory;
       auto& ticks = scheduler.ticks;
+      auto& mm_data   = memory.data;
 
       auto total_mem = memory.get_total_memory();
       auto free_mem  = memory.get_free_memory();
@@ -31,8 +32,7 @@ auto make_vmstat() -> CommandHandler {
       cout << format("Used memory      : {:>8} bytes\n", used_mem);
       cout << format("Free memory      : {:>8} bytes\n", free_mem);
       cout << format("CPU total ticks  : {:>8}\n", ticks);
-      // cout << "\n";
-      // cout << format("Pages paged in   : {:>8}\n", paged_in);
+      cout << format("Pages paged in   : {:>8}\n", mm_data.num_paged_in);
       // cout << format("Pages paged out  : {:>8}\n", paged_out);
     });
 }

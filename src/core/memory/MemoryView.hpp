@@ -82,14 +82,32 @@ class MemoryView {
    * Triggers a page-in if the page is not loaded; returns nullopt on failure.
    * Returns the physical address (frame * page_size + offset) if successful.
    */
+  // auto maddr_of(uint vaddr) -> opt<uint> {
+  //   auto page_num = vaddr / data.page_size;
+  //   auto offset   = vaddr % data.page_size;
+  //   auto& page_table = data.page_table_map.at(pid);
+  //   auto& page = page_table.get(page_num);
+
+  //   if (!page.is_loaded() && !page_in(pid, page_num)) // Note: page_in method has side effects
+  //     return nullopt;
+  //   return page.frame() * data.page_size + offset;
+  // }
+
   auto maddr_of(uint vaddr) -> opt<uint> {
     auto page_num = vaddr / data.page_size;
     auto offset   = vaddr % data.page_size;
     auto& page_table = data.page_table_map.at(pid);
     auto& page = page_table.get(page_num);
 
-    if (!page.is_loaded() && !page_in(pid, page_num)) // Note: page_in method has side effects
-      return nullopt;
+    if (!page.is_loaded()) {
+      // attempt to page in
+      bool success = page_in(pid, page_num);
+      if (!success) return nullopt;
+
+      // if now loaded after success, count it
+      if (page.is_loaded()) ++data.num_paged_in;
+    }
+
     return page.frame() * data.page_size + offset;
   }
 };
