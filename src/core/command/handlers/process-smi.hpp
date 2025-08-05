@@ -14,14 +14,17 @@ auto make_process_smi() -> CommandHandler {
     .set_max_args(0)
 
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
-      if (shell.screen.is_main())
-        return "Not in a process screen.";
+      // if (shell.screen.is_main())
+      //   return "Not in a process screen.";
 
-      auto& scheduler = shell.scheduler;
-      uint pid = shell.screen.get_id();
+      // auto& scheduler = shell.scheduler;
+      // uint pid = shell.screen.get_id();
 
-      if (!scheduler.data.has_process(pid))
-        return format("Active process with ID \"{}\" not found.", pid);
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+
+      // if (!scheduler.data.has_process(pid))
+      //   return format("Active process with ID \"{}\" not found.", pid);
 
       return nullopt;
     })
