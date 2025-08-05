@@ -19,6 +19,16 @@ auto make_vmstat() -> CommandHandler {
     })
 
     .set_execute([](Command& command, Shell& shell) {
-      cout << "To be implemented.\n";
+      auto& scheduler = shell.scheduler;
+      auto& memory    = scheduler.data.memory;
+
+      // cout << format("Total memory     : {:>8} bytes\n", total_mem);
+      // cout << format("Used memory      : {:>8} bytes\n", used_mem);
+      // cout << format("Free memory      : {:>8} bytes\n", free_mem);
+      // cout << "\n";
+      // cout << format("CPU total ticks  : {:>8}\n", total_ticks);
+      // cout << "\n";
+      // cout << format("Pages paged in   : {:>8}\n", paged_in);
+      // cout << format("Pages paged out  : {:>8}\n", paged_out);
     });
 }
