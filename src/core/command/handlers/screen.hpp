@@ -263,8 +263,10 @@ auto make_screen() -> CommandHandler {
         auto& program = process.data.program;
         auto& memory  = process.data.memory;
 
+        
         cout << format("[screen] Inspecting process '{}'\n", name);
         cout << "────────────────────────────────────────────\n";
+        cout << format("{}\n", scheduler.data.memory.render_layout());
         cout << "Context Stack:\n" << program.render_context() << '\n';
         cout << "Instruction List:\n" << program.render_script() << '\n';
         cout << "Symbol Table:\n" << memory.render_symbol_table();

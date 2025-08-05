@@ -52,7 +52,7 @@ class MemoryManager {
     auto& page_table = data.page_table_map.at(pid);
 
     // Free any frames currently in use
-    for (auto page_num : page_table.pages()) {
+    for (auto& page_num : page_table.pages()) {
       auto& page = page_table.get(page_num);
       if (page.is_loaded()) {
         data.free_frames.push_back(page.frame());
@@ -71,27 +71,40 @@ class MemoryManager {
   }
 
   /**
-   * @brief Attempts to load all virtual pages for a process into memory.
-   * 
-   * Returns true if all pages were successfully loaded.
-   * Returns false if any page could not be loaded due to memory constraints.
-   * 
-   * Assumes the page table for the process is already allocated.
-   */
-  auto page_in_all(uint pid) -> bool {
-    if (!data.page_table_map.contains(pid)) return false;
+ * @brief Renders a visual map of physical frames and their assigned virtual pages.
+ * 
+ * Each line shows:
+ *   - Frame index
+ *   - Owning process ID (if any)
+ *   - Virtual page number (if mapped)
+ *   - "free" if the frame is unused
+ */
+  auto render_layout() -> str {
+    // Create reverse map: frame_num → (pid, page_num)
+    auto frame_map = umap<uint, tup<uint, uint>>();
 
-    auto& page_table = data.page_table_map.at(pid);
-
-    for (auto page_num : page_table.pages()) {
-      if (page_table.get(page_num).is_loaded())
-        continue;
-
-      if (!page_in(pid, page_num))
-        return false;
+    for (auto& [pid, table] : data.page_table_map) {
+      for (auto page_num : table.pages()) {
+        auto& page = table.get(page_num);
+        if (page.is_loaded()) {
+          frame_map[page.frame()] = { pid, page_num };
+        }
+      }
     }
 
-    return true;
+    // Render table
+    auto out = osstream();
+    out << "\n[Physical Memory Layout]\n";
+    for (auto i = 0u; i < data.frame_count; ++i) {
+      if (frame_map.contains(i)) {
+        auto [pid, page] = frame_map[i];
+        out << format("[frame {:>2}] → pid={:<3} page={}\n", i, pid, page);
+      } else {
+        out << format("[frame {:>2}] → free\n", i);
+      }
+    }
+
+    return out.str();
   }
 
   // ------ Member variables ------
@@ -108,6 +121,11 @@ class MemoryManager {
       page_table.add(page_num, PageEntry());
 
     data.page_table_map[pid] = move(page_table);
+
+    // Try to preload as many pages as possible (no fault if not all succeed)
+    for (auto page_num = 0u; page_num < pages_needed; ++page_num)
+      page_in(pid, page_num);  // Ignore return value
+
     return true;
   }
 
@@ -165,8 +183,10 @@ class MemoryManager {
     for (auto it = data.equeue.begin(); it != data.equeue.end(); ++it) {
       auto [owner_pid, page_num] = *it;
 
-      // Only evict a process' own page
-      if (owner_pid != pid) continue;
+      // Only evict if:
+      // - The page belongs to the same process (self-eviction), OR
+      // - The owner process is considered inactive (e.g., finished or not assigned to any core)
+      if (owner_pid != pid) continue; /** TODO: */
 
       // Get page table and page entry
       auto& page_table = data.page_table_map.at(pid);

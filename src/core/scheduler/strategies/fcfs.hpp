@@ -26,11 +26,9 @@ auto make_fcfs_strategy() -> SchedulerStrategy {
         // Peek at the front process
         auto pid = data.rqueue.front();
 
-        // Check if there's enough memory to run this process
-        // Not enough memory — skip for now, leave in rqueue
-        // Pass true if process only needs at least 1 free frame
-        // otherwise require full memory allocation
-        if (!data.memory_available_for(pid, true))
+        // Check if at least one of its pages is already loaded, OR
+        // at least one free frame exists to satisfy future faults.
+        if (!data.memory_available_for(pid))
           continue;
 
         // Enough memory - assign to core
