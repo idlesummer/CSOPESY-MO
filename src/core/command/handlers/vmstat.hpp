@@ -15,10 +15,6 @@ auto make_vmstat() -> CommandHandler {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
 
-      auto config = shell.scheduler.data.config;
-      if (!config.getb("initialized"))
-        return "Scheduler not initialized. Please run 'initialize' first.";
-
       return nullopt;
     })
 
