@@ -117,6 +117,21 @@ class MemoryManager {
     return out.str();
   }
 
+  /** @brief Returns total main memory capacity in bytes. */
+    auto get_total_memory() -> uint {
+      return data.frame_count * data.page_size;
+  }
+
+    /** @brief Returns the number of free memory bytes. */
+  auto get_free_memory() -> uint {
+    return data.free_frames.size() * data.page_size;
+  }
+
+  /** @brief Returns the number of used memory bytes. */
+  auto get_used_memory() -> uint {
+    return get_total_memory() - get_free_memory();
+  }
+
   // ------ Member variables ------
   MemoryManagerData data;
   

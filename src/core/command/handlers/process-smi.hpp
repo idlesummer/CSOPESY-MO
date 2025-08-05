@@ -36,12 +36,15 @@ auto make_process_smi() -> CommandHandler {
       uint total_mib    = total_bytes / 1024;
       uint memory_util  = (used_frames * 100) / total_frames;
 
+      auto cpu_util = scheduler.data.cores.get_usage() * 100;
+
+
       if (shell.screen.is_main()) {
         // System Info
         cout << "------------------------------------------------------------\n";
         cout << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
         cout << "------------------------------------------------------------\n";
-        cout << "CPU-Util:  100%\n";
+        cout << format("CPU-Util:  {:.2f}%\n", cpu_util);
         cout << "Memory Usage: " << used_mib << "MiB / " << total_mib << "MiB\n";
         cout << "Memory Util: " << memory_util << "%\n";
 
@@ -51,15 +54,9 @@ auto make_process_smi() -> CommandHandler {
         cout << "Running processes and memory usage:\n\n";
 
         for (auto& [pid, table] : mm_data.page_table_map) {
-          uint frames = 0;
-          for (auto& [_,page] : table.entries) {
-            if (page.is_loaded()) {
-              frames++;
-            }
-          }
-          uint used_bytes = frames * mm_data.page_size;
+          uint pages_reserved = table.entries.size(); // Total pages allocated
+          uint used_bytes = pages_reserved * mm_data.page_size;
           uint used_mib = used_bytes / 1024;
-
           cout << format("process{:02d} {}MiB\n", pid, used_mib);
         }
       } else if (!shell.screen.is_main()) {
