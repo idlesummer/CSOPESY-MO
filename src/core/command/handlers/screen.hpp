@@ -130,12 +130,19 @@ auto make_screen() -> CommandHandler {
           return void(cout << format("[screen] Process '{}' already exists.\n", name));
 
         // Parse memory argument
-        uint memory = stoui(memstr);
-        if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
-          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+        // uint memory = stoui(memstr);
+        // if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
+        //   return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+        
+        // Parse memory argument
+        auto min_mem = scheduler.data.config.getu("min-mem-per-proc");
+        auto max_mem = scheduler.data.config.getu("max-mem-per-proc");
+        auto size = stoui(memstr);
+        if (size < min_mem || size > max_mem || (size & (size - 1)) != 0)
+          return void(cout << format("[screen] Invalid memory allocation. Must be power of 2 between {} and {}.\n", min_mem, max_mem));
 
         // Generate the process
-        scheduler.generate_process(name, memory);
+        scheduler.generate_process(name, size);
         cout << format("[screen] Waiting for process creation: {}...", name);
 
         // Wait until queued

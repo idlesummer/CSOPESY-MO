@@ -17,21 +17,30 @@ auto make_rr_strategy() -> SchedulerStrategy {
     .set_name("rr")
 
     .on_tick([](SchedulerData& data) {
-      for (auto& ref: data.cores.get_idle()) {
-    
-        // If no process is ready, stop assigning
-        if (data.rqueue.empty()) break;
-        
-        auto& core = ref.get();
-        uint pid = data.rqueue.front(); 
+      for (auto& ref : data.cores.get_idle()) {
+        // No processes to assign
+        if (data.rqueue.empty()) 
+          break;
+
+        // Peek at the front process
+        auto pid = data.rqueue.front();
+
+        // Check if there's enough memory to run this process
+        // Not enough memory — skip for now, leave in rqueue
+        // Pass true if process only needs at least 1 free frame
+        // otherwise require full memory allocation
+        if (!data.memory_available_for(pid, true))
+          continue;
+
+        // Enough memory - assign to core
         data.rqueue.pop();
+        auto& core = ref.get();
         core.assign(data.get_process(pid));
       }
     })
 
     .on_preempt([](SchedulerData& data) -> Core::func {
       auto quantum = data.config.getu("quantum-cycles");
-      
       return [quantum](Core& core) -> bool {
         return core.job_ticks >= quantum;
       };

@@ -134,8 +134,11 @@ class Scheduler {
       auto& process = core.get_job();
       core.release();
 
-      if (process.data.program.finished())
+      if (process.data.program.finished()) {
         data.finished_pids.push_back(process.data.id);
+        data.memory.release_all_frames_for(process.data.id);  // Clean up memory pages and eviction queue
+      }
+
       else if (process.data.control.sleeping())
         data.wqueue.push_back(process.data.id);     
       else                                      

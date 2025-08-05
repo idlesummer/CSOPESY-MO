@@ -412,7 +412,7 @@ auto make_demo() -> CommandHandler {
       // Create process if not yet spawned
       if (!storage.has("demo.process")) {
         auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
-        auto process = Process(0, "demo.process", 10, move(view));
+        auto process = Process(0, "demo.process", move(view), 10);
         storage.set("demo.process", move(process));
         cout << "[demo] Process created.\n";
       }
@@ -496,7 +496,49 @@ auto make_exit() -> CommandHandler {
         return void(shell.stop());
 
       screen.switch_to_main();
+      system("cls");
       cout << shell.banner.get();
+    });
+}
+
+------------------------------
+ FILE:  help.hpp
+ PATH:  core\command\handlers\help.hpp
+------------------------------
+
+#pragma once
+#include "core/shell/internal/Shell.impl.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/command/handlers/_all.hpp"
+#include "core/common/utility/RichText.hpp"
+
+
+
+auto make_help() -> CommandHandler {
+  return CommandHandler()
+    .set_name("help")
+    .set_desc("Provides information of how the commands work")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_disabled(false)
+    
+    .set_validate([](Command& command, Shell& shell) -> optional<str> {
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+      return nullopt;
+    })
+
+     .set_execute([](Command&, Shell& shell) {
+      cout << RichText("  [b fg=#d39c6a]Available Commands: [/]\n\n");
+
+      for (auto& [name, handler] : shell.interpreter.handlers) {
+        if (handler.disabled) continue;
+        // cout << format("  \033[1m{:<18}\033[0m {}\n", name, handler.desc);
+        cout << RichText(format("  [bold]{:<18}[/] {}\n", name, handler.desc));
+      }
+
+      cout << "\nUse the command name directly to invoke it. Example: `exit`\n";
     });
 }
 
@@ -828,11 +870,6 @@ auto make_screen() -> CommandHandler {
     );
   };
 
-  auto process_exists = [](auto& name, auto& scheduler) -> bool {
-    auto& data = scheduler.data;
-    return data.has_process(name);
-  };
-
   auto process_queued = [](auto& name, auto& scheduler) -> bool {
     for (uint i = 0; i < 30; ++i) {
       if (scheduler.data.has_process(name))
@@ -855,6 +892,7 @@ auto make_screen() -> CommandHandler {
     .add_flag("-r")
     .add_flag("-ls")
     .add_flag("-c")
+    .add_flag("-v")
     
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
       auto has_ls = command.flags.contains("-ls");
@@ -910,21 +948,29 @@ auto make_screen() -> CommandHandler {
 
       // === -s: Spawn and switch to new process screen
       else if (command.flags.contains("-s")) {
-        
-        if (command.args.empty()) 
-          return void(cout << "Missing process name.\n");
+        if (command.args.size() < 2)
+          return void(cout << "[screen] Usage: screen -s <name> <memory>\n");
 
-        auto& name = command.args[0];
-        if (process_exists(name, scheduler))
-          return void(cout << format("Process '{}' already exists\n", name));
+        auto& name   = command.args[0];
+        auto& memstr = command.args[1];
 
-        scheduler.generate_process(name);
-        cout << format("Waiting for process creation: {}", name);
+        if (scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' already exists.\n", name));
 
-        // Wait until process queues
+        // Parse memory argument
+        uint memory = stoui(memstr);
+        if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
+          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+
+        // Generate the process
+        scheduler.generate_process(name, memory);
+        cout << format("[screen] Waiting for process creation: {}...", name);
+
+        // Wait until queued
         if (!process_queued(name, scheduler))
-          return void(cout << "\nTimed out.\n");
+          return void(cout << "\n[screen] Timed out.\n");
 
+        // Retrieve process info
         auto& process = scheduler.data.get_process(name);
         auto pid = process.data.id;
 
@@ -934,7 +980,7 @@ auto make_screen() -> CommandHandler {
         cout << format("ID: {}\n", pid);
 
         cout << "Logs:\n";
-        for (auto& log: process.data.logs)
+        for (auto& log : process.data.logs)
           cout << format("  {}\n", log);
 
         auto& program = process.data.program;
@@ -970,16 +1016,165 @@ auto make_screen() -> CommandHandler {
       }
 
       else if (command.flags.contains("-c")) {
-        /** 
-         * Hi Raine! Here's the new changes:
-         * 
-         * @c command.input  -- raw input (without the command name)
-         * @c command.tokens -- list of all args and flags in order of the input
-         * @c command.flags  -- set of tokens with a dash `-` at the beginning
-         * @c command.args   -- list of arguments
-         * 
-         */ 
+        if (command.args.size() < 3)
+          return void(cout << "[screen] Usage: screen -c <name> <memory> \"<instruction string>\"\n");
+
+        auto& name = command.args[0];
+        auto size = stoui(command.args[1]);
+        auto& inst_str = command.args[2];
+
+        // Check if process already exists
+        if (scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' already exists.\n", name));
+
+        // Validate memory size
+        if (size < 64 || size > 65536 || (size & (size - 1)) != 0)
+          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+
+        // Tokenize instruction string by semicolons
+        auto token_lines = vec<vec<str>>();
+        auto lines = re::split(inst_str, std::regex(";"));
+        for (auto& line : lines) {
+          if (!line.empty())
+            token_lines.push_back(re::tokenize(re::strip(line)));
+        }
+
+        // Enforce instruction count limit
+        if (token_lines.empty() || token_lines.size() > 50)
+          return void(cout << "[screen] Instruction count must be between 1 and 50.\n");
+
+        // Parse and validate instruction script
+        auto& interpreter = InstructionInterpreter::get();
+        auto script = interpreter.parse_script(token_lines);
+        if (script.empty())
+          return void(cout << "[screen] Failed to parse instruction script.\n");
+
+        // Create process and memory view
+        auto view = scheduler.data.memory.create_memory_view_for(0, size); // pid = 0 (will be set)
+        auto process = Process(0, name, move(view), move(script));
+        auto pid = scheduler.data.new_pid();
+        process.data.id = pid;
+        scheduler.data.add_process(move(process));
+        scheduler.data.rqueue.push(pid);
+
+        // Attach to screen
+        screen.switch_to(pid);
+
+        // Confirm to user
+        auto& proc = scheduler.data.get_process(pid);
+        cout << format("[screen] Process '{}' created with PID {}.\n", name, pid);
+        cout << "Logs:\n";
+        for (auto& log : proc.data.logs)
+          cout << format("  {}\n", log);
+        cout << format("Current instruction line: {}\n", proc.data.program.ip);
+        cout << format("Lines of code: {}\n", proc.data.program.size());
       }
+
+      else if (command.flags.contains("-v")) {
+        if (command.args.empty())
+          return void(cout << "[screen] Usage: screen -v <process_name>\n");
+
+        auto& name = command.args[0];
+
+        // Check if process exists
+        if (!scheduler.data.has_process(name))
+          return void(cout << format("[screen] Process '{}' not found.\n", name));
+
+        auto& process = scheduler.data.get_process(name);
+        auto& program = process.data.program;
+        auto& memory  = process.data.memory;
+
+        cout << format("[screen] Inspecting process '{}'\n", name);
+        cout << "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n";
+        cout << "Context Stack:\n" << program.render_context() << '\n';
+        cout << "Instruction List:\n" << program.render_script() << '\n';
+        cout << "Symbol Table:\n" << memory.render_symbol_table();
+        cout << "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n";
+      }
+    });
+}
+
+------------------------------
+ FILE:  script.hpp
+ PATH:  core\command\handlers\script.hpp
+------------------------------
+
+#pragma once
+#include "core/common/imports/_all.hpp"
+#include "core/command/Command.hpp"
+#include "core/command/CommandHandler.hpp"
+#include "core/shell/internal/Shell.impl.hpp"
+
+auto make_script() -> CommandHandler {
+  return CommandHandler()
+    .set_name("script")
+    .set_desc("Parse and step through a hardcoded instruction script.")
+    .set_min_args(0)
+    .set_max_args(0)
+    .set_execute([](Command& command, Shell& shell) {
+      auto& interpreter = InstructionInterpreter::get();
+      auto& storage     = shell.storage;
+
+      // Reset script process
+      if (command.flags.contains("-r")) {
+        storage.remove("script.process");
+        cout << "[script] Script process reset.\n";
+        return;
+      }
+
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Create and store script process if not yet existing
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      if (!storage.has("script.process")) {
+        auto token_lines = vec<vec<str>>{
+          { "DECLARE", "x", "0xF"       },
+          { "DECLARE", "y", "10"        },
+          { "ADD",     "sum", "x", "y"  },
+          { "PRINT",   "sum"            },
+          { "DECLARE", "hexnum", "0x1F4" },
+          { "ADD",     "sum2", "hexnum", "0x10" },
+          { "PRINT",   "sum2" }
+        };
+
+        auto script = interpreter.parse_script(token_lines);
+        if (script.empty()) {
+          cout << "[script] Failed to parse script.\n";
+          return;
+        }
+
+        auto view = shell.scheduler.data.memory.create_memory_view_for(0, 64);
+        auto process = Process(0, "script", move(view), move(script));
+        storage.set("script.process", move(process));
+
+        cout << "[script] Script process created.\n";
+      }
+
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Access and step the process
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      auto& process = storage.get<Process>("script.process");
+      auto& program = process.data.program;
+      auto& memory  = process.data.memory;
+
+      cout << "[script] ================================\n";
+      cout << "[script] Script instructions:\n";
+      cout << program.render_script() << '\n';
+
+      cout << "[script] Symbol Table:\n";
+      cout << memory.render_symbol_table() << '\n';
+
+      if (program.finished())
+        cout << "[script] Already finished.\n";
+
+      else {
+        process.step();
+        cout << "[script] Stepped once.\n";
+      }
+
+      for (auto& log : process.data.logs)
+        cout << format("{}\n", log);
+
+      cout << "[script] ================================\n";
     });
 }
 
@@ -1114,7 +1309,9 @@ auto make_vmstat() -> CommandHandler {
 #include "scheduler-start.hpp"
 #include "scheduler-stop.hpp"
 #include "screen.hpp"
+#include "script.hpp"
 #include "vmstat.hpp"
+#include "help.hpp"
 
 
 auto get_command_handlers() -> vec<CommandHandler> {
@@ -1131,7 +1328,9 @@ auto get_command_handlers() -> vec<CommandHandler> {
     make_scheduler_start(),
     make_scheduler_stop(),
     make_screen(),
+    make_script(),
     make_vmstat(),
+    make_help()
   };
 }
 
@@ -1269,6 +1468,18 @@ constexpr auto count_digits(uint32_t n) -> uint32_t {
 
 constexpr auto pad_left(const std::string& s, uint32_t width, char fill=' ') -> std::string {
   return std::string(width > s.length() ? width - s.length() : 0, fill) + s;
+}
+
+/**  * @brief Converts a string to uint32. Supports hex (0x...), clamps on overflow, returns 0 on failure. */
+auto stoui(const std::string& s) -> std::uint32_t {
+  try {
+    unsigned long value = std::stoul(s, nullptr, 0); // base 0 = autodetect
+    return (value > std::numeric_limits<std::uint32_t>::max())
+      ? std::numeric_limits<std::uint32_t>::max()
+      : static_cast<std::uint32_t>(value);
+  } catch (...) {
+    return 0;
+  }
 }
 
 ------------------------------
@@ -2856,6 +3067,21 @@ class InstructionHandler {
     return inst;
   }
 
+  /**
+   * @brief Checks if any of the handler's signatures match the given arguments.
+   * 
+   * This dispatch-level check is used during instruction parsing to verify that
+   * a provided argument list matches at least one defined Signature for this opcode.
+   * 
+   * @param inputs The argument strings to validate.
+   * @return true if any signature matches the input list.
+   */
+  auto matches(const vec<str>& inputs) -> bool {
+    return any_of(signatures, [&](Signature& sig) {
+      return sig.matches(inputs);
+    });
+  }
+
   // ------ Instance variables ------
 
   str opcode;                                     
@@ -2927,8 +3153,34 @@ class InstructionInterpreter {
     auto it = handlers.find(inst.opcode);
     if (it == handlers.end())
       throw runtime_error("Unknown instruction: " + inst.opcode);
-
     it->second.execute(inst, proc);
+  }
+
+  /** @brief Parses a list of tokenized script lines into Instruction objects. */
+  auto parse_script(const vec<vec<str>>& token_lines) -> vec<Instruction> {
+    auto script = vec<Instruction>();
+
+    for (auto& tokens : token_lines) {
+      if (tokens.empty()) continue;
+
+      auto opcode = tokens[0];
+      auto it = handlers.find(opcode);
+      if (it == handlers.end()) {
+        cout << format("[parse_script]: Unknown opcode '{}'\n", opcode);
+        return {}; // return empty on unknown instruction
+      }
+
+      auto& handler = it->second;
+      auto args = vec<str>(tokens.begin()+1, tokens.end());
+      auto inst = Instruction(opcode, args);
+
+      if (!handler.matches(inst.args)) {
+        cout << format("[parse_script]: Invalid arguments for '{}'\n", opcode);
+        return {};
+      }
+      script.push_back(move(inst));
+    }
+    return script;
   }
 
   /** @brief Generates a random list of up to `size` instructions with proper block closure. */
@@ -3062,6 +3314,35 @@ class Signature {
     return result;
   }
 
+  /** @brief Returns true if the given argument list matches this signature. */
+  auto matches(const vec<str>& inputs) -> bool {
+    if (inputs.size() != args.size())
+      return false;
+
+    for (auto i = 0u; i < args.size(); ++i) {
+      auto& expected = args[i];
+      auto& actual = inputs[i];
+
+      if (expected.type == "uint") {
+        auto value =  stoui(actual);
+        if (value < expected.min || value > expected.max)
+          return false;
+
+      } else if (expected.type == "str") {
+        if (actual.empty()) return false;  // or remove if empty is okay
+
+      } else if (expected.type == "var") {
+        if (actual.empty() || !isalpha(actual[0])) return false;
+        for (char c : actual)
+          if (!isalnum(c) && c != '_') return false;
+
+      } else {
+        return false; // unknown type
+      }
+    }
+    return true;
+  }
+
   private:
 
   // ------ Instance variables ------
@@ -3157,7 +3438,7 @@ auto make_declare() -> InstructionHandler {
     .set_execute([](Instruction& inst, ProcessData& process) {
       auto& program = process.program;
       auto var   = inst.args[0];
-      auto value = stoul(inst.args[1]);
+      auto value = stoul(inst.args[1], nullptr, 0);
       auto [is_violation, is_page_fault, is_full] = process.memory.set(var, value);
 
       if (is_page_fault) {
@@ -3288,11 +3569,51 @@ auto make_for() -> InstructionHandler {
 auto make_print() -> InstructionHandler {
   return InstructionHandler()
     .set_opcode("PRINT")
-    // .add_signature(Signature().Str())
-    // .add_signature(Signature().Str().Var())
+    .add_signature(Signature().Str())
+    .add_signature(Signature().Str().Var())
 
     .set_execute([](Instruction& inst, ProcessData& process) {
       process.log(format("Hello world from {}!", process.name));
+    });
+}
+
+------------------------------
+ FILE:  read.hpp
+ PATH:  core\instruction\handlers\read.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+auto make_read () -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("READ")
+    .add_signature(Signature().Var().Uint16())
+
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
+      auto& memory = process.memory;
+
+      auto var   = inst.args[0];
+      auto vaddr = stoul(inst.args[1], nullptr, 0); // parses hex or dec
+
+      auto [value, is_violation, is_page_fault] = memory.virtual_memory.read(vaddr);
+
+      if (is_violation) {
+        process.log(format("[READ] access violation at address 0x{:X}", vaddr));
+        program.terminate();
+        return;
+      }
+
+      if (is_page_fault) {
+        process.log(format("[READ] Unable to resolve page fault on first try for '{}'", var));
+        program.set_ip(program.ip);
+        return;
+      }
+
+      memory.set(var, value);
     });
 }
 
@@ -3394,6 +3715,44 @@ auto make_subtract() -> InstructionHandler {
 }
 
 ------------------------------
+ FILE:  write.hpp
+ PATH:  core\instruction\handlers\write.hpp
+------------------------------
+
+#pragma once
+#include "core/instruction/Instruction.hpp"
+#include "core/instruction/InstructionHandler.hpp"
+#include "core/process/ProcessData.hpp"
+
+auto make_write () -> InstructionHandler {
+  return InstructionHandler()
+    .set_opcode("WRITE")
+    .add_signature(Signature().Uint16().Uint16())
+    
+    .set_execute([](Instruction& inst, ProcessData& process) {
+      auto& program = process.program;
+      auto& memory = process.memory;
+
+      auto vaddr = stoul(inst.args[0], nullptr, 0); 
+      auto value = stoul(inst.args[1], nullptr, 0);
+
+      auto [is_violation, is_page_fault] = memory.virtual_memory.write(vaddr, value);
+
+      if (is_violation) {
+        process.log(format("[WRITE] access violation at address 0x{:X}", vaddr));
+        program.terminate();
+        return;
+      }
+
+      if (is_page_fault) {
+        process.log(format("[WRITE] Unable to resolve page fault on first try for '{}'", value));
+        program.set_ip(program.ip);
+        return;
+      }
+    });
+}
+
+------------------------------
  FILE:  _all.hpp
  PATH:  core\instruction\handlers\_all.hpp
 ------------------------------
@@ -3420,169 +3779,6 @@ auto get_instruction_handlers() -> vec<InstructionHandler> {
     make_subtract(),
   };
 }
-
-------------------------------
- FILE:  main.py
- PATH:  core\memory\main.py
-------------------------------
-
-from MemoryManager2 import *
-
-
-class Process:
-    def __init__(self, pid, manager):
-        vmemory = manager.get_vmemory(pid)
-        self.memory = ProcessMemory(vmemory)
-
-
-class CommandRegistry:
-    def __init__(self, mm: MemoryManager, process: Process):
-        self.mm = mm
-        self.process = process
-        self.commands = {
-            "write": self._write,
-            "read": self._read,
-            "declare": self._declare,
-            "add": self._add,
-            "vmstat": self._vmstat,
-            "process-smi": self._process_smi,
-            "write-raw": self._write_raw,
-        }
-
-    def execute(self, line):
-        tokens = line.strip().split()
-        if not tokens: return
-        cmd, args = tokens[0], tokens[1:]
-
-        if cmd not in self.commands:
-            print(f"[shell] Unknown command: {cmd}")
-            return
-
-        try:
-            self.commands[cmd](args)
-        except Exception as e:
-            print(f"[error] {e}")
-
-    # Command Handlers
-
-    def _write_raw(self, args):
-        if len(args) != 2:
-            print("[write-raw] Usage: write-raw <vaddr> <value>")
-            return
-
-        vaddr = int(args[0])
-        value = int(args[1])
-        print(f"[exec] WRITE-RAW vaddr={hex(vaddr)} = {value}")
-
-        is_violation, is_page_fault = self.process.memory.view.write(vaddr, value)
-        if is_violation:
-            print("[write-raw] Invalid address (violation)")
-        elif is_page_fault:
-            print("[write-raw] Page fault occurred â€” retry later")
-        else:
-            print("[write-raw] Write successful")
-
-    def _write(self, args):
-        var, value = args[0], int(args[1])
-        print(f"[exec] WRITE {var} = {value}")
-        success = self.process.memory.set(var, value)
-        if not success:
-            print("[write] Page fault occurred â€” retry later")
-
-    def _read(self, args):
-        var = args[0]
-        print(f"[exec] READ {var}")
-        value, is_violation, is_page_fault = self.process.memory.get(var)
-
-        if is_violation:
-            print(f"[read] '{var}' is undeclared â€” cannot read")
-        elif is_page_fault:
-            print("[read] Page fault occurred â€” retry later")
-
-    def _declare(self, args):
-        if len(args) != 2:
-            print("[declare] Usage: declare <var> <value>")
-            return
-
-        var, value = args[0], int(args[1])
-        print(f"[exec] DECLARE {var} = {value}")
-        success = self.process.memory.set(var, value)
-        if not success:
-            print(f"[declare] Page fault occurred during declaration â€” retry later")
-
-    def _add(self, args):
-        if len(args) != 3:
-            print("[add] Usage: add <dst> <src1> <src2>")
-            return
-        dst, src1, src2 = args
-        print(f"[exec] ADD {dst} {src1} {src2}")
-
-        val1, inv1, pf1 = self.process.memory.get(src1)
-        val2, inv2, pf2 = self.process.memory.get(src2)
-
-        if inv1 or inv2:
-            print("[add] One or more variables undeclared â€” aborting")
-            return
-        if pf1 or pf2:
-            print("[add] Page fault occurred â€” retry later")
-            return
-
-        result = (val1 + val2) & 0xFFFF
-        success = self.process.memory.set(dst, result)
-        if not success:
-            print("[add] Destination write page fault â€” retry later")
-
-    def _vmstat(self, args):
-        if not args:
-            print("[vmstat] Usage: vmstat <pid>")
-            return
-
-        pid = int(args[0])
-        if pid not in self.mm.data.page_table_map:
-            print(f"[vmstat] No page table found for pid={pid}")
-            return
-
-        print(f"[vmstat] Process {pid}:")
-        table = self.mm.data.page_table_map[pid]
-        for page_num in sorted(table.pages()):
-            entry = table.get(page_num)
-            if entry.is_loaded():
-                print(f"  Page {page_num:<2} â†’ Frame {entry.frame_num}")
-            else:
-                print(f"  Page {page_num:<2} â†’ Not Loaded")
-
-    def _process_smi(self, args):
-        mm = self.mm
-        print("=== PROCESS-SMI: Memory Summary ===")
-        print(f"Total frames:     {mm.data.frame_count}")
-        print(f"Free frames:      {len(mm.data.free_frames)}")
-        print(f"Used frames:      {mm.data.frame_count - len(mm.data.free_frames)}\n")
-
-        for pid, page_table in mm.data.page_table_map.items():
-            print(f"Process PID: {pid}")
-            loaded = 0
-            for page_num in sorted(page_table.pages()):
-                page = page_table.get(page_num)
-                if page.is_loaded():
-                    print(f"  Page {page_num:02} â†’ Frame {page.frame_num}")
-                    loaded += 1
-                else:
-                    print(f"  Page {page_num:02} â†’ Not loaded")
-            print(f"  Total pages: {len(page_table.pages())}, Loaded: {loaded}")
-            print()
-
-
-if __name__ == "__main__":
-    mm = MemoryManager()
-    mm.init(capacity=64, page_size=64)
-    mm.alloc(pid=1, bytes_needed=128)        # 2 pages
-    process = Process(pid=1, manager=mm)
-    registry = CommandRegistry(mm, process)
-
-    registry.execute("write-raw 0 111")      ; print()  # page 0 â†’ frame 0
-    registry.execute("write-raw 64 222")     ; print()  # page 1 â†’ frame 0
-    registry.execute("write-raw 0 333")      ; print()  # will fail naturally
-
 
 ------------------------------
  FILE:  MemoryManager.hpp
@@ -3630,6 +3826,37 @@ class MemoryManager {
     });
   }
 
+  /**
+   * @brief Releases all memory used by a given process.
+   *
+   * Frees all physical frames occupied by the process's pages and
+   * clears their corresponding page table and eviction queue entries.
+   * This should be called when a process finishes execution or is terminated.
+   */
+  void release_all_frames_for(uint pid) {
+    if (!data.page_table_map.contains(pid)) return;
+
+    auto& page_table = data.page_table_map.at(pid);
+
+    // Free any frames currently in use
+    for (auto page_num : page_table.pages()) {
+      auto& page = page_table.get(page_num);
+      if (page.is_loaded()) {
+        data.free_frames.push_back(page.frame());
+        page.frame_num = nullopt;
+      }
+    }
+
+    // Remove from page table
+    data.page_table_map.erase(pid);
+
+    // Remove from eviction queue
+    erase_if(data.equeue, [&](auto& entry) {
+      auto [entry_pid, _] = entry;
+      return entry_pid == pid;
+    });
+  }
+
   // ------ Member variables ------
   MemoryManagerData data;
   
@@ -3661,7 +3888,7 @@ class MemoryManager {
   auto page_in(uint pid, uint page_num) -> bool {
     // Try to get a free frame
     if (data.free_frames.empty())
-      if (!page_out())
+      if (!page_out(pid))
         return false;   // Couldn't evict a page!
     
     // Retrieve free frame
@@ -3697,32 +3924,38 @@ class MemoryManager {
     * This simulates basic page replacement when memory is full.
     * Also known as: "evict_page".
     */
-  auto page_out() -> bool {
-    while (!data.equeue.empty()) {
-      auto [pid, page_num] = data.equeue.front();
-      data.equeue.pop_front();   
+  auto page_out(uint pid) -> bool {
+    for (auto it = data.equeue.begin(); it != data.equeue.end(); ++it) {
+      auto [owner_pid, page_num] = *it;
 
-      auto& table = data.page_table_map[pid];
-      auto& page = table.get(page_num);
+      // Only evict a process' own page
+      if (owner_pid != pid) continue;
 
+      // Get page table and page entry
+      auto& page_table = data.page_table_map.at(pid);
+      auto& page = page_table.get(page_num);
+
+      if (!page.is_loaded())
+        continue;  // Already unloaded, shouldn't happen but safe to skip
+
+      // Get frame number and mark page as unloaded
       auto frame_num = page.frame();
       page.frame_num = nullopt;
       data.free_frames.push_back(frame_num);
 
+      // Save to backing store
       auto maddr = frame_num * data.page_size;
       auto start = data.memory.begin() + maddr;
       auto end = start + data.page_size;
-      auto bytes_out = vec<uint>(start, end);
-      data.store[make_key(pid, page_num)] = move(bytes_out);
+      data.store[make_key(pid, page_num)] = vec<uint>(start, end);
 
-      // cout << format("  [evict]   pid={} page={} â†’ freed frame={} â†’ saved to store\n",
-      //                pid, page_num, frame_num);
-
-      return true;  // Evicted a page to backing store!
+      // Remove from global queue
+      data.equeue.erase(it);
+      return true;
     }
 
-    // cout << "  [evict]   page_out FAILED â†’ no pages available to evict\n";
-    return false;   // Nothing to evict
+    // No evictable pages found for this process
+    return false;
   }
 
   /**
@@ -3737,288 +3970,6 @@ class MemoryManager {
 ------------------------------
  FILE:  MemoryManager.py
  PATH:  core\memory\MemoryManager.py
-------------------------------
-
-class PageEntry:
-    """
-    Represents the metadata of a virtual page (not the actual content).
-
-    This object tracks:
-      - which physical frame it's loaded in (if any)
-      - whether the page is currently loaded into memory
-
-    Note:
-        This does NOT contain the page's data. Content is stored in the
-        memory array (RAM) and/or the backing store.
-    """
-
-    def __init__(self, frame_num=None):
-        self.frame_num = frame_num   # Physical frame index (or None if not loaded)
-
-    def is_loaded(self):
-        """True if page is currently loaded in memory (i.e. mapped to a frame)."""
-        return self.frame_num is not None
-
-
-class PageTable:
-    def __init__(self):
-        self.entries = {}  # Maps virtual page number â†’ PageEntry
-
-    def has_page(self, page_num):
-        return page_num in self.entries
-
-    def get(self, page_num):
-        return self.entries[page_num]
-
-    def add(self, page_num, page):
-        self.entries[page_num] = page
-
-    def pages(self):
-        return self.entries.keys()
-
-    def mark_unloaded(self, page_num):
-        self.entries[page_num].frame_num = None
-
-    def is_loaded(self, page_num):
-        return self.entries[page_num].is_loaded()
-
-    def get_frame(self, page_num):
-        return self.entries[page_num].frame_num
-
-
-class MemoryManager:
-    def __init__(self):
-        # Config and memory state
-        self.page_size = 0          # Bytes per page/frame
-        self.frame_count = 0        # Total number of frames
-
-        self.memory = []            # Physical memory: flat list of bytes
-        self.free_frames = []       # Tracks available frame indices
-        self.page_table_map = {}    # Page tables: maps pid â†’ PageTable object
-        self.equeue = []            # Tracks (pid, page_num) in load order
-        self.store = {}             # Backing store: (pid, page_num) â†’ byte array
-
-    def init(self, capacity, page_size):
-        """Initialize the memory manager with total capacity and page size."""
-        self.page_size = page_size
-        self.frame_count = capacity // page_size
-        self.memory = [0] * capacity
-        self.free_frames = list(range(self.frame_count))
-        self.page_table_map.clear()
-
-    def alloc(self, pid, bytes_needed):
-        """
-        Reserves virtual pages for a process without loading them.
-        Pages are created but not assigned frames until accessed.
-
-        Args:
-            pid (int): Process ID.
-            bytes_needed (int): Bytes to alloc.
-
-        Returns:
-            bool: True if allocation succeeded.
-        """
-        pages_needed = (bytes_needed + self.page_size - 1) // self.page_size
-        page_table = PageTable()
-        for page_num in range(pages_needed):
-            page_table.add(page_num, PageEntry())
-        self.page_table_map[pid] = page_table
-        return True
-
-    def write(self, pid, vaddr, value):
-        """Write a 2-byte value at the virtual address of a process."""
-        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
-            raise Exception(f"Access violation (WRITE) at address {hex(vaddr)}")
-        maddr1 = self._maddr_of(pid, vaddr)
-        maddr2 = self._maddr_of(pid, vaddr + 1)
-        self.memory[maddr1] = value & 0xFF
-        self.memory[maddr2] = (value >> 8) & 0xFF
-
-    def read(self, pid, vaddr):
-        """Read a 2-byte value at the virtual address of a process."""
-        if not self._owns_vaddr(pid, vaddr, num_bytes=2):
-            raise Exception(f"Access violation (READ) at address {hex(vaddr)}")
-        maddr1 = self._maddr_of(pid, vaddr)
-        maddr2 = self._maddr_of(pid, vaddr + 1)
-        lo = self.memory[maddr1]
-        hi = self.memory[maddr2] << 8
-        return lo | hi
-
-    # ------ PRIVATE METHODS ------
-
-    def _owns_vaddr(self, pid, vaddr, num_bytes=1):
-        """
-        Checks whether a range of virtual addresses is allocated to the given process.
-        Validates that [addr, addr + bytes - 1] fits entirely within
-        the set of reserved pages (regardless of load state).
-
-        Args:
-            pid (int): Process ID.
-            addr (int): Starting virtual address.
-            bytes (int): Number of bytes to check (default: 1).
-
-        Returns:
-            bool: True if all pages in range are reserved by the process.
-        """
-        if pid not in self.page_table_map:
-            return False
-        table = self.page_table_map[pid]
-        start = vaddr // self.page_size
-        end = (vaddr + num_bytes - 1) // self.page_size
-        return all(table.has_page(p) for p in range(start, end + 1))
-
-    def _maddr_of(self, pid, vaddr):
-        """
-        Translates a virtual address to a physical memory index.
-        Triggers page-in if the page is not yet loaded.
-
-        Args:
-            pid (int): Process ID.
-            addr (int): Virtual address.
-
-        Returns:
-            int: Index in physical memory array.
-        """
-        page_num = vaddr // self.page_size
-        offset = vaddr % self.page_size
-        table = self.page_table_map[pid]
-        page = table.get(page_num)
-        if not page.is_loaded():
-            self._page_in(pid, page_num)
-        return page.frame_num * self.page_size + offset
-
-    def _fill_frame(self, frame_num, filler):
-        """
-        Fills the given frame in memory using the provided filler function.
-
-        Args:
-            frame_num (int): Frame number to fill.
-            filler (Callable[[int], int]): Function taking index (0..page_size-1) and returning a byte.
-        """
-        maddr = frame_num * self.page_size
-        for i in range(self.page_size):
-            self.memory[maddr + i] = filler(i)
-
-    def _page_in(self, pid, page_num):
-        """
-        Loads a page into memory by assigning a free frame.
-        Also known as: "load_page".
-
-        Case 0: If the page is not loaded, this assigns a frame and zero-fills it.
-        Simulates demand paging (no actual disk access).
-        
-        Case 1: If memory is full, this triggers page replacement via FIFO eviction.
-
-        Args:
-            pid (int): Process ID.
-            page_num (int): Virtual page number to load.
-
-        Raises:
-            Exception: If no free frames are available.
-        """
-        frame_num = self.free_frames.pop(0) if self.free_frames else self._page_out()
-        table = self.page_table_map[pid]
-        page = table.get(page_num)
-        page.frame_num = frame_num
-        self.equeue.append((pid, page_num))
-
-        key = (pid, page_num)
-        if key in self.store:
-            data = self.store.pop(key)
-            self._fill_frame(frame_num, lambda i: data[i])
-            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (restored from store)")
-        else:
-            self._fill_frame(frame_num, lambda i: 0)
-            print(f"[MemoryManager._page_in()] LOAD  pid={pid} â†’ page={page_num:<2} â†’ frame={frame_num} (zero-filled)")
-
-    def _page_out(self):
-        """
-        Evicts one loaded page from memory and returns its freed frame number.
-        This simulates basic page replacement when memory is full.
-        Also known as: "evict_page".
-
-        Returns:
-            int: A frame number that was reclaimed.
-        """
-        while self.equeue:
-            pid, page_num = self.equeue.pop(0)
-            table = self.page_table_map[pid]
-            page = table.get(page_num)
-            
-            if not page.is_loaded():
-                continue
-            
-            frame_num = page.frame_num
-            page.frame_num = None
-            self.free_frames.append(frame_num)
-            
-            print(f"[MemoryManager._page_out()] EVICT pid={pid} â†’ page={page_num:<2} â†’ freed frame={frame_num}")
-            return frame_num
-        raise Exception("Eviction failed: no pages available to evict")
-
-
-class VirtualMemory:
-    """
-    Represents the virtual memory view for a specific process.
-    Provides read/write access using virtual addresses,
-    delegating to the system-wide MemoryManager.
-    """
-    def __init__(self, pid, manager):
-        self.pid = pid
-        self.manager = manager
-
-    def read(self, vaddr):
-        """Read a 2-byte value from the process's virtual memory."""
-        return self.manager.read(self.pid, vaddr)
-
-    def write(self, vaddr, value):
-        """Write a 2-byte value to the process's virtual memory."""
-        self.manager.write(self.pid, vaddr, value)
-
-class ProcessMemory:
-    def __init__(self, vmemory):
-        self.vmemory = vmemory
-        self.symbol_table = {}    # var name â†’ virtual address
-        self.next_offset = 0      # Next offset within symbol table
-        self.symbol_limit = 64    # Max 64 bytes (â†’ 32 symbol_table)
-
-    def set(self, var, value):
-        if var in self.symbol_table:
-            addr = self.symbol_table[var]
-        elif self.next_offset + 2 <= self.symbol_limit:
-            addr = self.next_offset
-            self.symbol_table[var] = addr
-            self.next_offset += 2
-            print(f"[ProcessMemory.set()] symbol_table['{var}'] = {addr}")
-        else:
-            print(f"[ProcessMemory.set()] DECLARE failed: symbol table full â†’ skipping '{var}'")
-            return
-        self.vmemory.write(addr, value)
-
-    def get(self, var):
-        if var not in self.symbol_table:
-            print(f"[ProcessMemory.get()] '{var}' not declared â€” returning 0")
-            return 0
-        addr = self.symbol_table[var]
-        print(f"[ProcessMemory.get()] symbol_table['{var}'] â†’ vaddr={hex(addr)}")
-        return self.vmemory.read(addr)
-
-
-# mm = MemoryManager()
-# mm.init(capacity=128, page_size=64)       # Creates 2 frames
-# mm.alloc(pid=1, bytes_needed=64)       # Allocates 1 page (for symbol table)
-
-# vmemory = VirtualMemory(pid=1, manager=mm)
-# process = Process()
-# process.memory = ProcessMemory(vmemory)
-
-# DECLARE(Instruction(["a", "100"]), process)
-# DECLARE(Instruction(["b", "250"]), process)
-# ADD(Instruction(["c", "a", "b"]), process)
-
-------------------------------
- FILE:  MemoryManager2.py
- PATH:  core\memory\MemoryManager2.py
 ------------------------------
 
 # This version uses MemoryView instead of VirtualMemory for process memory abstraction.
@@ -4686,14 +4637,25 @@ class Process {
   // ------ Class variables ------
   inline static auto& interpreter = InstructionInterpreter::get();
 
-  /** @brief Creates a process with a random instruction script. */
-  Process(uint pid, str name, uint size, MemoryView view): 
+  /** @brief Creates a process with a random instruction script given size. */
+  Process(uint pid, str name, MemoryView view, uint size): 
     data(           // Data container of process
       ProcessData(
         pid,
         move(name),
-        move(interpreter.generate_script(size)),
-        move(view)
+        move(view),
+        move(interpreter.generate_script(size))
+      )
+    ) {}
+
+  /** @brief Creates a process with a random instruction script. */
+  Process(uint pid, str name, MemoryView view, vec<Instruction> script): 
+    data(           // Data container of process
+      ProcessData(
+        pid,
+        move(name),
+        move(view),
+        move(script)
       )
     ) {}
 
@@ -4763,7 +4725,7 @@ class ProcessControl {
 #include "core/common/imports/_all.hpp"
 #include "core/instruction/Instruction.hpp"
 #include "core/memory/MemoryView.hpp"
-#include "ProcessMemory2.hpp"
+#include "ProcessMemory.hpp"
 #include "ProcessProgram.hpp"
 #include "ProcessControl.hpp"
 #include "types.hpp"
@@ -4780,7 +4742,7 @@ class ProcessData {
   public:
 
   /** @brief Constructs a process given name and process ID. */
-  ProcessData(uint id, str name, vec<Instruction> script, MemoryView view): 
+  ProcessData(uint id, str name, MemoryView view, vec<Instruction> script): 
     id      (id),                         // Unique process ID
     name    (move(name)),                 // Human-readable process name (e.g. p01, p02)
     logs    (vec<str>()),                 // Output logs collected from PRINT instructions
@@ -4807,50 +4769,6 @@ class ProcessData {
 ------------------------------
  FILE:  ProcessMemory.hpp
  PATH:  core\process\ProcessMemory.hpp
-------------------------------
-
-#pragma once
-#include "core/common/imports/_all.hpp"
-#include "core/memory/MemoryView.hpp"
-#include "types.hpp"
-
-
-class ProcessMemory { 
-  public:
-  
-  ProcessMemory(MemoryView& view):
-    symbol_table (umap<str,uint>()),  // TODO: docs
-    view         (view) {}            // TODO: docs
-
-  /** Memory mutators */
-  void set(str key, uint value) {
-    symbol_table[move(key)] = value;
-  }
-  
-  /** Memory accessors */
-  auto get(const str& key) const -> uint {
-    auto it = symbol_table.find(key);
-    return it != symbol_table.end() ? it->second : 0;
-  }
-  
-  /** Resolves a token as a literal or variable lookup */
-  auto resolve(const str& token) const -> uint {
-    return isdigit(token[0]) ? stoul(token) : get(token);
-  }
-  
-  /** Exposes internal variable bindings */
-  auto get_symbol_table() -> umap<str,uint>& {
-    return symbol_table;
-  }
-
-  // ------ Instance variables ------
-  umap<str,uint> symbol_table;
-  MemoryView& view;
-};
-
-------------------------------
- FILE:  ProcessMemory2.hpp
- PATH:  core\process\ProcessMemory2.hpp
 ------------------------------
 
 #pragma once
@@ -4946,8 +4864,12 @@ class ProcessMemory {
    *         - page_fault (bool): true if page fault occurred
    */
   auto resolve(const str& token) -> tup<uint, bool, bool, bool> {
-    if (is_digits(token))
-      return {stoul(token), false, false, false};
+    // Try to parse it as a number (supports hex, clamps overflow)
+    auto value =  stoui(token);
+    if (value != 0 || token == "0")  // catch both "0" and valid numbers
+      return {value, false, false, false};
+
+    // Otherwise treat as variable
     return get(token);
   }
 
@@ -5166,14 +5088,14 @@ class Scheduler {
   public:
 
   Scheduler():
-    names      (vec<str>()),            // Deferred generation list for user-inserted process table
+    spawn_reqs (vec<tup<str,uint>>()),  // Deferred generation list for user-inserted process table
     ticks      (0u),                    // Global tick counter
     generating (false),                 // Flag indicating auto-generation mode
     data       (SchedulerData()),       // Internal state (cores, process table, vec<str>)
     strategy   (SchedulerStrategy()) {} // Contains the scheduler strategy
 
   /** Adds a user-named process to the pending generation vec<str>. */
-  void generate_process(str name) { names.push_back(move(name)); }
+  void generate_process(str name, uint size) { spawn_reqs.emplace_back(move(name), size); }
 
   /** Enables or disables automatic process generation each tick. */
   void generate(bool flag) { generating = flag; }
@@ -5227,7 +5149,7 @@ class Scheduler {
 
   // ------ Instance variables ------
 
-  vec<str> names;                
+  vec<tup<str,uint>> spawn_reqs;                
   uint ticks;             
   bool generating;    
   SchedulerData data;         
@@ -5245,7 +5167,7 @@ class Scheduler {
 
   /** @brief Helper that generates user and scheduler-enqueued processes. */
   void generate_processes() {
-    auto make_process = [&](uint pid, str name = "") {
+    auto make_process = [&](uint pid, str name="", uint size=0u) {
       auto& config = data.config;
       auto pname = name.empty() ? format("p{:02}", pid) : move(name);
 
@@ -5257,19 +5179,19 @@ class Scheduler {
       // === Generate memory size for process (clamped to â‰¥64 automatically)
       auto min_mem = config.getu("min-mem-per-proc");
       auto max_mem = config.getu("max-mem-per-proc");
-      auto mem_size = Rand::num(min_mem, max_mem);
+      auto mem_size = size == 0 ? Rand::num(min_mem, max_mem) : size;
 
       // === Auto-alloc and get view (failsafe inside create_memory_view_for)
       auto view = data.memory.create_memory_view_for(pid, mem_size);
 
       // === Add to process table and ready queue
-      data.add_process(Process(pid, move(pname), ins_size, move(view)));
+      data.add_process(Process(pid, move(pname), move(view), ins_size));
       data.rqueue.push(pid);
     };
 
-    for (auto& name: names)
-      make_process(data.new_pid(), move(name));
-    names.clear();
+    for (auto& [name, size]: spawn_reqs)
+      make_process(data.new_pid(), move(name), size);
+    spawn_reqs.clear();
 
     if (generating && interval_has_elapsed())
       make_process(data.new_pid());
@@ -5282,8 +5204,11 @@ class Scheduler {
       auto& process = core.get_job();
       core.release();
 
-      if (process.data.program.finished())
+      if (process.data.program.finished()) {
         data.finished_pids.push_back(process.data.id);
+        data.memory.release_all_frames_for(process.data.id);  // Clean up memory pages and eviction queue
+      }
+
       else if (process.data.control.sleeping())
         data.wqueue.push_back(process.data.id);     
       else                                      
@@ -5365,6 +5290,26 @@ class SchedulerData {
   /** @brief Returns the vec<uint> of running process IDs. */
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
+  /**
+   * @brief Checks if there is enough free memory to run a given process.
+   *
+   * Computes the number of frames required based on configuration settings
+   * and compares it to the number of currently free frames.
+   */
+  auto memory_available_for(uint pid, bool allow_partial=false) -> bool {
+    // Read configuration values
+    auto mem_per_proc = config.getu("max-mem-per-proc");
+    auto mem_per_frame = config.getu("mem-per-frame");
+    
+    auto frames_needed = mem_per_proc / mem_per_frame;  // Compute how many frames are needed
+    auto free_frames = memory.data.free_frames.size();  // Check how many are free
+
+    if (allow_partial)
+      return free_frames >= 1;
+    else
+      return free_frames >= frames_needed;
+  }
+
   // ------ Instance variables ------
   umap<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
@@ -5374,7 +5319,6 @@ class SchedulerData {
   Config config;
   CoreManager cores;
   MemoryManager memory;
-
 
   // ------ Internal logic ------
   private:
@@ -5571,19 +5515,28 @@ auto make_fcfs_strategy() -> SchedulerStrategy {
   return SchedulerStrategy()
     .set_name("fcfs")
 
-    .on_tick([](SchedulerData& data) {;
-      for (auto& ref: data.cores.get_idle()) {
+    .on_tick([](SchedulerData& data) {
+      for (auto& ref : data.cores.get_idle()) {
+        // No processes to assign
+        if (data.rqueue.empty()) 
+          break;
 
-        // If no process is ready, stop assigning
-        if (data.rqueue.empty()) break;     
-        
-        // Assign the selected process to the current idle core
-        auto& core = ref.get();
-        uint pid = data.rqueue.front(); 
+        // Peek at the front process
+        auto pid = data.rqueue.front();
+
+        // Check if there's enough memory to run this process
+        // Not enough memory â€” skip for now, leave in rqueue
+        // Pass true if process only needs at least 1 free frame
+        // otherwise require full memory allocation
+        if (!data.memory_available_for(pid, true))
+          continue;
+
+        // Enough memory - assign to core
         data.rqueue.pop();
+        auto& core = ref.get();
         core.assign(data.get_process(pid));
       }
-  });
+    });
 }
 
 ------------------------------
@@ -5610,21 +5563,30 @@ auto make_rr_strategy() -> SchedulerStrategy {
     .set_name("rr")
 
     .on_tick([](SchedulerData& data) {
-      for (auto& ref: data.cores.get_idle()) {
-    
-        // If no process is ready, stop assigning
-        if (data.rqueue.empty()) break;
-        
-        auto& core = ref.get();
-        uint pid = data.rqueue.front(); 
+      for (auto& ref : data.cores.get_idle()) {
+        // No processes to assign
+        if (data.rqueue.empty()) 
+          break;
+
+        // Peek at the front process
+        auto pid = data.rqueue.front();
+
+        // Check if there's enough memory to run this process
+        // Not enough memory â€” skip for now, leave in rqueue
+        // Pass true if process only needs at least 1 free frame
+        // otherwise require full memory allocation
+        if (!data.memory_available_for(pid, true))
+          continue;
+
+        // Enough memory - assign to core
         data.rqueue.pop();
+        auto& core = ref.get();
         core.assign(data.get_process(pid));
       }
     })
 
     .on_preempt([](SchedulerData& data) -> Core::func {
       auto quantum = data.config.getu("quantum-cycles");
-      
       return [quantum](Core& core) -> bool {
         return core.job_ticks >= quantum;
       };
@@ -5701,8 +5663,8 @@ class ShellBanner {
     // Add onboarding message
     out << RichText("[fg=#88a17a]To get started:[/]\n");
     out << RichText("  1. Type [b fg=#d39c6a]demo[/] to see a sample process in action.\n");
-    out << RichText("  2. Then [b fg=#d39c6a]exit[/] to leave the shell.\n");
-    out << RichText("  3. Use [b fg=#d39c6a]help[/] for more information on commands.\n\n\n");
+    out << RichText("  2. Use [b fg=#d39c6a]help[/] for more information on commands\n");
+    out << RichText("  3. Then [b fg=#d39c6a]exit[/] to leave the shell..\n\n\n");
     return out.str();
   }
 

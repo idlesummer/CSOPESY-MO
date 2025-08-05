@@ -50,6 +50,26 @@ class SchedulerData {
   /** @brief Returns the vec<uint> of running process IDs. */
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
+  /**
+   * @brief Checks if there is enough free memory to run a given process.
+   *
+   * Computes the number of frames required based on configuration settings
+   * and compares it to the number of currently free frames.
+   */
+  auto memory_available_for(uint pid, bool allow_partial=false) -> bool {
+    // Read configuration values
+    auto mem_per_proc = config.getu("max-mem-per-proc");
+    auto mem_per_frame = config.getu("mem-per-frame");
+    
+    auto frames_needed = mem_per_proc / mem_per_frame;  // Compute how many frames are needed
+    auto free_frames = memory.data.free_frames.size();  // Check how many are free
+
+    if (allow_partial)
+      return free_frames >= 1;
+    else
+      return free_frames >= frames_needed;
+  }
+
   // ------ Instance variables ------
   umap<uint, uptr<Process>> proc_table;
   vec<uint> finished_pids;         
@@ -59,7 +79,6 @@ class SchedulerData {
   Config config;
   CoreManager cores;
   MemoryManager memory;
-
 
   // ------ Internal logic ------
   private:
