@@ -71,8 +71,15 @@ class CoreManager {
   /** @brief Returns a list of pids to all busy (non-idle) cores. */
   auto get_running_pids() -> vec<uint> { return extract_ids([](auto& core) { return core.get_job().data.id; }); }
 
-  // ------ Internal logic ------
+  /** @brief Returns true if any core is currently running the given PID. */
+  auto is_running(uint pid) -> bool {
+    for (auto& core : cores)
+      if (core && !core->is_idle() && core->get_job().data.id == pid)
+        return true;
+    return false;
+  }
 
+  // ------ Internal logic ------
   private:
 
   // ------ Instance variables ------

@@ -11,10 +11,20 @@ class MemoryManager {
   MemoryManager():
     data (MemoryManagerData()) {}
 
-  void init(uint memory_capacity, uint page_size) {    
+  /**
+   * @brief Initializes the memory system and sets up free frames and internal state.
+   *
+   * @param memory_capacity Total memory size in bytes.
+   * @param page_size       Size of each page/frame in bytes.
+   * @param is_preempted    Optional predicate function that returns true if a given PID is preempted.
+   */
+  void init(uint memory_capacity, uint page_size, func<bool(uint)> is_preempted=nullptr) {    
     data.page_size = page_size;
     data.frame_count = memory_capacity / page_size;
     data.memory = vec<uint>(memory_capacity, 0);
+
+    // Store the preemption-check callback
+    data.is_preempted = move(is_preempted);
   
     // Reset and repopulate the free frame list
     data.free_frames.clear(); 
@@ -96,11 +106,11 @@ class MemoryManager {
     auto out = osstream();
     out << "\n[Physical Memory Layout]\n";
     for (auto i = 0u; i < data.frame_count; ++i) {
-      if (frame_map.contains(i)) {
+      if (!frame_map.contains(i))
+        out << format("[frame {:>2}] → free\n", i);
+      else {
         auto [pid, page] = frame_map[i];
         out << format("[frame {:>2}] → pid={:<3} page={}\n", i, pid, page);
-      } else {
-        out << format("[frame {:>2}] → free\n", i);
       }
     }
 
@@ -181,15 +191,16 @@ class MemoryManager {
     */
   auto page_out(uint pid) -> bool {
     for (auto it = data.equeue.begin(); it != data.equeue.end(); ++it) {
-      auto [owner_pid, page_num] = *it;
+      auto [evict_pid, page_num] = *it;
 
-      // Only evict if:
-      // - The page belongs to the same process (self-eviction), OR
-      // - The owner process is considered inactive (e.g., finished or not assigned to any core)
-      if (owner_pid != pid) continue; /** TODO: */
+      // Evict only if:
+      // - The page belongs to this process (self-eviction), OR
+      // - The page belongs to a process that is currently preempted or inactive
+      if (!(evict_pid == pid || (data.is_preempted && data.is_preempted(evict_pid))))
+        continue;
 
       // Get page table and page entry
-      auto& page_table = data.page_table_map.at(pid);
+      auto& page_table = data.page_table_map.at(evict_pid);
       auto& page = page_table.get(page_num);
 
       if (!page.is_loaded())

@@ -60,8 +60,10 @@ class Scheduler {
     // Initialize memory manager
     auto memory_capacity = config.getu("max-overall-mem");
     auto page_size = config.getu("mem-per-frame");
-    data.memory.init(memory_capacity, page_size);
-    
+    data.memory.init(memory_capacity, page_size, [&](uint pid) {
+      return !data.cores.is_running(pid);  // true if process is currently preempted
+    });
+
     // Initialize CPU cores
     strategy = get_scheduler_strategy(config.gets("scheduler"));
     auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
