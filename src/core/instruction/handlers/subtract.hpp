@@ -32,6 +32,12 @@ auto make_subtract() -> InstructionHandler {
       auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
       auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
 
+      if (lviolation || rviolation) {
+        process.log("[SUBTRACT] Violation during operand read.");
+        // program.terminate();
+        // return;
+      }
+
       if (lundeclared)
         memory.set(args[1], 0u);
 
@@ -41,12 +47,16 @@ auto make_subtract() -> InstructionHandler {
       auto diff = (lval > rval) ? (lval - rval) : 0u;
       auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], diff);
 
+      if (is_violation) {
+        process.log("[SUBTRACT] Violation during result write.");
+        program.terminate();
+        return;
+      }
+
       if (lfault || rfault || is_page_fault) {
         process.log("[SUBTRACT] Unable to resolve page fault on first try.");
         program.set_ip(program.ip); // Retry on next tick
-      }
-      else if (lviolation || rviolation || is_violation)
-        process.log("[SUBTRACT] Violation during operand or result write.");
+      }  
       else if (is_symbol_limit)
         process.log("[SUBTRACT] Symbol table full — could not DECLARE target variable.");
     });

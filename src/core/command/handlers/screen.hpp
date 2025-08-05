@@ -206,9 +206,11 @@ auto make_screen() -> CommandHandler {
         if (scheduler.data.has_process(name))
           return void(cout << format("[screen] Process '{}' already exists.\n", name));
 
-        // Validate memory size
-        if (size < 64 || size > 65536 || (size & (size - 1)) != 0)
-          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+        // Parse memory argument
+        auto min_mem = scheduler.data.config.getu("min-mem-per-proc");
+        auto max_mem = scheduler.data.config.getu("max-mem-per-proc");
+        if (size < min_mem || size > max_mem || (size & (size - 1)) != 0)
+          return void(cout << format("[screen] Invalid memory allocation. Must be power of 2 between {} and {}.\n", min_mem, max_mem));
 
         // Tokenize instruction string by semicolons
         auto token_lines = vec<vec<str>>();
@@ -229,10 +231,10 @@ auto make_screen() -> CommandHandler {
           return void(cout << "[screen] Failed to parse instruction script.\n");
 
         // Create process and memory view
-        auto view = scheduler.data.memory.create_memory_view_for(0, size); // pid = 0 (will be set)
-        auto process = Process(0, name, move(view), move(script));
+        // Generate the PID first
         auto pid = scheduler.data.new_pid();
-        process.data.id = pid;
+        auto view = scheduler.data.memory.create_memory_view_for(pid, size); // pid = 0 (will be set)
+        auto process = Process(pid, name, move(view), move(script));
         scheduler.data.add_process(move(process));
         scheduler.data.rqueue.push(pid);
 

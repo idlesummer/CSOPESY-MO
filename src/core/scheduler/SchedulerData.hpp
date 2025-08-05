@@ -58,15 +58,28 @@ class SchedulerData {
    * - At least one free frame exists to satisfy future faults.
    */
   auto memory_available_for(uint pid) -> bool {
+    
+    // cout << format("[debug] Pid: {}\n", pid);
+    // cout << "[debug] Page Table Map Contents:\n";
+    // for (auto& [pid, pt] : memory.data.page_table_map) {
+    //   cout << format("  PID {}: {} pages\n", pid, pt.pages().size());
+    //   for (auto page_num : pt.pages()) {
+    //     auto& entry = pt.get(page_num);
+    //     cout << format("    Page {} → {}\n", page_num, 
+    //       entry.is_loaded() ? format("frame {}", entry.frame()) : "not loaded");
+    //   }
+    // } 
+
     // Check if the process has pages
     if (!memory.data.page_table_map.contains(pid))
       return false;
-
-    auto& table = memory.data.page_table_map.at(pid);
+    
+    auto& page_table = memory.data.page_table_map.at(pid);
+    // cout << format("[debug] PID {} has {} pages and {} free frames\n", pid, page_table.pages().size(), memory.data.free_frames.size());
 
     // If any of its pages are loaded, it's good to run
-    for (auto page_num : table.pages())
-      if (table.get(page_num).is_loaded())
+    for (auto page_num : page_table.pages())
+      if (page_table.get(page_num).is_loaded())
         return true;
 
     // Otherwise, check if there's at least one free frame

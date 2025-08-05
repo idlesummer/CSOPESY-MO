@@ -30,6 +30,12 @@ auto make_add() -> InstructionHandler {
       auto [lval, lviolation, lfault, lundeclared] = memory.resolve(args[1]);
       auto [rval, rviolation, rfault, rundeclared] = memory.resolve(args[2]);
 
+      if (lviolation || rviolation) {
+        process.log("[ADD] Violation during operand read.");
+        // program.terminate();
+        // return;
+      }
+
       // "Variables are automatically declared with a value of 0 
       // if they have not yet been declared beforehand."
       if (lundeclared)
@@ -41,13 +47,17 @@ auto make_add() -> InstructionHandler {
       auto sum = lval + rval;
       auto [is_violation, is_page_fault, is_symbol_limit] = memory.set(args[0], sum);
 
+      if (is_violation) {
+        process.log("[ADD] Violation during result write.");
+        program.terminate();
+        return;
+      }
+
       // Optional logs for debugging or trace output
       if (lfault || rfault || is_page_fault) {
         process.log("[ADD] Unable to resolve page fault on first try.");
         program.set_ip(program.ip);
       }
-      else if (lviolation || rviolation || is_violation)
-        process.log("[ADD] Violation during operand or result write.");
       else if (is_symbol_limit)
         process.log("[ADD] Symbol table full — could not DECLARE target variable.");
     });

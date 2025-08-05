@@ -626,14 +626,17 @@ auto make_process_smi() -> CommandHandler {
     .set_max_args(0)
 
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
-      if (shell.screen.is_main())
-        return "Not in a process screen.";
+      // if (shell.screen.is_main())
+      //   return "Not in a process screen.";
 
-      auto& scheduler = shell.scheduler;
-      uint pid = shell.screen.get_id();
+      // auto& scheduler = shell.scheduler;
+      // uint pid = shell.screen.get_id();
 
-      if (!scheduler.data.has_process(pid))
-        return format("Active process with ID \"{}\" not found.", pid);
+      if (!shell.screen.is_main())
+        return "Not in the Main Menu.";
+
+      // if (!scheduler.data.has_process(pid))
+      //   return format("Active process with ID \"{}\" not found.", pid);
 
       return nullopt;
     })
@@ -958,12 +961,19 @@ auto make_screen() -> CommandHandler {
           return void(cout << format("[screen] Process '{}' already exists.\n", name));
 
         // Parse memory argument
-        uint memory = stoui(memstr);
-        if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
-          return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+        // uint memory = stoui(memstr);
+        // if (memory < 64 || memory > 65536 || (memory & (memory - 1)) != 0)
+        //   return void(cout << "[screen] Invalid memory allocation. Must be power of 2 between 64 and 65536.\n");
+        
+        // Parse memory argument
+        auto min_mem = scheduler.data.config.getu("min-mem-per-proc");
+        auto max_mem = scheduler.data.config.getu("max-mem-per-proc");
+        auto size = stoui(memstr);
+        if (size < min_mem || size > max_mem || (size & (size - 1)) != 0)
+          return void(cout << format("[screen] Invalid memory allocation. Must be power of 2 between {} and {}.\n", min_mem, max_mem));
 
         // Generate the process
-        scheduler.generate_process(name, memory);
+        scheduler.generate_process(name, size);
         cout << format("[screen] Waiting for process creation: {}...", name);
 
         // Wait until queued
@@ -1084,8 +1094,10 @@ auto make_screen() -> CommandHandler {
         auto& program = process.data.program;
         auto& memory  = process.data.memory;
 
+        
         cout << format("[screen] Inspecting process '{}'\n", name);
         cout << "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n";
+        cout << format("{}\n", scheduler.data.memory.render_layout());
         cout << "Context Stack:\n" << program.render_context() << '\n';
         cout << "Instruction List:\n" << program.render_script() << '\n';
         cout << "Symbol Table:\n" << memory.render_symbol_table();
@@ -1276,10 +1288,6 @@ auto make_vmstat() -> CommandHandler {
     .set_validate([](Command& command, Shell& shell) -> optional<str> {
       if (!shell.screen.is_main())
         return "Not in the Main Menu.";
-
-      auto config = shell.scheduler.data.config;
-      if (!config.getb("initialized"))
-        return "Scheduler not initialized. Please run 'initialize' first.";
 
       return nullopt;
     })
@@ -2954,8 +2962,15 @@ class CoreManager {
   /** @brief Returns a list of pids to all busy (non-idle) cores. */
   auto get_running_pids() -> vec<uint> { return extract_ids([](auto& core) { return core.get_job().data.id; }); }
 
-  // ------ Internal logic ------
+  /** @brief Returns true if any core is currently running the given PID. */
+  auto is_running(uint pid) -> bool {
+    for (auto& core : cores)
+      if (core && !core->is_idle() && core->get_job().data.id == pid)
+        return true;
+    return false;
+  }
 
+  // ------ Internal logic ------
   private:
 
   // ------ Instance variables ------
@@ -3798,10 +3813,20 @@ class MemoryManager {
   MemoryManager():
     data (MemoryManagerData()) {}
 
-  void init(uint memory_capacity, uint page_size) {    
+  /**
+   * @brief Initializes the memory system and sets up free frames and internal state.
+   *
+   * @param memory_capacity Total memory size in bytes.
+   * @param page_size       Size of each page/frame in bytes.
+   * @param is_preempted    Optional predicate function that returns true if a given PID is preempted.
+   */
+  void init(uint memory_capacity, uint page_size, func<bool(uint)> is_preempted=nullptr) {    
     data.page_size = page_size;
     data.frame_count = memory_capacity / page_size;
     data.memory = vec<uint>(memory_capacity, 0);
+
+    // Store the preemption-check callback
+    data.is_preempted = move(is_preempted);
   
     // Reset and repopulate the free frame list
     data.free_frames.clear(); 
@@ -3839,7 +3864,7 @@ class MemoryManager {
     auto& page_table = data.page_table_map.at(pid);
 
     // Free any frames currently in use
-    for (auto page_num : page_table.pages()) {
+    for (auto& page_num : page_table.pages()) {
       auto& page = page_table.get(page_num);
       if (page.is_loaded()) {
         data.free_frames.push_back(page.frame());
@@ -3857,6 +3882,43 @@ class MemoryManager {
     });
   }
 
+  /**
+ * @brief Renders a visual map of physical frames and their assigned virtual pages.
+ * 
+ * Each line shows:
+ *   - Frame index
+ *   - Owning process ID (if any)
+ *   - Virtual page number (if mapped)
+ *   - "free" if the frame is unused
+ */
+  auto render_layout() -> str {
+    // Create reverse map: frame_num â†’ (pid, page_num)
+    auto frame_map = umap<uint, tup<uint, uint>>();
+
+    for (auto& [pid, table] : data.page_table_map) {
+      for (auto page_num : table.pages()) {
+        auto& page = table.get(page_num);
+        if (page.is_loaded()) {
+          frame_map[page.frame()] = { pid, page_num };
+        }
+      }
+    }
+
+    // Render table
+    auto out = osstream();
+    out << "\n[Physical Memory Layout]\n";
+    for (auto i = 0u; i < data.frame_count; ++i) {
+      if (!frame_map.contains(i))
+        out << format("[frame {:>2}] â†’ free\n", i);
+      else {
+        auto [pid, page] = frame_map[i];
+        out << format("[frame {:>2}] â†’ pid={:<3} page={}\n", i, pid, page);
+      }
+    }
+
+    return out.str();
+  }
+
   // ------ Member variables ------
   MemoryManagerData data;
   
@@ -3871,6 +3933,11 @@ class MemoryManager {
       page_table.add(page_num, PageEntry());
 
     data.page_table_map[pid] = move(page_table);
+
+    // Try to preload as many pages as possible (no fault if not all succeed)
+    for (auto page_num = 0u; page_num < pages_needed; ++page_num)
+      page_in(pid, page_num);  // Ignore return value
+
     return true;
   }
 
@@ -3905,15 +3972,13 @@ class MemoryManager {
 
     // Fill frame with content from backing store or zero-fill
     auto key = make_key(pid, page_num);
-    if (data.store.contains(key)) {
+    if (!data.store.contains(key))
+      fill_frame(frame_num, [](uint) -> uint { return 0; });
+    else {
       auto bytes = move(data.store.at(key));
       data.store.erase(key);
+      write_store_to_file();  // Reflect changes in text file
       fill_frame(frame_num, [&](uint i) -> uint { return bytes[i]; });
-      // cout << format("  [restore] pid={} page={} â†’ frame={} â† restored from store\n", pid, page_num, frame_num);
-    }
-    else {
-      fill_frame(frame_num, [](uint) -> uint { return 0; });
-      // cout << format("  [zero]    pid={} page={} â†’ frame={} â† filled with zeros\n", pid, page_num, frame_num);
     }
 
     return true;
@@ -3926,13 +3991,16 @@ class MemoryManager {
     */
   auto page_out(uint pid) -> bool {
     for (auto it = data.equeue.begin(); it != data.equeue.end(); ++it) {
-      auto [owner_pid, page_num] = *it;
+      auto [evict_pid, page_num] = *it;
 
-      // Only evict a process' own page
-      if (owner_pid != pid) continue;
+      // Evict only if:
+      // - The page belongs to this process (self-eviction), OR
+      // - The page belongs to a process that is currently preempted or inactive
+      if (!(evict_pid == pid || (data.is_preempted && data.is_preempted(evict_pid))))
+        continue;
 
       // Get page table and page entry
-      auto& page_table = data.page_table_map.at(pid);
+      auto& page_table = data.page_table_map.at(evict_pid);
       auto& page = page_table.get(page_num);
 
       if (!page.is_loaded())
@@ -3948,6 +4016,7 @@ class MemoryManager {
       auto start = data.memory.begin() + maddr;
       auto end = start + data.page_size;
       data.store[make_key(pid, page_num)] = vec<uint>(start, end);
+      write_store_to_file();  // Reflect changes in text file
 
       // Remove from global queue
       data.equeue.erase(it);
@@ -3964,6 +4033,28 @@ class MemoryManager {
    */
   auto make_key(uint pid, uint page_num) -> uint64 {
     return (cast<uint64>(pid) << 32) | page_num;
+  }
+
+  /** @brief Writes the entire backing store to 'csopesy-backing-store.txt' as a fresh snapshot. */
+  void write_store_to_file() {
+    auto file = ofstream("csopesy-backing-store.txt", std::ios::trunc);
+    if (!file.is_open()) return;
+
+    file << "[Backing Store Snapshot]\n";
+
+    for (auto& [key, bytes] : data.store) {
+      uint pid = key >> 32;
+      uint page = key & 0xFFFFFFFF;
+
+      file << format("key={} pid={} page={} [", key, pid, page);
+      for (auto i=0u; i < bytes.size(); ++i) {
+        file << format("{:04x}", bytes[i]);
+        if (i != bytes.size() - 1) file << " ";
+      }
+      file << "]\n";
+    }
+
+    file.close();
   }
 };
 
@@ -4310,7 +4401,8 @@ class MemoryManagerData {
     free_frames    (deque<uint>()),
     page_table_map (umap<uint,PageTable>()),
     equeue         (deque<tup<uint, uint>>()),
-    store          (umap<uint64,vec<uint>>()) {}
+    store          (umap<uint64,vec<uint>>()),
+    is_preempted   (nullptr) {}
 
   // ------ Member variables ------
   uint page_size;
@@ -4320,6 +4412,7 @@ class MemoryManagerData {
   umap<uint,PageTable> page_table_map;
   deque<tup<uint, uint>> equeue;
   umap<uint64,vec<uint>> store;
+  func<bool(uint)> is_preempted;
 };
 
 ------------------------------
@@ -5130,8 +5223,10 @@ class Scheduler {
     // Initialize memory manager
     auto memory_capacity = config.getu("max-overall-mem");
     auto page_size = config.getu("mem-per-frame");
-    data.memory.init(memory_capacity, page_size);
-    
+    data.memory.init(memory_capacity, page_size, [&](uint pid) {
+      return !data.cores.is_running(pid);  // true if process is currently preempted
+    });
+
     // Initialize CPU cores
     strategy = get_scheduler_strategy(config.gets("scheduler"));
     auto preempt_handler = strategy.get_preempt_handler(data);  // Create handler from factory method
@@ -5291,23 +5386,26 @@ class SchedulerData {
   auto get_running_pids() -> vec<uint> { return cores.get_running_pids(); }
 
   /**
-   * @brief Checks if there is enough free memory to run a given process.
+   * @brief Determines if a process can be scheduled based on current memory state.
    *
-   * Computes the number of frames required based on configuration settings
-   * and compares it to the number of currently free frames.
+   * A process is eligible to run if:
+   * - At least one of its pages is already loaded, OR
+   * - At least one free frame exists to satisfy future faults.
    */
-  auto memory_available_for(uint pid, bool allow_partial=false) -> bool {
-    // Read configuration values
-    auto mem_per_proc = config.getu("max-mem-per-proc");
-    auto mem_per_frame = config.getu("mem-per-frame");
-    
-    auto frames_needed = mem_per_proc / mem_per_frame;  // Compute how many frames are needed
-    auto free_frames = memory.data.free_frames.size();  // Check how many are free
+  auto memory_available_for(uint pid) -> bool {
+    // Check if the process has pages
+    if (!memory.data.page_table_map.contains(pid))
+      return false;
 
-    if (allow_partial)
-      return free_frames >= 1;
-    else
-      return free_frames >= frames_needed;
+    auto& table = memory.data.page_table_map.at(pid);
+
+    // If any of its pages are loaded, it's good to run
+    for (auto page_num : table.pages())
+      if (table.get(page_num).is_loaded())
+        return true;
+
+    // Otherwise, check if there's at least one free frame
+    return !memory.data.free_frames.empty();
   }
 
   // ------ Instance variables ------
@@ -5524,11 +5622,9 @@ auto make_fcfs_strategy() -> SchedulerStrategy {
         // Peek at the front process
         auto pid = data.rqueue.front();
 
-        // Check if there's enough memory to run this process
-        // Not enough memory â€” skip for now, leave in rqueue
-        // Pass true if process only needs at least 1 free frame
-        // otherwise require full memory allocation
-        if (!data.memory_available_for(pid, true))
+        // Check if at least one of its pages is already loaded, OR
+        // at least one free frame exists to satisfy future faults.
+        if (!data.memory_available_for(pid))
           continue;
 
         // Enough memory - assign to core
@@ -5571,11 +5667,9 @@ auto make_rr_strategy() -> SchedulerStrategy {
         // Peek at the front process
         auto pid = data.rqueue.front();
 
-        // Check if there's enough memory to run this process
-        // Not enough memory â€” skip for now, leave in rqueue
-        // Pass true if process only needs at least 1 free frame
-        // otherwise require full memory allocation
-        if (!data.memory_available_for(pid, true))
+        // Check if at least one of its pages is already loaded, OR
+        // at least one free frame exists to satisfy future faults.
+        if (!data.memory_available_for(pid))
           continue;
 
         // Enough memory - assign to core

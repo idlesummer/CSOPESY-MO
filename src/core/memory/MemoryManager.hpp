@@ -170,15 +170,13 @@ class MemoryManager {
 
     // Fill frame with content from backing store or zero-fill
     auto key = make_key(pid, page_num);
-    if (data.store.contains(key)) {
+    if (!data.store.contains(key))
+      fill_frame(frame_num, [](uint) -> uint { return 0; });
+    else {
       auto bytes = move(data.store.at(key));
       data.store.erase(key);
+      write_store_to_file();  // Reflect changes in text file
       fill_frame(frame_num, [&](uint i) -> uint { return bytes[i]; });
-      // cout << format("  [restore] pid={} page={} → frame={} ← restored from store\n", pid, page_num, frame_num);
-    }
-    else {
-      fill_frame(frame_num, [](uint) -> uint { return 0; });
-      // cout << format("  [zero]    pid={} page={} → frame={} ← filled with zeros\n", pid, page_num, frame_num);
     }
 
     return true;
@@ -196,7 +194,7 @@ class MemoryManager {
       // Evict only if:
       // - The page belongs to this process (self-eviction), OR
       // - The page belongs to a process that is currently preempted or inactive
-      if (!(evict_pid == pid || (data.is_preempted && data.is_preempted(evict_pid))))
+      if (!(evict_pid == pid /* || (data.is_preempted && data.is_preempted(evict_pid)) */))
         continue;
 
       // Get page table and page entry
@@ -216,6 +214,7 @@ class MemoryManager {
       auto start = data.memory.begin() + maddr;
       auto end = start + data.page_size;
       data.store[make_key(pid, page_num)] = vec<uint>(start, end);
+      write_store_to_file();  // Reflect changes in text file
 
       // Remove from global queue
       data.equeue.erase(it);
@@ -232,5 +231,27 @@ class MemoryManager {
    */
   auto make_key(uint pid, uint page_num) -> uint64 {
     return (cast<uint64>(pid) << 32) | page_num;
+  }
+
+  /** @brief Writes the entire backing store to 'csopesy-backing-store.txt' as a fresh snapshot. */
+  void write_store_to_file() {
+    auto file = ofstream("csopesy-backing-store.txt", std::ios::trunc);
+    if (!file.is_open()) return;
+
+    file << "[Backing Store Snapshot]\n";
+
+    for (auto& [key, bytes] : data.store) {
+      uint pid = key >> 32;
+      uint page = key & 0xFFFFFFFF;
+
+      file << format("key={} pid={} page={} [", key, pid, page);
+      for (auto i=0u; i < bytes.size(); ++i) {
+        file << format("{:04x}", bytes[i]);
+        if (i != bytes.size() - 1) file << " ";
+      }
+      file << "]\n";
+    }
+
+    file.close();
   }
 };

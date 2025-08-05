@@ -15,14 +15,17 @@ auto make_declare() -> InstructionHandler {
       auto value = stoul(inst.args[1], nullptr, 0);
       auto [is_violation, is_page_fault, is_full] = process.memory.set(var, value);
 
-      if (is_page_fault) {
+      if (is_violation) {
+        process.log(format("[DECLARE] write violation for '{}'", var));
+        // program.terminate();
+        // return;
+      }
+      else if (is_page_fault) {
         process.log(format("[DECLARE] Unable to resolve page fault on first try for '{}'", var));
         program.set_ip(program.ip);
         return;
       }
       else if (is_full)
         process.log(format("[DECLARE] failed: symbol table full → '{}'", var));
-      else if (is_violation)
-        process.log(format("[DECLARE] write violation for '{}'", var));
     });
 }
